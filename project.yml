@@ -1,0 +1,40 @@
+name: Tapeze
+options:
+  bundleIdPrefix: com.tapeze
+  deploymentTarget:
+    iOS: "16.0"
+  xcodeVersion: "15.0"
+
+settings:
+  base:
+    SWIFT_VERSION: "5.9"
+    TARGETED_DEVICE_FAMILY: "1,2"
+
+targets:
+  Tapeze:
+    type: application
+    platform: iOS
+    sources:
+      - path: Tapeze
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.tapeze.app
+        INFOPLIST_FILE: Tapeze/Info.plist
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+        CODE_SIGN_STYLE: Automatic
+        DEVELOPMENT_TEAM: ""
+    dependencies:
+      - target: TapezeKeyboard
+
+  TapezeKeyboard:
+    type: app-extension
+    platform: iOS
+    sources:
+      - path: TapezeKeyboard
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.tapeze.app.keyboard
+        INFOPLIST_FILE: TapezeKeyboard/Info.plist
+        CODE_SIGN_STYLE: Automatic
+        DEVELOPMENT_TEAM: ""
+        SKIP_INSTALL: "YES"
