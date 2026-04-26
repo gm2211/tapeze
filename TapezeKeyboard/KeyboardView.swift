@@ -117,7 +117,9 @@ struct KeyboardView: View {
     private func mainGrid(width: CGFloat, height: CGFloat, rowHeight: CGFloat) -> some View {
         let colWidth = max((width - spacing * CGFloat(gridCols - 1)) / CGFloat(gridCols), 1)
         let grid = state.currentGrid
+        let isSymbolOverlay = state.currentLayer == .letters && state.isSymbolOverlayActive
         let showCenter = state.currentLayer != .symbolsOnly && state.showCenterLabels
+        let showSwipes = state.currentLayer != .letters || state.showCenterLabels || isSymbolOverlay
 
         VStack(spacing: spacing) {
             ForEach(0..<gridRows, id: \.self) { row in
@@ -131,6 +133,7 @@ struct KeyboardView: View {
                             config: config,
                             isActive: isActive,
                             showCenter: showCenter,
+                            showSwipes: showSwipes,
                             isShifted: state.isShifted || state.isCapsLocked
                         )
                         .frame(width: colWidth, height: rowHeight)
@@ -315,7 +318,7 @@ struct KeyboardView: View {
             }
 
             // ".com" on key (1,0)
-            if pos.row == 1 && pos.col == 0 && state.currentLayer == .letters {
+            if pos.row == 1 && pos.col == 0 && state.currentLayer == .letters && !state.isSymbolOverlayActive && state.showCenterLabels {
                 Text(".com")
                     .font(.system(size: 9, weight: .medium))
                     .foregroundColor(KeyboardTheme.swipeColor)

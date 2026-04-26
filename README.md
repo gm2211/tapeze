@@ -26,7 +26,7 @@ A gesture-based keyboard for iOS inspired by MessagEase. Uses a compact 3x3 grid
 2. **Swipe** between two keys to type the gray letter shown between them
 3. **Swipe and back** (out and return to same key) to get the **uppercase** version of the swipe character
 4. **Circular motion** starting and ending on a key to type the **uppercase** of the tap character
-5. **Spacebar swipe up** toggles the symbol overlay on the letter layer; **swipe up and back** toggles showing/hiding center labels
+5. **Spacebar swipe up** toggles the symbol overlay on the letter layer; **swipe up and back** toggles letter legends, leaving symbol swipes visible when the overlay is active
 6. **Globe swipe left/right** toggles keyboard width mode
 7. **Globe circle** moves command bar between left and right side
 8. **Globe swipe up** increases keyboard size

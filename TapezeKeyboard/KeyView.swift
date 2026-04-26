@@ -20,6 +20,7 @@ struct CharacterKeyView: View {
     let config: KeyConfig
     let isActive: Bool
     let showCenter: Bool
+    let showSwipes: Bool
     let isShifted: Bool
 
     var body: some View {
@@ -42,13 +43,15 @@ struct CharacterKeyView: View {
                             .foregroundColor(KeyboardTheme.tapColor)
                     }
 
-                    // Swipe direction labels
-                    ForEach(Array(config.swipes.keys), id: \.self) { dir in
-                        if let char = config.swipes[dir] {
-                            Text(displayText(char))
-                                .font(.system(size: swipeFontSize(geo), weight: .medium, design: .rounded))
-                                .foregroundColor(KeyboardTheme.swipeColor)
-                                .position(positionForDirection(dir, in: geo.size))
+                    if showSwipes {
+                        // Swipe direction labels
+                        ForEach(Array(config.swipes.keys), id: \.self) { dir in
+                            if let char = config.swipes[dir] {
+                                Text(displayText(char))
+                                    .font(.system(size: swipeFontSize(geo), weight: .medium, design: .rounded))
+                                    .foregroundColor(KeyboardTheme.swipeColor)
+                                    .position(positionForDirection(dir, in: geo.size))
+                            }
                         }
                     }
                 }
