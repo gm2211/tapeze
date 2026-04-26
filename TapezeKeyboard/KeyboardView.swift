@@ -79,7 +79,7 @@ struct KeyboardView: View {
                 }
             }
             .frame(height: state.keyboardHeight)
-            .background(Color(red: 0.12, green: 0.12, blue: 0.14))
+            .background(KeyboardTheme.keyboardBackground)
             .gesture(
                 DragGesture(minimumDistance: 0, coordinateSpace: .named("keyboard"))
                     .onChanged { value in
@@ -296,8 +296,8 @@ struct KeyboardView: View {
             // Tab indicator on key (2,0)
             if pos.row == 2 && pos.col == 0 {
                 Image(systemName: "arrow.right.to.line")
-                    .font(.system(size: 10))
-                    .foregroundColor(KeyboardTheme.tapColor)
+                    .font(.system(size: 12, weight: .bold))
+                    .foregroundColor(KeyboardTheme.swipeColor)
                     .position(x: size.width * 0.85, y: size.height * 0.88)
             }
 
@@ -305,11 +305,11 @@ struct KeyboardView: View {
             if pos.row == 0 && pos.col == 0 {
                 Text("C")
                     .font(.system(size: 10, weight: .bold))
-                    .foregroundColor(KeyboardTheme.tapColor)
+                    .foregroundColor(KeyboardTheme.swipeColor)
                     .padding(2)
                     .background(
                         RoundedRectangle(cornerRadius: 2)
-                            .fill(KeyboardTheme.tapColor.opacity(0.3))
+                            .fill(KeyboardTheme.swipeColor.opacity(0.2))
                     )
                     .position(x: size.width * 0.1, y: size.height * 0.12)
             }
