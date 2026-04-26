@@ -297,7 +297,7 @@ struct KeyboardView: View {
             if pos.row == 2 && pos.col == 0 {
                 Image(systemName: "arrow.right.to.line")
                     .font(.system(size: 12, weight: .bold))
-                    .foregroundColor(KeyboardTheme.swipeColor)
+                    .foregroundColor(KeyboardTheme.tapColor)
                     .position(x: size.width * 0.85, y: size.height * 0.88)
             }
 
@@ -305,11 +305,11 @@ struct KeyboardView: View {
             if pos.row == 0 && pos.col == 0 {
                 Text("C")
                     .font(.system(size: 10, weight: .bold))
-                    .foregroundColor(KeyboardTheme.swipeColor)
+                    .foregroundColor(KeyboardTheme.tapColor)
                     .padding(2)
                     .background(
                         RoundedRectangle(cornerRadius: 2)
-                            .fill(KeyboardTheme.swipeColor.opacity(0.2))
+                            .fill(KeyboardTheme.tapColor.opacity(0.3))
                     )
                     .position(x: size.width * 0.1, y: size.height * 0.12)
             }

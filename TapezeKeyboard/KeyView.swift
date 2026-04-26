@@ -3,15 +3,15 @@ import SwiftUI
 // MARK: - Theme Colors
 
 struct KeyboardTheme {
-    static let keyboardBackground = Color(red: 0.08, green: 0.06, blue: 0.10)
-    static let keyBackground = Color(red: 0.02, green: 0.02, blue: 0.03)
-    static let commandBackground = Color(red: 0.70, green: 0.70, blue: 0.70)
-    static let spaceBackground = Color(red: 0.52, green: 0.53, blue: 0.52)
-    static let tapColor = Color(red: 0.82, green: 0.86, blue: 1.0)
-    static let swipeColor = Color(red: 0.96, green: 0.88, blue: 0.56)
-    static let specialTextColor = Color(red: 0.03, green: 0.03, blue: 0.04)
-    static let keyBorder = Color(red: 0.24, green: 0.24, blue: 0.26)
-    static let activeKeyBackground = Color(red: 0.12, green: 0.10, blue: 0.16)
+    static let keyboardBackground = Color(red: 0.12, green: 0.12, blue: 0.14)
+    static let keyBackground = Color(red: 0.17, green: 0.24, blue: 0.31)       // #2C3E50
+    static let commandBackground = Color(red: 0.75, green: 0.78, blue: 0.80)   // #BFC8CC
+    static let spaceBackground = Color(red: 0.65, green: 0.68, blue: 0.70)     // #A6ADB2
+    static let tapColor = Color(red: 0.78, green: 0.66, blue: 0.20)            // #C8A832 (golden)
+    static let swipeColor = Color(red: 0.60, green: 0.66, blue: 0.72)          // #99A8B8 (light gray)
+    static let specialTextColor = Color(red: 0.25, green: 0.30, blue: 0.35)    // dark gray
+    static let keyBorder = Color(red: 0.35, green: 0.40, blue: 0.45)           // subtle border
+    static let activeKeyBackground = Color(red: 0.25, green: 0.35, blue: 0.45) // highlight
 }
 
 // MARK: - Main Character Key View
