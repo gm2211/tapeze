@@ -76,7 +76,7 @@ struct CharacterKeyView: View {
     }
 
     private func positionForDirection(_ dir: SwipeDirection, in size: CGSize) -> CGPoint {
-        let inset: CGFloat = 0.15
+        let inset: CGFloat = 0.2
         let xPositions: [CGFloat] = [inset, 0.5, 1.0 - inset]
         let yPositions: [CGFloat] = [inset, 0.5, 1.0 - inset]
 

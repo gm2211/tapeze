@@ -114,9 +114,10 @@ class GestureEngine {
             }
         }
 
-        // Finger ended on a different key: directional swipe
-        let angle = atan2(-(end.y - start.y), end.x - start.x)
-        let direction = SwipeDirection.fromAngle(Double(angle))
+        // Finger ended on a different key: prefer the destination key's grid
+        // direction so slightly off-center starts still resolve cleanly.
+        let direction = endKey.flatMap { gridDirection(from: startKey, to: $0) }
+            ?? peakSwipeDirection(from: startKey)
         return .swipe(fromKey: startKey, direction: direction)
     }
 
@@ -223,6 +224,23 @@ class GestureEngine {
 
         let angle = atan2(-(peakPoint.y - center.y), peakPoint.x - center.x)
         return SwipeDirection.fromAngle(Double(angle))
+    }
+
+    private func gridDirection(from start: GridPosition, to end: GridPosition) -> SwipeDirection? {
+        let row = max(-1, min(1, end.row - start.row))
+        let col = max(-1, min(1, end.col - start.col))
+
+        switch (row, col) {
+        case (-1, -1): return .topLeft
+        case (-1, 0):  return .top
+        case (-1, 1):  return .topRight
+        case (0, -1):  return .left
+        case (0, 1):   return .right
+        case (1, -1):  return .bottomLeft
+        case (1, 0):   return .bottom
+        case (1, 1):   return .bottomRight
+        default:       return nil
+        }
     }
 
     // MARK: - Helper: Circle detection
