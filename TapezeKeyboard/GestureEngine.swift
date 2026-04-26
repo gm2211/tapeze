@@ -134,8 +134,9 @@ class GestureEngine {
             return .tap(GridPosition(row: 3, col: 0)) // spacebar position
         }
 
-        // Check for swipe up and back
-        let cameBack = abs(end.y - start.y) < tapDistanceThreshold && hasVerticalExcursion()
+        // Check for swipe up and back. Use the spacebar bounds instead of
+        // exact start/end distance so a natural return still counts.
+        let cameBack = spaceBarRegion.insetBy(dx: -12, dy: -12).contains(end) && hasUpwardExcursion()
         if cameBack {
             return .specialSwipe(.spaceSwipeUpAndBack)
         }
@@ -284,11 +285,11 @@ class GestureEngine {
 
     // MARK: - Helper: Vertical excursion detection
 
-    private func hasVerticalExcursion() -> Bool {
+    private func hasUpwardExcursion() -> Bool {
         guard let start = points.first else { return false }
         let threshold: CGFloat = 30
         for point in points {
-            if abs(point.y - start.y) > threshold {
+            if start.y - point.y > threshold {
                 return true
             }
         }

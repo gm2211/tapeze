@@ -83,22 +83,20 @@ struct KeyboardView: View {
             .gesture(
                 DragGesture(minimumDistance: 0, coordinateSpace: .named("keyboard"))
                     .onChanged { value in
+                        if !gestureEngine.hasActiveGesture {
+                            gestureEngine.touchBegan(at: value.startLocation)
+                        }
                         gestureEngine.touchMoved(to: value.location)
                         updateActiveKey(at: value.location)
                     }
                     .onEnded { value in
+                        if !gestureEngine.hasActiveGesture {
+                            gestureEngine.touchBegan(at: value.startLocation)
+                        }
                         let result = gestureEngine.touchEnded(at: value.location)
                         handleGestureResult(result)
                         state.activeKeyPosition = nil
                         state.swipeDirection = nil
-                    }
-            )
-            .simultaneousGesture(
-                DragGesture(minimumDistance: 0, coordinateSpace: .named("keyboard"))
-                    .onChanged { value in
-                        if !gestureEngine.hasActiveGesture {
-                            gestureEngine.touchBegan(at: value.location)
-                        }
                     }
             )
             .coordinateSpace(name: "keyboard")
