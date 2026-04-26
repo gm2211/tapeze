@@ -34,15 +34,15 @@ struct KeyboardTheme: Identifiable {
     static let liquidGlass = KeyboardTheme(
         id: "liquidGlass",
         name: "Liquid Glass",
-        keyboardBackground: Color(red: 0.90, green: 0.94, blue: 0.98).opacity(0.82),
-        keyBackground: Color(red: 0.98, green: 1.00, blue: 1.00).opacity(0.62),
-        commandBackground: Color(red: 0.91, green: 0.95, blue: 0.99).opacity(0.78),
-        spaceBackground: Color(red: 0.82, green: 0.88, blue: 0.94).opacity(0.70),
-        tapColor: Color(red: 0.10, green: 0.22, blue: 0.35),
-        swipeColor: Color(red: 0.32, green: 0.47, blue: 0.62),
-        specialTextColor: Color(red: 0.10, green: 0.16, blue: 0.24),
-        keyBorder: Color.white.opacity(0.72),
-        activeKeyBackground: Color(red: 0.72, green: 0.87, blue: 1.00).opacity(0.72)
+        keyboardBackground: Color.white.opacity(0.16),
+        keyBackground: Color.white.opacity(0.42),
+        commandBackground: Color.white.opacity(0.56),
+        spaceBackground: Color.white.opacity(0.28),
+        tapColor: Color(red: 0.06, green: 0.08, blue: 0.10),
+        swipeColor: Color(red: 0.35, green: 0.38, blue: 0.42),
+        specialTextColor: Color(red: 0.08, green: 0.09, blue: 0.11),
+        keyBorder: Color.white.opacity(0.82),
+        activeKeyBackground: Color.white.opacity(0.72)
     )
 
     static let graphite = KeyboardTheme(
