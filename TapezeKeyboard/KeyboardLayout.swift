@@ -193,6 +193,14 @@ struct KeyboardLayoutData {
         ],
     ]
 
+    // MARK: Symbol Overlay - Letter taps with symbol swipes
+
+    static let symbolOverlayGrid: [[KeyConfig]] = zip(letterGrid, numberGrid).map { letterRow, numberRow in
+        zip(letterRow, numberRow).map { letterKey, numberKey in
+            KeyConfig(tap: letterKey.tap, swipes: numberKey.swipes)
+        }
+    }
+
     // MARK: Command Bar (right column)
 
     static func commandBar(for layer: KeyboardLayer) -> [KeyConfig] {

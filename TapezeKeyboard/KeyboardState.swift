@@ -11,6 +11,7 @@ class KeyboardState: ObservableObject {
     @Published var commandBarOnRight: Bool = true
     @Published var isFullWidth: Bool = true
     @Published var showCenterLabels: Bool = true
+    @Published var isSymbolOverlayActive: Bool = false
 
     // Gesture feedback
     @Published var activeKeyPosition: GridPosition? = nil
@@ -25,6 +26,8 @@ class KeyboardState: ObservableObject {
     // MARK: - Actions
 
     func toggleLayer() {
+        isSymbolOverlayActive = false
+
         switch currentLayer {
         case .letters:
             currentLayer = .numbers
@@ -54,14 +57,15 @@ class KeyboardState: ObservableObject {
     }
 
     func toggleSymbolsOnly() {
+        if currentLayer == .letters {
+            isSymbolOverlayActive.toggle()
+            return
+        }
+
         if currentLayer == .symbolsOnly {
             currentLayer = .numbers
         } else if currentLayer == .numbers {
             currentLayer = .symbolsOnly
-        }
-        // From letters: swipe up on space shows symbols
-        if currentLayer == .letters {
-            currentLayer = .numbers
         }
     }
 
@@ -90,6 +94,9 @@ class KeyboardState: ObservableObject {
     var currentGrid: [[KeyConfig]] {
         switch currentLayer {
         case .letters:
+            if isSymbolOverlayActive {
+                return KeyboardLayoutData.symbolOverlayGrid
+            }
             return KeyboardLayoutData.letterGrid
         case .numbers:
             return KeyboardLayoutData.numberGrid
