@@ -98,9 +98,11 @@ struct KeyboardTheme: Identifiable {
 
 struct CharacterKeyView: View {
     let config: KeyConfig
+    let letterSwipeLabels: [SwipeDirection: String]?
     let isActive: Bool
     let showCenter: Bool
     let showSwipes: Bool
+    let showSymbolOverlay: Bool
     let isShifted: Bool
     let theme: KeyboardTheme
 
@@ -124,10 +126,21 @@ struct CharacterKeyView: View {
                             .foregroundColor(theme.tapColor)
                     }
 
-                    if showSwipes {
-                        // Swipe direction labels
+                    if showSymbolOverlay {
                         ForEach(Array(config.swipes.keys), id: \.self) { dir in
                             if let char = config.swipes[dir] {
+                                Text(char)
+                                    .font(.system(size: symbolOverlayFontSize(geo), weight: .medium, design: .rounded))
+                                    .foregroundColor(theme.swipeColor.opacity(0.62))
+                                    .position(symbolOverlayPositionForDirection(dir, in: geo.size))
+                            }
+                        }
+                    }
+
+                    if showSwipes {
+                        // Swipe direction labels
+                        ForEach(Array(displayedSwipeLabels.keys), id: \.self) { dir in
+                            if let char = displayedSwipeLabels[dir] {
                                 Text(displayText(char))
                                     .font(.system(size: swipeFontSize(geo), weight: .medium, design: .rounded))
                                     .foregroundColor(theme.swipeColor)
@@ -138,6 +151,10 @@ struct CharacterKeyView: View {
                 }
             }
         }
+    }
+
+    private var displayedSwipeLabels: [SwipeDirection: String] {
+        letterSwipeLabels ?? config.swipes
     }
 
     private func displayText(_ text: String) -> String {
@@ -155,9 +172,39 @@ struct CharacterKeyView: View {
         min(geo.size.width, geo.size.height) * 0.26
     }
 
+    private func symbolOverlayFontSize(_ geo: GeometryProxy) -> CGFloat {
+        min(geo.size.width, geo.size.height) * 0.20
+    }
+
     private func positionForDirection(_ dir: SwipeDirection, in size: CGSize) -> CGPoint {
         let xInset: CGFloat = 0.11
         let yInset: CGFloat = 0.13
+        let xPositions: [CGFloat] = [xInset, 0.5, 1.0 - xInset]
+        let yPositions: [CGFloat] = [yInset, 0.5, 1.0 - yInset]
+
+        let col: Int
+        let row: Int
+
+        switch dir {
+        case .topLeft:     col = 0; row = 0
+        case .top:         col = 1; row = 0
+        case .topRight:    col = 2; row = 0
+        case .left:        col = 0; row = 1
+        case .right:       col = 2; row = 1
+        case .bottomLeft:  col = 0; row = 2
+        case .bottom:      col = 1; row = 2
+        case .bottomRight: col = 2; row = 2
+        }
+
+        return CGPoint(
+            x: xPositions[col] * size.width,
+            y: yPositions[row] * size.height
+        )
+    }
+
+    private func symbolOverlayPositionForDirection(_ dir: SwipeDirection, in size: CGSize) -> CGPoint {
+        let xInset: CGFloat = 0.06
+        let yInset: CGFloat = 0.08
         let xPositions: [CGFloat] = [xInset, 0.5, 1.0 - xInset]
         let yPositions: [CGFloat] = [yInset, 0.5, 1.0 - yInset]
 

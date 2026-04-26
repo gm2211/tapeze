@@ -135,7 +135,7 @@ struct KeyboardView: View {
         let grid = state.currentGrid
         let isSymbolOverlay = state.currentLayer == .letters && state.isSymbolOverlayActive
         let showCenter = state.currentLayer != .symbolsOnly && state.showCenterLabels
-        let showSwipes = state.currentLayer != .letters || state.showCenterLabels || isSymbolOverlay
+        let showSwipes = state.currentLayer != .letters || state.showCenterLabels
 
         VStack(spacing: spacing) {
             ForEach(0..<gridRows, id: \.self) { row in
@@ -143,13 +143,16 @@ struct KeyboardView: View {
                     ForEach(0..<gridCols, id: \.self) { col in
                         let pos = GridPosition(row: row, col: col)
                         let config = grid[row][col]
+                        let letterSwipeLabels = isSymbolOverlay ? KeyboardLayoutData.letterGrid[row][col].swipes : nil
                         let isActive = state.activeKeyPosition == pos
 
                         CharacterKeyView(
                             config: config,
+                            letterSwipeLabels: letterSwipeLabels,
                             isActive: isActive,
                             showCenter: showCenter,
                             showSwipes: showSwipes,
+                            showSymbolOverlay: isSymbolOverlay,
                             isShifted: state.isShifted || state.isCapsLocked,
                             theme: state.theme
                         )
