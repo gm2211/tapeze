@@ -4,7 +4,10 @@ import Combine
 // MARK: - Keyboard State
 
 class KeyboardState: ObservableObject {
+    static let appGroupSuiteName = "group.com.tapeze.app"
+    static let settingsDefaults = UserDefaults(suiteName: appGroupSuiteName) ?? .standard
     static let showGestureTrailDefaultsKey = "showGestureTrail"
+    static let selectedThemeDefaultsKey = KeyboardTheme.defaultsKey
 
     @Published var currentLayer: KeyboardLayer = .letters
     @Published var isShifted: Bool = false
@@ -16,7 +19,12 @@ class KeyboardState: ObservableObject {
     @Published var isSymbolOverlayActive: Bool = false
     @Published var showGestureTrail: Bool {
         didSet {
-            UserDefaults.standard.set(showGestureTrail, forKey: Self.showGestureTrailDefaultsKey)
+            Self.settingsDefaults.set(showGestureTrail, forKey: Self.showGestureTrailDefaultsKey)
+        }
+    }
+    @Published var selectedThemeID: String {
+        didSet {
+            Self.settingsDefaults.set(selectedThemeID, forKey: Self.selectedThemeDefaultsKey)
         }
     }
 
@@ -31,11 +39,21 @@ class KeyboardState: ObservableObject {
     let heightStep: CGFloat = 30
 
     init() {
-        if UserDefaults.standard.object(forKey: Self.showGestureTrailDefaultsKey) == nil {
+        if Self.settingsDefaults.object(forKey: Self.showGestureTrailDefaultsKey) == nil {
             showGestureTrail = true
         } else {
-            showGestureTrail = UserDefaults.standard.bool(forKey: Self.showGestureTrailDefaultsKey)
+            showGestureTrail = Self.settingsDefaults.bool(forKey: Self.showGestureTrailDefaultsKey)
         }
+
+        if let savedThemeID = Self.settingsDefaults.string(forKey: Self.selectedThemeDefaultsKey) {
+            selectedThemeID = savedThemeID
+        } else {
+            selectedThemeID = KeyboardTheme.classic.id
+        }
+    }
+
+    var theme: KeyboardTheme {
+        KeyboardTheme.theme(for: selectedThemeID)
     }
 
     // MARK: - Actions

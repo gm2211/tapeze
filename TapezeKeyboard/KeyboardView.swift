@@ -79,7 +79,7 @@ struct KeyboardView: View {
                 }
             }
             .frame(height: state.keyboardHeight)
-            .background(KeyboardTheme.keyboardBackground)
+            .background(state.theme.keyboardBackground)
             .gesture(
                 DragGesture(minimumDistance: 0, coordinateSpace: .named("keyboard"))
                     .onChanged { value in
@@ -113,7 +113,7 @@ struct KeyboardView: View {
             )
             .overlay {
                 if state.showGestureTrail && !state.gestureTrailPoints.isEmpty {
-                    GestureTrailView(points: state.gestureTrailPoints)
+                    GestureTrailView(points: state.gestureTrailPoints, theme: state.theme)
                         .allowsHitTesting(false)
                 }
             }
@@ -150,7 +150,8 @@ struct KeyboardView: View {
                             isActive: isActive,
                             showCenter: showCenter,
                             showSwipes: showSwipes,
-                            isShifted: state.isShifted || state.isCapsLocked
+                            isShifted: state.isShifted || state.isCapsLocked,
+                            theme: state.theme
                         )
                         .frame(width: colWidth, height: rowHeight)
                         .overlay(
@@ -191,7 +192,8 @@ struct KeyboardView: View {
 
                 CommandKeyView(
                     config: config,
-                    isActive: state.activeKeyPosition == commandPos
+                    isActive: state.activeKeyPosition == commandPos,
+                    theme: state.theme
                 )
                 .frame(width: width, height: rowHeight)
                 .background(
@@ -224,7 +226,7 @@ struct KeyboardView: View {
     @ViewBuilder
     private func bottomRow(width: CGFloat, height: CGFloat) -> some View {
         if state.currentLayer == .letters {
-            SpaceBarView(isActive: state.activeKeyPosition == GridPosition(row: 3, col: 0))
+            SpaceBarView(isActive: state.activeKeyPosition == GridPosition(row: 3, col: 0), theme: state.theme)
                 .frame(width: width, height: height)
                 .background(
                     GeometryReader { geo in
@@ -246,13 +248,14 @@ struct KeyboardView: View {
                     let config = parts[idx]
                     BottomNumberKeyView(
                         config: config,
-                        isActive: false
+                        isActive: false,
+                        theme: state.theme
                     )
                     .frame(height: height)
                 }
 
                 // Remaining space
-                SpaceBarView(isActive: false)
+                SpaceBarView(isActive: false, theme: state.theme)
                     .frame(height: height)
                     .background(
                         GeometryReader { geo in
@@ -280,7 +283,8 @@ struct KeyboardView: View {
 
         CommandKeyView(
             config: KeyConfig(tap: "", specialAction: .enter, displayLabel: "return"),
-            isActive: state.activeKeyPosition == pos
+            isActive: state.activeKeyPosition == pos,
+            theme: state.theme
         )
         .frame(width: width, height: height)
         .background(
@@ -307,7 +311,8 @@ struct KeyboardView: View {
             if pos.row == 1 && pos.col == 2 {
                 ShiftIndicatorView(
                     isShifted: state.isShifted,
-                    isCapsLocked: state.isCapsLocked
+                    isCapsLocked: state.isCapsLocked,
+                    theme: state.theme
                 )
                 .position(x: size.width * 0.5, y: size.height * 0.12)
             }
@@ -316,7 +321,7 @@ struct KeyboardView: View {
             if pos.row == 2 && pos.col == 0 {
                 Image(systemName: "arrow.right.to.line")
                     .font(.system(size: 10))
-                    .foregroundColor(KeyboardTheme.tapColor)
+                    .foregroundColor(state.theme.tapColor)
                     .position(x: size.width * 0.85, y: size.height * 0.88)
             }
 
@@ -324,11 +329,11 @@ struct KeyboardView: View {
             if pos.row == 0 && pos.col == 0 {
                 Text("C")
                     .font(.system(size: 10, weight: .bold))
-                    .foregroundColor(KeyboardTheme.tapColor)
+                    .foregroundColor(state.theme.tapColor)
                     .padding(2)
                     .background(
                         RoundedRectangle(cornerRadius: 2)
-                            .fill(KeyboardTheme.tapColor.opacity(0.3))
+                            .fill(state.theme.tapColor.opacity(0.3))
                     )
                     .position(x: size.width * 0.1, y: size.height * 0.12)
             }
@@ -337,7 +342,7 @@ struct KeyboardView: View {
             if pos.row == 1 && pos.col == 0 && state.currentLayer == .letters && !state.isSymbolOverlayActive && state.showCenterLabels {
                 Text(".com")
                     .font(.system(size: 9, weight: .medium))
-                    .foregroundColor(KeyboardTheme.swipeColor)
+                    .foregroundColor(state.theme.swipeColor)
                     .position(x: size.width * 0.35, y: size.height * 0.88)
             }
 
@@ -517,6 +522,7 @@ struct KeyboardView: View {
 
 private struct GestureTrailView: View {
     let points: [CGPoint]
+    let theme: KeyboardTheme
 
     var body: some View {
         Path { path in
@@ -527,7 +533,7 @@ private struct GestureTrailView: View {
             }
         }
         .stroke(
-            KeyboardTheme.tapColor.opacity(0.85),
+            theme.tapColor.opacity(0.85),
             style: StrokeStyle(lineWidth: 4, lineCap: .round, lineJoin: .round)
         )
         .shadow(color: .black.opacity(0.2), radius: 2)

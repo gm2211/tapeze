@@ -1,7 +1,8 @@
 import SwiftUI
 
 struct ContentView: View {
-    @AppStorage(KeyboardState.showGestureTrailDefaultsKey) private var showGestureTrail = true
+    @AppStorage(KeyboardState.showGestureTrailDefaultsKey, store: KeyboardState.settingsDefaults) private var showGestureTrail = true
+    @AppStorage(KeyboardState.selectedThemeDefaultsKey, store: KeyboardState.settingsDefaults) private var selectedThemeID = KeyboardTheme.classic.id
     @State private var testText: String = ""
     @StateObject private var previewState = KeyboardState()
 
@@ -54,11 +55,16 @@ struct ContentView: View {
                 Spacer()
             }
             .navigationBarTitleDisplayMode(.inline)
+            .background(previewState.theme.keyboardBackground.opacity(0.08))
             .onAppear {
                 previewState.showGestureTrail = showGestureTrail
+                previewState.selectedThemeID = selectedThemeID
             }
             .onChange(of: showGestureTrail) { newValue in
                 previewState.showGestureTrail = newValue
+            }
+            .onChange(of: selectedThemeID) { newValue in
+                previewState.selectedThemeID = newValue
             }
         }
     }
@@ -89,9 +95,40 @@ struct ContentView: View {
     }
 
     private var settingsView: some View {
-        Toggle("Show gesture trail", isOn: $showGestureTrail)
-            .font(.subheadline)
-            .padding(.horizontal)
+        VStack(alignment: .leading, spacing: 12) {
+            HStack {
+                Text("Settings")
+                    .font(.headline)
+                Spacer()
+            }
+
+            Picker("Theme", selection: $selectedThemeID) {
+                ForEach(KeyboardTheme.all) { theme in
+                    Text(theme.name).tag(theme.id)
+                }
+            }
+            .pickerStyle(.menu)
+
+            HStack(spacing: 8) {
+                ForEach(KeyboardTheme.all) { theme in
+                    Button {
+                        selectedThemeID = theme.id
+                    } label: {
+                        ThemeSwatch(theme: theme, isSelected: selectedThemeID == theme.id)
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
+
+            Toggle("Show gesture trail", isOn: $showGestureTrail)
+                .font(.subheadline)
+        }
+        .padding()
+        .background(
+            RoundedRectangle(cornerRadius: 10)
+                .fill(Color(.systemGray6))
+        )
+        .padding(.horizontal)
     }
 
     private func instructionRow(number: Int, text: String) -> some View {
@@ -102,6 +139,41 @@ struct ContentView: View {
             Text(text)
                 .font(.body)
                 .fixedSize(horizontal: false, vertical: true)
+        }
+    }
+}
+
+private struct ThemeSwatch: View {
+    let theme: KeyboardTheme
+    let isSelected: Bool
+
+    var body: some View {
+        VStack(spacing: 4) {
+            ZStack {
+                RoundedRectangle(cornerRadius: 6)
+                    .fill(theme.keyBackground)
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 6)
+                            .strokeBorder(isSelected ? theme.tapColor : theme.keyBorder, lineWidth: isSelected ? 2 : 1)
+                    )
+
+                Circle()
+                    .fill(theme.tapColor)
+                    .frame(width: 12, height: 12)
+                    .offset(x: -8, y: -4)
+
+                Circle()
+                    .fill(theme.swipeColor)
+                    .frame(width: 8, height: 8)
+                    .offset(x: 9, y: 7)
+            }
+            .frame(width: 44, height: 34)
+
+            Text(theme.name)
+                .font(.system(size: 9))
+                .lineLimit(1)
+                .minimumScaleFactor(0.65)
+                .frame(width: 54)
         }
     }
 }

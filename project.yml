@@ -20,6 +20,7 @@ targets:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.tapeze.app
         INFOPLIST_FILE: Tapeze/Info.plist
+        CODE_SIGN_ENTITLEMENTS: Tapeze/Tapeze.entitlements
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
         CODE_SIGN_STYLE: Automatic
         DEVELOPMENT_TEAM: ""
@@ -35,6 +36,7 @@ targets:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.tapeze.app.keyboard
         INFOPLIST_FILE: TapezeKeyboard/Info.plist
+        CODE_SIGN_ENTITLEMENTS: TapezeKeyboard/TapezeKeyboard.entitlements
         CODE_SIGN_STYLE: Automatic
         DEVELOPMENT_TEAM: ""
         ENABLE_DEBUG_DYLIB: "NO"

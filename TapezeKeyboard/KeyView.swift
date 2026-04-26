@@ -1,17 +1,97 @@
 import SwiftUI
 
-// MARK: - Theme Colors
+// MARK: - Theme
 
-struct KeyboardTheme {
-    static let keyboardBackground = Color(red: 0.12, green: 0.12, blue: 0.14)
-    static let keyBackground = Color(red: 0.17, green: 0.24, blue: 0.31)       // #2C3E50
-    static let commandBackground = Color(red: 0.75, green: 0.78, blue: 0.80)   // #BFC8CC
-    static let spaceBackground = Color(red: 0.65, green: 0.68, blue: 0.70)     // #A6ADB2
-    static let tapColor = Color(red: 0.78, green: 0.66, blue: 0.20)            // #C8A832 (golden)
-    static let swipeColor = Color(red: 0.60, green: 0.66, blue: 0.72)          // #99A8B8 (light gray)
-    static let specialTextColor = Color(red: 0.25, green: 0.30, blue: 0.35)    // dark gray
-    static let keyBorder = Color(red: 0.35, green: 0.40, blue: 0.45)           // subtle border
-    static let activeKeyBackground = Color(red: 0.25, green: 0.35, blue: 0.45) // highlight
+struct KeyboardTheme: Identifiable {
+    static let defaultsKey = "keyboardTheme"
+
+    let id: String
+    let name: String
+    let keyboardBackground: Color
+    let keyBackground: Color
+    let commandBackground: Color
+    let spaceBackground: Color
+    let tapColor: Color
+    let swipeColor: Color
+    let specialTextColor: Color
+    let keyBorder: Color
+    let activeKeyBackground: Color
+
+    static let classic = KeyboardTheme(
+        id: "classic",
+        name: "Classic",
+        keyboardBackground: Color(red: 0.12, green: 0.12, blue: 0.14),
+        keyBackground: Color(red: 0.17, green: 0.24, blue: 0.31),
+        commandBackground: Color(red: 0.75, green: 0.78, blue: 0.80),
+        spaceBackground: Color(red: 0.65, green: 0.68, blue: 0.70),
+        tapColor: Color(red: 0.78, green: 0.66, blue: 0.20),
+        swipeColor: Color(red: 0.60, green: 0.66, blue: 0.72),
+        specialTextColor: Color(red: 0.25, green: 0.30, blue: 0.35),
+        keyBorder: Color(red: 0.35, green: 0.40, blue: 0.45),
+        activeKeyBackground: Color(red: 0.25, green: 0.35, blue: 0.45)
+    )
+
+    static let liquidGlass = KeyboardTheme(
+        id: "liquidGlass",
+        name: "Liquid Glass",
+        keyboardBackground: Color(red: 0.90, green: 0.94, blue: 0.98).opacity(0.82),
+        keyBackground: Color(red: 0.98, green: 1.00, blue: 1.00).opacity(0.62),
+        commandBackground: Color(red: 0.91, green: 0.95, blue: 0.99).opacity(0.78),
+        spaceBackground: Color(red: 0.82, green: 0.88, blue: 0.94).opacity(0.70),
+        tapColor: Color(red: 0.10, green: 0.22, blue: 0.35),
+        swipeColor: Color(red: 0.32, green: 0.47, blue: 0.62),
+        specialTextColor: Color(red: 0.10, green: 0.16, blue: 0.24),
+        keyBorder: Color.white.opacity(0.72),
+        activeKeyBackground: Color(red: 0.72, green: 0.87, blue: 1.00).opacity(0.72)
+    )
+
+    static let graphite = KeyboardTheme(
+        id: "graphite",
+        name: "Graphite",
+        keyboardBackground: Color(red: 0.08, green: 0.09, blue: 0.11),
+        keyBackground: Color(red: 0.14, green: 0.16, blue: 0.19),
+        commandBackground: Color(red: 0.58, green: 0.61, blue: 0.66),
+        spaceBackground: Color(red: 0.42, green: 0.45, blue: 0.49),
+        tapColor: Color(red: 0.93, green: 0.78, blue: 0.16),
+        swipeColor: Color(red: 0.78, green: 0.82, blue: 0.88),
+        specialTextColor: Color(red: 0.10, green: 0.13, blue: 0.17),
+        keyBorder: Color(red: 0.28, green: 0.31, blue: 0.36),
+        activeKeyBackground: Color(red: 0.22, green: 0.25, blue: 0.30)
+    )
+
+    static let aurora = KeyboardTheme(
+        id: "aurora",
+        name: "Aurora",
+        keyboardBackground: Color(red: 0.07, green: 0.13, blue: 0.15),
+        keyBackground: Color(red: 0.08, green: 0.23, blue: 0.27),
+        commandBackground: Color(red: 0.72, green: 0.82, blue: 0.82),
+        spaceBackground: Color(red: 0.52, green: 0.63, blue: 0.64),
+        tapColor: Color(red: 0.93, green: 0.76, blue: 0.23),
+        swipeColor: Color(red: 0.60, green: 0.83, blue: 0.82),
+        specialTextColor: Color(red: 0.08, green: 0.15, blue: 0.18),
+        keyBorder: Color(red: 0.15, green: 0.38, blue: 0.43),
+        activeKeyBackground: Color(red: 0.12, green: 0.33, blue: 0.38)
+    )
+
+    static let roseQuartz = KeyboardTheme(
+        id: "roseQuartz",
+        name: "Rose Quartz",
+        keyboardBackground: Color(red: 0.21, green: 0.16, blue: 0.19),
+        keyBackground: Color(red: 0.33, green: 0.24, blue: 0.29),
+        commandBackground: Color(red: 0.84, green: 0.77, blue: 0.79),
+        spaceBackground: Color(red: 0.66, green: 0.58, blue: 0.61),
+        tapColor: Color(red: 0.98, green: 0.79, blue: 0.37),
+        swipeColor: Color(red: 0.86, green: 0.72, blue: 0.80),
+        specialTextColor: Color(red: 0.24, green: 0.19, blue: 0.23),
+        keyBorder: Color(red: 0.45, green: 0.34, blue: 0.40),
+        activeKeyBackground: Color(red: 0.43, green: 0.30, blue: 0.38)
+    )
+
+    static let all: [KeyboardTheme] = [.classic, .liquidGlass, .graphite, .aurora, .roseQuartz]
+
+    static func theme(for id: String) -> KeyboardTheme {
+        all.first { $0.id == id } ?? .classic
+    }
 }
 
 // MARK: - Main Character Key View
@@ -22,16 +102,17 @@ struct CharacterKeyView: View {
     let showCenter: Bool
     let showSwipes: Bool
     let isShifted: Bool
+    let theme: KeyboardTheme
 
     var body: some View {
         GeometryReader { geo in
             ZStack {
                 // Background
                 RoundedRectangle(cornerRadius: 4)
-                    .fill(isActive ? KeyboardTheme.activeKeyBackground : KeyboardTheme.keyBackground)
+                    .fill(isActive ? theme.activeKeyBackground : theme.keyBackground)
                     .overlay(
                         RoundedRectangle(cornerRadius: 4)
-                            .strokeBorder(KeyboardTheme.keyBorder, lineWidth: 0.5)
+                            .strokeBorder(theme.keyBorder, lineWidth: 0.5)
                     )
 
                 // Labels
@@ -40,7 +121,7 @@ struct CharacterKeyView: View {
                     if showCenter {
                         Text(displayText(config.tap))
                             .font(.system(size: centerFontSize(geo), weight: .bold, design: .rounded))
-                            .foregroundColor(KeyboardTheme.tapColor)
+                            .foregroundColor(theme.tapColor)
                     }
 
                     if showSwipes {
@@ -49,7 +130,7 @@ struct CharacterKeyView: View {
                             if let char = config.swipes[dir] {
                                 Text(displayText(char))
                                     .font(.system(size: swipeFontSize(geo), weight: .medium, design: .rounded))
-                                    .foregroundColor(KeyboardTheme.swipeColor)
+                                    .foregroundColor(theme.swipeColor)
                                     .position(positionForDirection(dir, in: geo.size))
                             }
                         }
@@ -106,15 +187,16 @@ struct CharacterKeyView: View {
 struct CommandKeyView: View {
     let config: KeyConfig
     let isActive: Bool
+    let theme: KeyboardTheme
 
     var body: some View {
         GeometryReader { geo in
             ZStack {
                 RoundedRectangle(cornerRadius: 4)
-                    .fill(isActive ? KeyboardTheme.activeKeyBackground : KeyboardTheme.commandBackground)
+                    .fill(isActive ? theme.activeKeyBackground : theme.commandBackground)
                     .overlay(
                         RoundedRectangle(cornerRadius: 4)
-                            .strokeBorder(KeyboardTheme.keyBorder, lineWidth: 0.5)
+                            .strokeBorder(theme.keyBorder, lineWidth: 0.5)
                     )
 
                 commandContent(size: geo.size)
@@ -128,27 +210,27 @@ struct CommandKeyView: View {
         case .globe:
             Image(systemName: "globe")
                 .font(.system(size: size.height * 0.4))
-                .foregroundColor(KeyboardTheme.specialTextColor)
+                .foregroundColor(theme.specialTextColor)
 
         case .backspace:
             Image(systemName: "delete.backward.fill")
                 .font(.system(size: size.height * 0.3))
-                .foregroundColor(KeyboardTheme.specialTextColor)
+                .foregroundColor(theme.specialTextColor)
 
         case .enter:
             Image(systemName: "return")
                 .font(.system(size: size.height * 0.4))
-                .foregroundColor(KeyboardTheme.specialTextColor)
+                .foregroundColor(theme.specialTextColor)
 
         case .toggleLayer:
             Text(config.displayLabel ?? "")
                 .font(.system(size: size.height * 0.35, weight: .medium, design: .rounded))
-                .foregroundColor(KeyboardTheme.specialTextColor)
+                .foregroundColor(theme.specialTextColor)
 
         default:
             Text(config.displayLabel ?? config.tap)
                 .font(.system(size: size.height * 0.3, weight: .medium, design: .rounded))
-                .foregroundColor(KeyboardTheme.specialTextColor)
+                .foregroundColor(theme.specialTextColor)
         }
     }
 }
@@ -157,14 +239,15 @@ struct CommandKeyView: View {
 
 struct SpaceBarView: View {
     let isActive: Bool
+    let theme: KeyboardTheme
 
     var body: some View {
         GeometryReader { geo in
             RoundedRectangle(cornerRadius: 4)
-                .fill(isActive ? KeyboardTheme.activeKeyBackground : KeyboardTheme.spaceBackground)
+                .fill(isActive ? theme.activeKeyBackground : theme.spaceBackground)
                 .overlay(
                     RoundedRectangle(cornerRadius: 4)
-                        .strokeBorder(KeyboardTheme.keyBorder, lineWidth: 0.5)
+                        .strokeBorder(theme.keyBorder, lineWidth: 0.5)
                 )
         }
     }
@@ -175,20 +258,21 @@ struct SpaceBarView: View {
 struct BottomNumberKeyView: View {
     let config: KeyConfig
     let isActive: Bool
+    let theme: KeyboardTheme
 
     var body: some View {
         GeometryReader { geo in
             ZStack {
                 RoundedRectangle(cornerRadius: 4)
-                    .fill(isActive ? KeyboardTheme.activeKeyBackground : KeyboardTheme.keyBackground)
+                    .fill(isActive ? theme.activeKeyBackground : theme.keyBackground)
                     .overlay(
                         RoundedRectangle(cornerRadius: 4)
-                            .strokeBorder(KeyboardTheme.keyBorder, lineWidth: 0.5)
+                            .strokeBorder(theme.keyBorder, lineWidth: 0.5)
                     )
 
                 Text(config.tap)
                     .font(.system(size: min(geo.size.width, geo.size.height) * 0.4, weight: .bold, design: .rounded))
-                    .foregroundColor(KeyboardTheme.tapColor)
+                    .foregroundColor(theme.tapColor)
             }
         }
     }
@@ -199,11 +283,12 @@ struct BottomNumberKeyView: View {
 struct ShiftIndicatorView: View {
     let isShifted: Bool
     let isCapsLocked: Bool
+    let theme: KeyboardTheme
 
     var body: some View {
         let symbolName = isCapsLocked ? "capslock.fill" : (isShifted ? "shift.fill" : "shift")
         Image(systemName: symbolName)
             .font(.system(size: 12))
-            .foregroundColor(KeyboardTheme.tapColor)
+            .foregroundColor(theme.tapColor)
     }
 }
