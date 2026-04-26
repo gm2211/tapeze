@@ -296,7 +296,7 @@ struct KeyboardView: View {
             // Tab indicator on key (2,0)
             if pos.row == 2 && pos.col == 0 {
                 Image(systemName: "arrow.right.to.line")
-                    .font(.system(size: 12, weight: .bold))
+                    .font(.system(size: 10))
                     .foregroundColor(KeyboardTheme.tapColor)
                     .position(x: size.width * 0.85, y: size.height * 0.88)
             }

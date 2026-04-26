@@ -38,7 +38,7 @@ struct CharacterKeyView: View {
                     // Center tap label
                     if showCenter {
                         Text(displayText(config.tap))
-                            .font(.system(size: centerFontSize(geo), weight: .medium, design: .rounded))
+                            .font(.system(size: centerFontSize(geo), weight: .bold, design: .rounded))
                             .foregroundColor(KeyboardTheme.tapColor)
                     }
 
@@ -46,7 +46,7 @@ struct CharacterKeyView: View {
                     ForEach(Array(config.swipes.keys), id: \.self) { dir in
                         if let char = config.swipes[dir] {
                             Text(displayText(char))
-                                .font(.system(size: swipeFontSize(geo), weight: .regular, design: .rounded))
+                                .font(.system(size: swipeFontSize(geo), weight: .medium, design: .rounded))
                                 .foregroundColor(KeyboardTheme.swipeColor)
                                 .position(positionForDirection(dir, in: geo.size))
                         }
@@ -58,18 +58,18 @@ struct CharacterKeyView: View {
     }
 
     private func displayText(_ text: String) -> String {
-        if text.count == 1 && text.first?.isLetter == true {
+        if isShifted && text.count == 1 && text.first?.isLetter == true {
             return text.uppercased()
         }
         return text
     }
 
     private func centerFontSize(_ geo: GeometryProxy) -> CGFloat {
-        min(geo.size.width, geo.size.height) * 0.46
+        min(geo.size.width, geo.size.height) * 0.4
     }
 
     private func swipeFontSize(_ geo: GeometryProxy) -> CGFloat {
-        min(geo.size.width, geo.size.height) * 0.21
+        min(geo.size.width, geo.size.height) * 0.2
     }
 
     private func positionForDirection(_ dir: SwipeDirection, in size: CGSize) -> CGPoint {
@@ -124,22 +124,22 @@ struct CommandKeyView: View {
         switch config.specialAction {
         case .globe:
             Image(systemName: "globe")
-                .font(.system(size: size.height * 0.46, weight: .medium))
+                .font(.system(size: size.height * 0.4))
                 .foregroundColor(KeyboardTheme.specialTextColor)
 
         case .backspace:
             Image(systemName: "delete.backward.fill")
-                .font(.system(size: size.height * 0.34, weight: .medium))
+                .font(.system(size: size.height * 0.3))
                 .foregroundColor(KeyboardTheme.specialTextColor)
 
         case .enter:
             Image(systemName: "return")
-                .font(.system(size: size.height * 0.48, weight: .bold))
+                .font(.system(size: size.height * 0.4))
                 .foregroundColor(KeyboardTheme.specialTextColor)
 
         case .toggleLayer:
             Text(config.displayLabel ?? "")
-                .font(.system(size: size.height * 0.40, weight: .regular, design: .rounded))
+                .font(.system(size: size.height * 0.35, weight: .medium, design: .rounded))
                 .foregroundColor(KeyboardTheme.specialTextColor)
 
         default:
@@ -184,7 +184,7 @@ struct BottomNumberKeyView: View {
                     )
 
                 Text(config.tap)
-                    .font(.system(size: min(geo.size.width, geo.size.height) * 0.46, weight: .medium, design: .rounded))
+                    .font(.system(size: min(geo.size.width, geo.size.height) * 0.4, weight: .bold, design: .rounded))
                     .foregroundColor(KeyboardTheme.tapColor)
             }
         }
