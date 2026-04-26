@@ -85,20 +85,38 @@ struct KeyboardView: View {
                     .onChanged { value in
                         if !gestureEngine.hasActiveGesture {
                             gestureEngine.touchBegan(at: value.startLocation)
+                            state.gestureTrailPoints = []
                         }
                         gestureEngine.touchMoved(to: value.location)
+                        if state.showGestureTrail {
+                            state.gestureTrailPoints = gestureEngine.points
+                        } else {
+                            state.gestureTrailPoints = []
+                        }
                         updateActiveKey(at: value.location)
                     }
                     .onEnded { value in
                         if !gestureEngine.hasActiveGesture {
                             gestureEngine.touchBegan(at: value.startLocation)
                         }
+                        if state.showGestureTrail {
+                            state.gestureTrailPoints = gestureEngine.points + [value.location]
+                        }
                         let result = gestureEngine.touchEnded(at: value.location)
                         handleGestureResult(result)
                         state.activeKeyPosition = nil
                         state.swipeDirection = nil
+                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.12) {
+                            state.gestureTrailPoints = []
+                        }
                     }
             )
+            .overlay {
+                if state.showGestureTrail && !state.gestureTrailPoints.isEmpty {
+                    GestureTrailView(points: state.gestureTrailPoints)
+                        .allowsHitTesting(false)
+                }
+            }
             .coordinateSpace(name: "keyboard")
         }
         .frame(height: state.keyboardHeight)
@@ -494,5 +512,24 @@ struct KeyboardView: View {
         case .globeCircle:
             state.toggleCommandBarSide()
         }
+    }
+}
+
+private struct GestureTrailView: View {
+    let points: [CGPoint]
+
+    var body: some View {
+        Path { path in
+            guard let first = points.first else { return }
+            path.move(to: first)
+            for point in points.dropFirst() {
+                path.addLine(to: point)
+            }
+        }
+        .stroke(
+            KeyboardTheme.tapColor.opacity(0.85),
+            style: StrokeStyle(lineWidth: 4, lineCap: .round, lineJoin: .round)
+        )
+        .shadow(color: .black.opacity(0.2), radius: 2)
     }
 }

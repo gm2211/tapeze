@@ -4,6 +4,8 @@ import Combine
 // MARK: - Keyboard State
 
 class KeyboardState: ObservableObject {
+    static let showGestureTrailDefaultsKey = "showGestureTrail"
+
     @Published var currentLayer: KeyboardLayer = .letters
     @Published var isShifted: Bool = false
     @Published var isCapsLocked: Bool = false
@@ -12,6 +14,11 @@ class KeyboardState: ObservableObject {
     @Published var isFullWidth: Bool = true
     @Published var showCenterLabels: Bool = true
     @Published var isSymbolOverlayActive: Bool = false
+    @Published var showGestureTrail: Bool {
+        didSet {
+            UserDefaults.standard.set(showGestureTrail, forKey: Self.showGestureTrailDefaultsKey)
+        }
+    }
 
     // Gesture feedback
     @Published var activeKeyPosition: GridPosition? = nil
@@ -22,6 +29,14 @@ class KeyboardState: ObservableObject {
     let minHeight: CGFloat = 200
     let maxHeight: CGFloat = 400
     let heightStep: CGFloat = 30
+
+    init() {
+        if UserDefaults.standard.object(forKey: Self.showGestureTrailDefaultsKey) == nil {
+            showGestureTrail = true
+        } else {
+            showGestureTrail = UserDefaults.standard.bool(forKey: Self.showGestureTrailDefaultsKey)
+        }
+    }
 
     // MARK: - Actions
 

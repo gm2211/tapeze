@@ -32,6 +32,8 @@ A gesture-based keyboard for iOS inspired by MessagEase. Uses a compact 3x3 grid
 8. **Globe swipe up** increases keyboard size
 9. **Globe swipe down** decreases keyboard size
 
+Gesture trails are shown by default while swiping and can be turned off from the Tapeze app settings.
+
 ## Setup & Testing on iPhone Simulator
 
 ### Prerequisites

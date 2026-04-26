@@ -55,7 +55,6 @@ struct CharacterKeyView: View {
                         }
                     }
                 }
-                .padding(4)
             }
         }
     }
@@ -72,13 +71,14 @@ struct CharacterKeyView: View {
     }
 
     private func swipeFontSize(_ geo: GeometryProxy) -> CGFloat {
-        min(geo.size.width, geo.size.height) * 0.2
+        min(geo.size.width, geo.size.height) * 0.26
     }
 
     private func positionForDirection(_ dir: SwipeDirection, in size: CGSize) -> CGPoint {
-        let inset: CGFloat = 0.2
-        let xPositions: [CGFloat] = [inset, 0.5, 1.0 - inset]
-        let yPositions: [CGFloat] = [inset, 0.5, 1.0 - inset]
+        let xInset: CGFloat = 0.11
+        let yInset: CGFloat = 0.13
+        let xPositions: [CGFloat] = [xInset, 0.5, 1.0 - xInset]
+        let yPositions: [CGFloat] = [yInset, 0.5, 1.0 - yInset]
 
         let col: Int
         let row: Int

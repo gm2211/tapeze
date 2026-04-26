@@ -35,6 +35,7 @@ class GestureEngine {
     // Thresholds
     private let tapDistanceThreshold: CGFloat = 15.0
     private let minSwipeDistance: CGFloat = 20.0
+    private let subcellActivationDistance: CGFloat = 12.0
 
     // MARK: - Setup
 
@@ -89,29 +90,32 @@ class GestureEngine {
         guard let startKey = keyAt(start) else { return .none }
 
         let totalDistance = distance(start, end)
+        let maxDistance = maxDistance(from: start)
 
         // Simple tap: minimal movement
-        if totalDistance < tapDistanceThreshold {
+        if totalDistance < tapDistanceThreshold && maxDistance < tapDistanceThreshold {
             return .tap(startKey)
         }
 
         let endKey = keyAt(end)
+        let subcellDirection = firstSubcellDirection(from: startKey)
 
-        // Finger ended on the same key it started
+        // Finger returned to the same key: resolve against the 3x3 subcells.
         if endKey == startKey {
-            let didLeave = didLeaveKeyRegion(startKey)
-            if !didLeave {
-                // Stayed within key — treat as tap
-                return .tap(startKey)
-            }
-
-            // Left key and came back: circle or swipe-and-back
             if isCircularMotion() {
                 return .circle(startKey)
-            } else {
-                let peakDir = peakSwipeDirection(from: startKey)
-                return .swipeBack(fromKey: startKey, direction: peakDir)
             }
+            if let direction = subcellDirection {
+                if didReturnTowardStart(from: start, to: end, key: startKey) {
+                    return .swipeBack(fromKey: startKey, direction: direction)
+                }
+                return .swipe(fromKey: startKey, direction: direction)
+            }
+            return .tap(startKey)
+        }
+
+        if let direction = subcellDirection {
+            return .swipe(fromKey: startKey, direction: direction)
         }
 
         // Finger ended on a different key: prefer the destination key's grid
@@ -193,18 +197,6 @@ class GestureEngine {
         return nil
     }
 
-    // MARK: - Helper: Did leave key region
-
-    private func didLeaveKeyRegion(_ key: GridPosition) -> Bool {
-        guard let region = keyRegions[key] else { return false }
-        for point in points {
-            if !region.contains(point) {
-                return true
-            }
-        }
-        return false
-    }
-
     // MARK: - Helper: Peak swipe direction
 
     private func peakSwipeDirection(from key: GridPosition) -> SwipeDirection {
@@ -242,6 +234,66 @@ class GestureEngine {
         case (1, 1):   return .bottomRight
         default:       return nil
         }
+    }
+
+    private func firstSubcellDirection(from key: GridPosition) -> SwipeDirection? {
+        guard let region = keyRegions[key], let start = points.first else { return nil }
+        let center = CGPoint(x: region.midX, y: region.midY)
+
+        for point in points.dropFirst() {
+            guard distance(start, point) >= subcellActivationDistance ||
+                    distance(center, point) >= min(region.width, region.height) * 0.22 else {
+                continue
+            }
+
+            if let direction = subcellDirection(for: point, in: region) {
+                return direction
+            }
+            if !region.contains(point) {
+                return subcellDirection(
+                    for: CGPoint(
+                        x: min(max(point.x, region.minX), region.maxX),
+                        y: min(max(point.y, region.minY), region.maxY)
+                    ),
+                    in: region
+                )
+            }
+        }
+        return nil
+    }
+
+    private func subcellDirection(for point: CGPoint, in region: CGRect) -> SwipeDirection? {
+        guard region.width > 0, region.height > 0 else { return nil }
+
+        let normalizedX = min(max((point.x - region.minX) / region.width, 0), 0.999)
+        let normalizedY = min(max((point.y - region.minY) / region.height, 0), 0.999)
+        let col = Int(normalizedX * 3)
+        let row = Int(normalizedY * 3)
+
+        switch (row, col) {
+        case (0, 0): return .topLeft
+        case (0, 1): return .top
+        case (0, 2): return .topRight
+        case (1, 0): return .left
+        case (1, 2): return .right
+        case (2, 0): return .bottomLeft
+        case (2, 1): return .bottom
+        case (2, 2): return .bottomRight
+        default:     return nil
+        }
+    }
+
+    private func didReturnTowardStart(from start: CGPoint, to end: CGPoint, key: GridPosition) -> Bool {
+        guard let region = keyRegions[key] else { return false }
+        let centerBox = CGRect(
+            x: region.minX + region.width / 3,
+            y: region.minY + region.height / 3,
+            width: region.width / 3,
+            height: region.height / 3
+        ).insetBy(dx: -10, dy: -10)
+
+        return distance(start, end) <= max(tapDistanceThreshold * 2, min(region.width, region.height) * 0.28) ||
+            centerBox.contains(end)
     }
 
     // MARK: - Helper: Circle detection
@@ -302,5 +354,9 @@ class GestureEngine {
         let dx = b.x - a.x
         let dy = b.y - a.y
         return sqrt(dx * dx + dy * dy)
+    }
+
+    private func maxDistance(from start: CGPoint) -> CGFloat {
+        points.map { distance(start, $0) }.max() ?? 0
     }
 }

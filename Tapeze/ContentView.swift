@@ -1,6 +1,7 @@
 import SwiftUI
 
 struct ContentView: View {
+    @AppStorage(KeyboardState.showGestureTrailDefaultsKey) private var showGestureTrail = true
     @State private var testText: String = ""
     @StateObject private var previewState = KeyboardState()
 
@@ -18,6 +19,8 @@ struct ContentView: View {
                     .padding(.horizontal)
 
                 setupInstructionsView
+
+                settingsView
 
                 Divider()
 
@@ -51,6 +54,12 @@ struct ContentView: View {
                 Spacer()
             }
             .navigationBarTitleDisplayMode(.inline)
+            .onAppear {
+                previewState.showGestureTrail = showGestureTrail
+            }
+            .onChange(of: showGestureTrail) { newValue in
+                previewState.showGestureTrail = newValue
+            }
         }
     }
 
@@ -77,6 +86,12 @@ struct ContentView: View {
                 .fill(Color(.systemGray6))
         )
         .padding(.horizontal)
+    }
+
+    private var settingsView: some View {
+        Toggle("Show gesture trail", isOn: $showGestureTrail)
+            .font(.subheadline)
+            .padding(.horizontal)
     }
 
     private func instructionRow(number: Int, text: String) -> some View {
