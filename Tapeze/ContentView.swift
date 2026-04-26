@@ -7,66 +7,70 @@ struct ContentView: View {
     @StateObject private var previewState = KeyboardState()
 
     var body: some View {
-        NavigationView {
-            VStack(spacing: 20) {
-                Text("Tapeze Keyboard")
-                    .font(.largeTitle.bold())
-                    .padding(.top, 30)
-
-                Text("A gesture-based keyboard inspired by MessagEase")
-                    .font(.subheadline)
-                    .foregroundColor(.secondary)
-                    .multilineTextAlignment(.center)
-                    .padding(.horizontal)
-
-                setupInstructionsView
-
+        ScrollView {
+            VStack(alignment: .leading, spacing: 16) {
+                headerView
                 settingsView
+                previewView
+                setupInstructionsView
+            }
+            .padding(.horizontal, 16)
+            .padding(.top, 14)
+            .padding(.bottom, 28)
+        }
+        .background(Color(.systemGroupedBackground))
+        .onAppear {
+            previewState.showGestureTrail = showGestureTrail
+            previewState.selectedThemeID = selectedThemeID
+        }
+        .onChange(of: showGestureTrail) { newValue in
+            previewState.showGestureTrail = newValue
+        }
+        .onChange(of: selectedThemeID) { newValue in
+            previewState.selectedThemeID = newValue
+        }
+    }
 
-                Divider()
+    private var headerView: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text("Tapeze")
+                .font(.system(.largeTitle, design: .rounded, weight: .bold))
 
-                // Preview area
+            Text("Gesture keyboard setup, themes, and preview.")
+                .font(.subheadline)
+                .foregroundColor(.secondary)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    private var previewView: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            VStack(alignment: .leading, spacing: 3) {
                 Text("Keyboard Preview")
                     .font(.headline)
 
-                Text("The keyboard below is a non-functional preview.\nTo use the real keyboard, enable it in Settings.")
+                Text("A non-functional preview using the selected theme.")
                     .font(.caption)
                     .foregroundColor(.secondary)
-                    .multilineTextAlignment(.center)
+            }
 
-                KeyboardView(
-                    state: previewState,
-                    onCharacter: { char in testText += char },
-                    onBackspace: {
-                        if !testText.isEmpty { testText.removeLast() }
-                    },
-                    onEnter: { testText += "\n" },
-                    onNextKeyboard: nil
-                )
-                .frame(height: previewState.keyboardHeight)
-                .clipShape(RoundedRectangle(cornerRadius: 8))
-                .padding(.horizontal, 8)
+            KeyboardView(
+                state: previewState,
+                onCharacter: { char in testText += char },
+                onBackspace: {
+                    if !testText.isEmpty { testText.removeLast() }
+                },
+                onEnter: { testText += "\n" },
+                onNextKeyboard: nil
+            )
+            .frame(height: previewState.keyboardHeight)
+            .clipShape(RoundedRectangle(cornerRadius: 8))
 
-                // Test text field
-                TextField("Type here to test...", text: $testText)
-                    .textFieldStyle(.roundedBorder)
-                    .padding(.horizontal)
-
-                Spacer()
-            }
-            .navigationBarTitleDisplayMode(.inline)
-            .background(previewState.theme.keyboardBackground.opacity(0.08))
-            .onAppear {
-                previewState.showGestureTrail = showGestureTrail
-                previewState.selectedThemeID = selectedThemeID
-            }
-            .onChange(of: showGestureTrail) { newValue in
-                previewState.showGestureTrail = newValue
-            }
-            .onChange(of: selectedThemeID) { newValue in
-                previewState.selectedThemeID = newValue
-            }
+            TextField("Type here to test...", text: $testText)
+                .textFieldStyle(.roundedBorder)
         }
+        .padding(14)
+        .background(sectionBackground)
     }
 
     private var setupInstructionsView: some View {
@@ -86,58 +90,60 @@ struct ContentView: View {
                 .fixedSize(horizontal: false, vertical: true)
                 .padding(.top, 4)
         }
-        .padding()
-        .background(
-            RoundedRectangle(cornerRadius: 12)
-                .fill(Color(.systemGray6))
-        )
-        .padding(.horizontal)
+        .padding(14)
+        .background(sectionBackground)
     }
 
     private var settingsView: some View {
         VStack(alignment: .leading, spacing: 12) {
-            HStack {
+            HStack(alignment: .firstTextBaseline) {
                 Text("Settings")
                     .font(.headline)
                 Spacer()
+                Text(KeyboardTheme.theme(for: selectedThemeID).name)
+                    .font(.subheadline.weight(.semibold))
+                    .foregroundColor(.secondary)
             }
 
-            Picker("Theme", selection: $selectedThemeID) {
-                ForEach(KeyboardTheme.all) { theme in
-                    Text(theme.name).tag(theme.id)
-                }
-            }
-            .pickerStyle(.menu)
+            VStack(alignment: .leading, spacing: 8) {
+                Text("Theme")
+                    .font(.caption.weight(.semibold))
+                    .foregroundColor(.secondary)
+                    .textCase(.uppercase)
 
-            HStack(spacing: 8) {
-                ForEach(KeyboardTheme.all) { theme in
-                    Button {
-                        selectedThemeID = theme.id
-                    } label: {
-                        ThemeSwatch(theme: theme, isSelected: selectedThemeID == theme.id)
+                ScrollView(.horizontal, showsIndicators: false) {
+                    HStack(spacing: 10) {
+                        ForEach(KeyboardTheme.all) { theme in
+                            Button {
+                                selectedThemeID = theme.id
+                            } label: {
+                                ThemeSwatch(theme: theme, isSelected: selectedThemeID == theme.id)
+                            }
+                            .buttonStyle(.plain)
+                        }
                     }
-                    .buttonStyle(.plain)
                 }
             }
 
             Toggle("Show gesture trail", isOn: $showGestureTrail)
                 .font(.subheadline)
         }
-        .padding()
-        .background(
-            RoundedRectangle(cornerRadius: 10)
-                .fill(Color(.systemGray6))
-        )
-        .padding(.horizontal)
+        .padding(14)
+        .background(sectionBackground)
+    }
+
+    private var sectionBackground: some View {
+        RoundedRectangle(cornerRadius: 16, style: .continuous)
+            .fill(Color(.secondarySystemGroupedBackground))
     }
 
     private func instructionRow(number: Int, text: String) -> some View {
         HStack(alignment: .top, spacing: 8) {
             Text("\(number).")
-                .fontWeight(.bold)
+                .font(.callout.weight(.bold))
                 .frame(width: 20, alignment: .trailing)
             Text(text)
-                .font(.body)
+                .font(.callout)
                 .fixedSize(horizontal: false, vertical: true)
         }
     }
@@ -148,32 +154,38 @@ private struct ThemeSwatch: View {
     let isSelected: Bool
 
     var body: some View {
-        VStack(spacing: 4) {
+        VStack(alignment: .leading, spacing: 8) {
             ZStack {
-                RoundedRectangle(cornerRadius: 6)
+                RoundedRectangle(cornerRadius: 9, style: .continuous)
                     .fill(theme.keyBackground)
                     .overlay(
-                        RoundedRectangle(cornerRadius: 6)
-                            .strokeBorder(isSelected ? theme.tapColor : theme.keyBorder, lineWidth: isSelected ? 2 : 1)
+                        RoundedRectangle(cornerRadius: 9, style: .continuous)
+                            .strokeBorder(isSelected ? theme.tapColor : Color(.separator).opacity(0.45), lineWidth: isSelected ? 2 : 1)
                     )
 
                 Circle()
                     .fill(theme.tapColor)
-                    .frame(width: 12, height: 12)
-                    .offset(x: -8, y: -4)
+                    .frame(width: 16, height: 16)
+                    .offset(x: -15, y: -8)
 
                 Circle()
                     .fill(theme.swipeColor)
-                    .frame(width: 8, height: 8)
-                    .offset(x: 9, y: 7)
+                    .frame(width: 10, height: 10)
+                    .offset(x: 16, y: 9)
             }
-            .frame(width: 44, height: 34)
+            .frame(width: 64, height: 44)
 
             Text(theme.name)
-                .font(.system(size: 9))
+                .font(.caption2.weight(isSelected ? .semibold : .regular))
+                .foregroundColor(isSelected ? .primary : .secondary)
                 .lineLimit(1)
-                .minimumScaleFactor(0.65)
-                .frame(width: 54)
+                .minimumScaleFactor(0.75)
+                .frame(width: 72, alignment: .leading)
         }
+        .padding(8)
+        .background(
+            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                .fill(isSelected ? Color(.tertiarySystemGroupedBackground) : Color.clear)
+        )
     }
 }
