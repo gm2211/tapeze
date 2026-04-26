@@ -5,9 +5,16 @@ class KeyboardViewController: UIInputViewController {
 
     private var keyboardState = KeyboardState()
     private var hostingController: UIHostingController<KeyboardView>?
+    private var heightConstraint: NSLayoutConstraint?
 
     override func viewDidLoad() {
         super.viewDidLoad()
+        view.backgroundColor = .clear
+
+        let heightConstraint = view.heightAnchor.constraint(equalToConstant: keyboardState.keyboardHeight)
+        heightConstraint.priority = .defaultHigh
+        heightConstraint.isActive = true
+        self.heightConstraint = heightConstraint
 
         let keyboardView = KeyboardView(
             state: keyboardState,
@@ -45,15 +52,7 @@ class KeyboardViewController: UIInputViewController {
 
     override func viewWillLayoutSubviews() {
         super.viewWillLayoutSubviews()
-        // Update height constraint
-        let desiredHeight = keyboardState.keyboardHeight
-        if let constraint = view.constraints.first(where: { $0.firstAttribute == .height && $0.firstItem === view }) {
-            constraint.constant = desiredHeight
-        } else {
-            let heightConstraint = view.heightAnchor.constraint(equalToConstant: desiredHeight)
-            heightConstraint.priority = .defaultHigh
-            heightConstraint.isActive = true
-        }
+        heightConstraint?.constant = keyboardState.keyboardHeight
     }
 
     override func textWillChange(_ textInput: UITextInput?) {

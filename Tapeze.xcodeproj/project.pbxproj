@@ -428,6 +428,7 @@
 			buildSettings = {
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
+				ENABLE_DEBUG_DYLIB = NO;
 				GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = TapezeKeyboard/Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = Tapeze;
@@ -452,6 +453,7 @@
 			buildSettings = {
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
+				ENABLE_DEBUG_DYLIB = NO;
 				GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = TapezeKeyboard/Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = Tapeze;

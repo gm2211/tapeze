@@ -62,8 +62,14 @@ struct ContentView: View {
             instructionRow(number: 1, text: "Open Settings → General → Keyboard → Keyboards")
             instructionRow(number: 2, text: "Tap \"Add New Keyboard...\"")
             instructionRow(number: 3, text: "Select \"Tapeze\"")
-            instructionRow(number: 4, text: "Open any app with a text field")
-            instructionRow(number: 5, text: "Tap the globe icon 🌐 to switch to Tapeze")
+            instructionRow(number: 4, text: "Open Notes or the test field below")
+            instructionRow(number: 5, text: "Long-press 🌐 and select \"Tapeze\"")
+
+            Text("Some system fields, including password fields and Safari's address bar, may force Apple's keyboard.")
+                .font(.caption)
+                .foregroundColor(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+                .padding(.top, 4)
         }
         .padding()
         .background(
@@ -80,6 +86,7 @@ struct ContentView: View {
                 .frame(width: 20, alignment: .trailing)
             Text(text)
                 .font(.body)
+                .fixedSize(horizontal: false, vertical: true)
         }
     }
 }

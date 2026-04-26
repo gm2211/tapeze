@@ -54,7 +54,8 @@ A gesture-based keyboard for iOS inspired by MessagEase. Uses a compact 3x3 grid
    - Select **Tapeze**
    - Optionally enable "Allow Full Access" for clipboard support
 
-4. Open any app with a text field (e.g., Notes, Safari)
+4. Open an app with a plain text field (e.g., Notes, Messages, or the test field in Tapeze)
+   - Avoid password fields, phone-number fields, and Safari's address/search bar while testing; iOS may force Apple's keyboard there.
    - Long-press the globe icon on the system keyboard
    - Select **Tapeze**
 

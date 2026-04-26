@@ -204,7 +204,6 @@ struct KeyboardLayoutData {
                 displayLabel: layer == .letters ? "123" : "abc"
             ),
             KeyConfig(tap: "", specialAction: .backspace, displayLabel: "delete.left"),
-            KeyConfig(tap: "", specialAction: .enter, displayLabel: "return"),
         ]
     }
 

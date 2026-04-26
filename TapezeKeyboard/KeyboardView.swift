@@ -21,11 +21,11 @@ struct KeyboardView: View {
 
     var body: some View {
         GeometryReader { outerGeo in
-            let totalWidth = outerGeo.size.width
-            let commandColWidth = totalWidth * 0.22
+            let totalWidth = max(outerGeo.size.width, 1)
+            let commandColWidth = max(totalWidth * 0.22, 1)
             let mainGridWidth: CGFloat = state.isFullWidth
-                ? totalWidth - commandColWidth - spacing
-                : totalWidth * 0.58
+                ? max(totalWidth - commandColWidth - spacing, 1)
+                : max(totalWidth * 0.58, 1)
 
             let mainRowHeight = (state.keyboardHeight - spacing * 3) / 4
             let mainGridHeight = mainRowHeight * 3 + spacing * 2
@@ -57,10 +57,9 @@ struct KeyboardView: View {
                     }
                 }
 
-                // Bottom row: spacebar + enter
+                // Bottom row: spacebar plus return key.
                 HStack(spacing: spacing) {
                     if !state.commandBarOnRight {
-                        // Enter on left
                         enterKey(width: commandColWidth, height: bottomRowHeight)
                     }
 
@@ -116,7 +115,7 @@ struct KeyboardView: View {
 
     @ViewBuilder
     private func mainGrid(width: CGFloat, height: CGFloat, rowHeight: CGFloat) -> some View {
-        let colWidth = (width - spacing * CGFloat(gridCols - 1)) / CGFloat(gridCols)
+        let colWidth = max((width - spacing * CGFloat(gridCols - 1)) / CGFloat(gridCols), 1)
         let grid = state.currentGrid
         let showCenter = state.currentLayer != .symbolsOnly && state.showCenterLabels
 
@@ -141,9 +140,13 @@ struct KeyboardView: View {
                         )
                         .background(
                             GeometryReader { geo in
+                                let frame = geo.frame(in: .named("keyboard"))
                                 Color.clear.onAppear {
-                                    let frame = geo.frame(in: .named("keyboard"))
                                     keyRegions[pos] = frame
+                                    gestureEngine.updateKeyRegions(keyRegions)
+                                }
+                                .onChange(of: frame) { newFrame in
+                                    keyRegions[pos] = newFrame
                                     gestureEngine.updateKeyRegions(keyRegions)
                                 }
                             }
@@ -174,13 +177,21 @@ struct KeyboardView: View {
                 .frame(width: width, height: rowHeight)
                 .background(
                     GeometryReader { geo in
+                        let frame = geo.frame(in: .named("keyboard"))
                         Color.clear.onAppear {
-                            let frame = geo.frame(in: .named("keyboard"))
                             if config.specialAction == .globe {
                                 globeRegion = frame
                                 gestureEngine.updateGlobeRegion(globeRegion)
                             }
                             keyRegions[commandPos] = frame
+                            gestureEngine.updateKeyRegions(keyRegions)
+                        }
+                        .onChange(of: frame) { newFrame in
+                            if config.specialAction == .globe {
+                                globeRegion = newFrame
+                                gestureEngine.updateGlobeRegion(globeRegion)
+                            }
+                            keyRegions[commandPos] = newFrame
                             gestureEngine.updateKeyRegions(keyRegions)
                         }
                     }
@@ -198,8 +209,13 @@ struct KeyboardView: View {
                 .frame(width: width, height: height)
                 .background(
                     GeometryReader { geo in
+                        let frame = geo.frame(in: .named("keyboard"))
                         Color.clear.onAppear {
-                            spaceBarRegion = geo.frame(in: .named("keyboard"))
+                            spaceBarRegion = frame
+                            gestureEngine.updateSpaceBarRegion(spaceBarRegion)
+                        }
+                        .onChange(of: frame) { newFrame in
+                            spaceBarRegion = newFrame
                             gestureEngine.updateSpaceBarRegion(spaceBarRegion)
                         }
                     }
@@ -221,8 +237,13 @@ struct KeyboardView: View {
                     .frame(height: height)
                     .background(
                         GeometryReader { geo in
+                            let frame = geo.frame(in: .named("keyboard"))
                             Color.clear.onAppear {
-                                spaceBarRegion = geo.frame(in: .named("keyboard"))
+                                spaceBarRegion = frame
+                                gestureEngine.updateSpaceBarRegion(spaceBarRegion)
+                            }
+                            .onChange(of: frame) { newFrame in
+                                spaceBarRegion = newFrame
                                 gestureEngine.updateSpaceBarRegion(spaceBarRegion)
                             }
                         }
@@ -236,11 +257,26 @@ struct KeyboardView: View {
 
     @ViewBuilder
     private func enterKey(width: CGFloat, height: CGFloat) -> some View {
+        let pos = GridPosition(row: 3, col: state.commandBarOnRight ? 3 : -1)
+
         CommandKeyView(
             config: KeyConfig(tap: "", specialAction: .enter, displayLabel: "return"),
-            isActive: false
+            isActive: state.activeKeyPosition == pos
         )
         .frame(width: width, height: height)
+        .background(
+            GeometryReader { geo in
+                let frame = geo.frame(in: .named("keyboard"))
+                Color.clear.onAppear {
+                    keyRegions[pos] = frame
+                    gestureEngine.updateKeyRegions(keyRegions)
+                }
+                .onChange(of: frame) { newFrame in
+                    keyRegions[pos] = newFrame
+                    gestureEngine.updateKeyRegions(keyRegions)
+                }
+            }
+        )
     }
 
     // MARK: - Overlays
@@ -338,6 +374,10 @@ struct KeyboardView: View {
 
         // Command bar keys
         if pos.col == 3 || pos.col == -1 {
+            if pos.row == 3 {
+                onEnter()
+                return
+            }
             handleCommandTap(row: pos.row)
             return
         }
@@ -455,4 +495,3 @@ struct KeyboardView: View {
         }
     }
 }
-
