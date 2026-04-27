@@ -16,6 +16,8 @@ targets:
     platform: iOS
     sources:
       - path: Tapeze
+    resources:
+      - path: Tapeze/PrivacyInfo.xcprivacy
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.tapeze.app
@@ -32,6 +34,8 @@ targets:
     platform: iOS
     sources:
       - path: TapezeKeyboard
+    resources:
+      - path: TapezeKeyboard/PrivacyInfo.xcprivacy
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.tapeze.app.keyboard
