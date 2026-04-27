@@ -4,7 +4,7 @@ import Combine
 // MARK: - Keyboard State
 
 class KeyboardState: ObservableObject {
-    static let appGroupSuiteName = "group.com.tapeze.app"
+    static let appGroupSuiteName = "group.com.gmecocci.tapeze"
     static let settingsDefaults = UserDefaults(suiteName: appGroupSuiteName) ?? .standard
     static let showGestureTrailDefaultsKey = "showGestureTrail"
     static let selectedThemeDefaultsKey = KeyboardTheme.defaultsKey
