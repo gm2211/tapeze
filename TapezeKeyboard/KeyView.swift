@@ -172,7 +172,7 @@ struct KeyboardTheme: Identifiable {
         keyboardBackground: Color(red: 0.14, green: 0.17, blue: 0.20),
         emptyColumnBackground: Color(red: 0.18, green: 0.19, blue: 0.20),
         keyBackground: Color(red: 0.18, green: 0.23, blue: 0.28),
-        commandBackground: Color(red: 0.57, green: 0.61, blue: 0.65),
+        commandBackground: Color(red: 0.61, green: 0.65, blue: 0.69),
         spaceBackground: Color(red: 0.48, green: 0.52, blue: 0.56),
         tapColor: Color(red: 0.86, green: 0.68, blue: 0.24),
         swipeColor: Color(red: 0.58, green: 0.65, blue: 0.72),
@@ -181,8 +181,8 @@ struct KeyboardTheme: Identifiable {
         activeKeyBackground: Color(red: 0.24, green: 0.30, blue: 0.36),
         keyGradientTop: Color(red: 0.24, green: 0.29, blue: 0.34),
         keyGradientBottom: Color(red: 0.15, green: 0.19, blue: 0.24),
-        commandGradientTop: Color(red: 0.66, green: 0.70, blue: 0.74),
-        commandGradientBottom: Color(red: 0.47, green: 0.51, blue: 0.55),
+        commandGradientTop: Color(red: 0.70, green: 0.74, blue: 0.78),
+        commandGradientBottom: Color(red: 0.52, green: 0.56, blue: 0.60),
         spaceGradientTop: Color(red: 0.56, green: 0.60, blue: 0.63),
         spaceGradientBottom: Color(red: 0.42, green: 0.46, blue: 0.50),
         keyBorderWidth: 1,
@@ -327,6 +327,22 @@ private extension View {
                 radius: 0.45,
                 x: 0,
                 y: 0.8
+            )
+    }
+
+    func commandLabelDepth(for theme: KeyboardTheme) -> some View {
+        self
+            .shadow(
+                color: theme.id == KeyboardTheme.tapeze.id ? Color.white.opacity(0.22) : .clear,
+                radius: 0.25,
+                x: -0.25,
+                y: -0.35
+            )
+            .shadow(
+                color: theme.id == KeyboardTheme.tapeze.id ? Color.black.opacity(0.24) : theme.labelShadowColor,
+                radius: theme.id == KeyboardTheme.tapeze.id ? 1.0 : theme.labelShadowRadius,
+                x: 0,
+                y: theme.id == KeyboardTheme.tapeze.id ? 1.0 : theme.labelShadowYOffset
             )
     }
 }
@@ -517,31 +533,31 @@ struct CommandKeyView: View {
             Image(systemName: "globe")
                 .font(.system(size: size.height * 0.4))
                 .foregroundColor(theme.specialTextColor)
-                .labelDepth(for: theme)
+                .commandLabelDepth(for: theme)
 
         case .backspace:
             Image(systemName: "delete.backward.fill")
                 .font(.system(size: size.height * 0.3))
                 .foregroundColor(theme.specialTextColor)
-                .labelDepth(for: theme)
+                .commandLabelDepth(for: theme)
 
         case .enter:
             Image(systemName: "return")
                 .font(.system(size: size.height * 0.4))
                 .foregroundColor(theme.specialTextColor)
-                .labelDepth(for: theme)
+                .commandLabelDepth(for: theme)
 
         case .toggleLayer:
             Text(config.displayLabel ?? "")
                 .font(.system(size: size.height * 0.35, weight: .medium, design: .rounded))
                 .foregroundColor(theme.specialTextColor)
-                .labelDepth(for: theme)
+                .commandLabelDepth(for: theme)
 
         default:
             Text(config.displayLabel ?? config.tap)
                 .font(.system(size: size.height * 0.3, weight: .medium, design: .rounded))
                 .foregroundColor(theme.specialTextColor)
-                .labelDepth(for: theme)
+                .commandLabelDepth(for: theme)
         }
     }
 }
