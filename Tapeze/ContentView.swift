@@ -3,6 +3,7 @@ import SwiftUI
 struct ContentView: View {
     @AppStorage(KeyboardState.showGestureTrailDefaultsKey, store: KeyboardState.settingsDefaults) private var showGestureTrail = true
     @AppStorage(KeyboardState.selectedThemeDefaultsKey, store: KeyboardState.settingsDefaults) private var selectedThemeID = KeyboardTheme.classic.id
+    @AppStorage(KeyboardState.keyCornerRadiusDefaultsKey, store: KeyboardState.settingsDefaults) private var keyCornerRadius = Double(KeyboardState.defaultKeyCornerRadius)
     @State private var testText: String = ""
     @StateObject private var previewState = KeyboardState()
 
@@ -22,12 +23,16 @@ struct ContentView: View {
         .onAppear {
             previewState.showGestureTrail = showGestureTrail
             previewState.selectedThemeID = selectedThemeID
+            previewState.keyCornerRadius = CGFloat(keyCornerRadius)
         }
         .onChange(of: showGestureTrail) { newValue in
             previewState.showGestureTrail = newValue
         }
         .onChange(of: selectedThemeID) { newValue in
             previewState.selectedThemeID = newValue
+        }
+        .onChange(of: keyCornerRadius) { newValue in
+            previewState.keyCornerRadius = CGFloat(newValue)
         }
     }
 
@@ -54,23 +59,79 @@ struct ContentView: View {
                     .foregroundColor(.secondary)
             }
 
-            KeyboardView(
-                state: previewState,
-                onCharacter: { char in testText += char },
-                onBackspace: {
-                    if !testText.isEmpty { testText.removeLast() }
-                },
-                onEnter: { testText += "\n" },
-                onNextKeyboard: nil
-            )
+            ZStack {
+                keyboardPreviewBackdrop
+
+                KeyboardView(
+                    state: previewState,
+                    onCharacter: { char in testText += char },
+                    onBackspace: {
+                        if !testText.isEmpty { testText.removeLast() }
+                    },
+                    onDeleteWord: deletePreviousPreviewWord,
+                    onDeleteLine: deleteCurrentPreviewLine,
+                    onEnter: { testText += "\n" },
+                    onNextKeyboard: nil
+                )
+            }
             .frame(height: previewState.keyboardHeight)
-            .clipShape(RoundedRectangle(cornerRadius: 8))
+            .clipShape(RoundedRectangle(cornerRadius: CGFloat(keyCornerRadius), style: .continuous))
 
             TextField("Type here to test...", text: $testText)
                 .textFieldStyle(.roundedBorder)
         }
         .padding(14)
         .background(sectionBackground)
+    }
+
+    private var keyboardPreviewBackdrop: some View {
+        Group {
+            if selectedThemeID == KeyboardTheme.liquidGlass.id {
+                LinearGradient(
+                    colors: [
+                        Color(red: 0.95, green: 0.90, blue: 0.82),
+                        Color(red: 0.78, green: 0.86, blue: 0.91),
+                        Color(red: 0.88, green: 0.82, blue: 0.92)
+                    ],
+                    startPoint: .topLeading,
+                    endPoint: .bottomTrailing
+                )
+            } else {
+                Color.clear
+            }
+        }
+    }
+
+    private func deletePreviousPreviewWord() {
+        guard !testText.isEmpty else { return }
+
+        while let last = testText.last, last.isWhitespace, last != "\n" {
+            testText.removeLast()
+        }
+
+        var removedWordCharacter = false
+        while let last = testText.last, !last.isWhitespace {
+            testText.removeLast()
+            removedWordCharacter = true
+        }
+
+        if !removedWordCharacter, !testText.isEmpty {
+            testText.removeLast()
+        }
+    }
+
+    private func deleteCurrentPreviewLine() {
+        guard !testText.isEmpty else { return }
+
+        var removedCharacter = false
+        while let last = testText.last, last != "\n" {
+            testText.removeLast()
+            removedCharacter = true
+        }
+
+        if !removedCharacter, !testText.isEmpty {
+            testText.removeLast()
+        }
     }
 
     private var setupInstructionsView: some View {
@@ -123,6 +184,31 @@ struct ContentView: View {
                         }
                     }
                 }
+            }
+
+            VStack(alignment: .leading, spacing: 8) {
+                HStack {
+                    Text("Border radius")
+                        .font(.caption.weight(.semibold))
+                        .foregroundColor(.secondary)
+                        .textCase(.uppercase)
+                    Spacer()
+                    Text("\(Int(keyCornerRadius.rounded())) px")
+                        .font(.caption.monospacedDigit())
+                        .foregroundColor(.secondary)
+                }
+
+                Slider(
+                    value: Binding(
+                        get: { keyCornerRadius },
+                        set: { newValue in
+                            keyCornerRadius = newValue
+                            previewState.keyCornerRadius = CGFloat(newValue)
+                        }
+                    ),
+                    in: 0...18,
+                    step: 1
+                )
             }
 
             Toggle("Show gesture trail", isOn: $showGestureTrail)

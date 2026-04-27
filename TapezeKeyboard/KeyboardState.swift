@@ -8,6 +8,8 @@ class KeyboardState: ObservableObject {
     static let settingsDefaults = UserDefaults(suiteName: appGroupSuiteName) ?? .standard
     static let showGestureTrailDefaultsKey = "showGestureTrail"
     static let selectedThemeDefaultsKey = KeyboardTheme.defaultsKey
+    static let keyCornerRadiusDefaultsKey = "keyCornerRadius"
+    static let defaultKeyCornerRadius: CGFloat = 4
 
     @Published var currentLayer: KeyboardLayer = .letters
     @Published var isShifted: Bool = false
@@ -17,6 +19,7 @@ class KeyboardState: ObservableObject {
     @Published var isFullWidth: Bool = true
     @Published var showCenterLabels: Bool = true
     @Published var isSymbolOverlayActive: Bool = false
+    @Published var isURLField: Bool = false
     @Published var showGestureTrail: Bool {
         didSet {
             Self.settingsDefaults.set(showGestureTrail, forKey: Self.showGestureTrailDefaultsKey)
@@ -25,6 +28,11 @@ class KeyboardState: ObservableObject {
     @Published var selectedThemeID: String {
         didSet {
             Self.settingsDefaults.set(selectedThemeID, forKey: Self.selectedThemeDefaultsKey)
+        }
+    }
+    @Published var keyCornerRadius: CGFloat {
+        didSet {
+            Self.settingsDefaults.set(Double(keyCornerRadius), forKey: Self.keyCornerRadiusDefaultsKey)
         }
     }
 
@@ -49,6 +57,12 @@ class KeyboardState: ObservableObject {
             selectedThemeID = savedThemeID
         } else {
             selectedThemeID = KeyboardTheme.classic.id
+        }
+
+        if Self.settingsDefaults.object(forKey: Self.keyCornerRadiusDefaultsKey) == nil {
+            keyCornerRadius = Self.defaultKeyCornerRadius
+        } else {
+            keyCornerRadius = CGFloat(Self.settingsDefaults.double(forKey: Self.keyCornerRadiusDefaultsKey))
         }
     }
 

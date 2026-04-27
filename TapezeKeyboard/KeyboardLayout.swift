@@ -136,11 +136,11 @@ struct KeyboardLayoutData {
         [
             KeyConfig(tap: "t", swipes: [.topRight: "y"]),
             KeyConfig(tap: "e", swipes: [
-                .top: "w",
+                .top: "w", .topRight: "'",
                 .bottomLeft: ",", .bottom: ".", .bottomRight: ":",
             ]),
             KeyConfig(tap: "s", swipes: [
-                .topLeft: "'", .top: "f", .bottomLeft: ";",
+                .topLeft: "f", .bottomLeft: ";",
             ]),
         ],
     ]
@@ -152,7 +152,7 @@ struct KeyboardLayoutData {
         [
             KeyConfig(tap: "1", swipes: [
                 .topRight: "£", .left: "<", .right: "-",
-                .bottomLeft: "$", .bottom: "·",
+                .bottomLeft: "$",
             ]),
             KeyConfig(tap: "2", swipes: [
                 .topLeft: "`", .top: "^", .topRight: "´",
@@ -160,8 +160,8 @@ struct KeyboardLayoutData {
                 .bottomLeft: "/", .bottomRight: "\\",
             ]),
             KeyConfig(tap: "3", swipes: [
-                .left: "?", .topRight: "≥",
-                .bottomLeft: "=", .bottomRight: "€",
+                .left: "?", .right: "≥",
+                .bottom: "=", .bottomRight: "€",
             ]),
         ],
         // Row 1: 4, 5, 6
@@ -179,7 +179,7 @@ struct KeyboardLayoutData {
         // Row 2: 7, 8, 9
         [
             KeyConfig(tap: "7", swipes: [
-                .topLeft: "~", .topRight: "¨",
+                .topLeft: "~", .top: "¨",
                 .left: "<", .right: "*",
             ]),
             KeyConfig(tap: "8", swipes: [
@@ -195,11 +195,39 @@ struct KeyboardLayoutData {
 
     // MARK: Symbol Overlay - Letter taps with symbol swipes
 
-    static let symbolOverlayGrid: [[KeyConfig]] = zip(letterGrid, numberGrid).map { letterRow, numberRow in
-        zip(letterRow, numberRow).map { letterKey, numberKey in
-            KeyConfig(tap: letterKey.tap, swipes: numberKey.swipes)
-        }
-    }
+    static let symbolOverlayGrid: [[KeyConfig]] = [
+        [
+            KeyConfig(tap: "a", swipes: [.right: "-", .bottomLeft: "$", .bottom: "."]),
+            KeyConfig(tap: "n", swipes: [
+                .topLeft: "`", .top: "^", .topRight: "´",
+                .left: "+", .right: "!",
+                .bottomLeft: "/", .bottomRight: "\\",
+            ]),
+            KeyConfig(tap: "i", swipes: [.left: "?", .bottom: "=", .bottomRight: "€"]),
+        ],
+        [
+            KeyConfig(tap: "h", swipes: [
+                .topLeft: "{", .topRight: "%",
+                .left: "(", .bottomLeft: "[", .bottomRight: "_",
+            ]),
+            KeyConfig(tap: "o", swipes: [:]),
+            KeyConfig(tap: "r", swipes: [
+                .topLeft: "|", .topRight: "}",
+                .right: ")", .bottomLeft: "@", .bottomRight: "]",
+            ]),
+        ],
+        [
+            KeyConfig(tap: "t", swipes: [.topLeft: "~", .top: "¨", .left: "<", .right: "*"]),
+            KeyConfig(tap: "e", swipes: [
+                .topLeft: "\"", .topRight: "'",
+                .bottomLeft: ",", .bottom: ".", .bottomRight: ":",
+            ]),
+            KeyConfig(tap: "s", swipes: [
+                .top: "&", .topRight: "°",
+                .left: "#", .right: ">", .bottomLeft: ";",
+            ]),
+        ],
+    ]
 
     // MARK: Command Bar (right column)
 

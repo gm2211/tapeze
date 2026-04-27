@@ -133,16 +133,17 @@ class GestureEngine {
         let dy = end.y - start.y
         let totalDist = distance(start, end)
 
-        if totalDist < tapDistanceThreshold {
-            // Tap on spacebar
-            return .tap(GridPosition(row: 3, col: 0)) // spacebar position
-        }
-
         // Check for swipe up and back. Use the spacebar bounds instead of
-        // exact start/end distance so a natural return still counts.
+        // exact start/end distance so a straight there-and-back path still
+        // counts even when it lands close enough to look like a tap.
         let cameBack = spaceBarRegion.insetBy(dx: -12, dy: -12).contains(end) && hasUpwardExcursion()
         if cameBack {
             return .specialSwipe(.spaceSwipeUpAndBack)
+        }
+
+        if totalDist < tapDistanceThreshold {
+            // Tap on spacebar
+            return .tap(GridPosition(row: 3, col: 0)) // spacebar position
         }
 
         if dy < -minSwipeDistance {
@@ -159,13 +160,17 @@ class GestureEngine {
         let dy = end.y - start.y
         let totalDist = distance(start, end)
 
-        if totalDist < tapDistanceThreshold {
-            return .tap(GridPosition(row: 0, col: 3)) // globe position
+        // Check for circle before tap: a good loop often ends near its start.
+        if isCircularMotion() || isClosedLoopGesture(in: globeRegion) {
+            return .specialSwipe(.globeCircle)
         }
 
-        // Check for circle
-        if isCircularMotion() {
-            return .specialSwipe(.globeCircle)
+        if let horizontalToggle = globeBackAndForthSwipe(from: start, to: end) {
+            return .specialSwipe(horizontalToggle)
+        }
+
+        if totalDist < tapDistanceThreshold {
+            return .tap(GridPosition(row: 0, col: 3)) // globe position
         }
 
         // Directional swipes
@@ -184,6 +189,32 @@ class GestureEngine {
         }
 
         return .none
+    }
+
+    private func globeBackAndForthSwipe(from start: CGPoint, to end: CGPoint) -> GestureResult.SpecialSwipe? {
+        guard points.count >= 4 else { return nil }
+
+        var maxLeft: CGFloat = 0
+        var maxRight: CGFloat = 0
+        var maxVertical: CGFloat = 0
+
+        for point in points {
+            let dx = point.x - start.x
+            maxLeft = max(maxLeft, -dx)
+            maxRight = max(maxRight, dx)
+            maxVertical = max(maxVertical, abs(point.y - start.y))
+        }
+
+        let horizontalExcursion = max(maxLeft, maxRight)
+        let returnedNearStart = distance(start, end) <= max(tapDistanceThreshold * 2, min(globeRegion.width, globeRegion.height) * 0.35)
+
+        guard returnedNearStart,
+              horizontalExcursion > minSwipeDistance,
+              horizontalExcursion > maxVertical * 1.35 else {
+            return nil
+        }
+
+        return maxRight >= maxLeft ? .globeSwipeRight : .globeSwipeLeft
     }
 
     // MARK: - Helper: Find key at point
@@ -239,6 +270,8 @@ class GestureEngine {
     private func firstSubcellDirection(from key: GridPosition) -> SwipeDirection? {
         guard let region = keyRegions[key], let start = points.first else { return nil }
         let center = CGPoint(x: region.midX, y: region.midY)
+        var farthestPoint: CGPoint?
+        var farthestDistance: CGFloat = 0
 
         for point in points.dropFirst() {
             guard distance(start, point) >= subcellActivationDistance ||
@@ -246,20 +279,20 @@ class GestureEngine {
                 continue
             }
 
-            if let direction = subcellDirection(for: point, in: region) {
-                return direction
-            }
-            if !region.contains(point) {
-                return subcellDirection(
-                    for: CGPoint(
-                        x: min(max(point.x, region.minX), region.maxX),
-                        y: min(max(point.y, region.minY), region.maxY)
-                    ),
-                    in: region
-                )
+            let outwardDistance = distance(center, point)
+            if outwardDistance > farthestDistance {
+                farthestDistance = outwardDistance
+                farthestPoint = point
             }
         }
-        return nil
+
+        guard let point = farthestPoint else { return nil }
+
+        let clampedPoint = CGPoint(
+            x: min(max(point.x, region.minX), region.maxX),
+            y: min(max(point.y, region.minY), region.maxY)
+        )
+        return subcellDirection(for: clampedPoint, in: region)
     }
 
     private func subcellDirection(for point: CGPoint, in region: CGRect) -> SwipeDirection? {
@@ -333,6 +366,26 @@ class GestureEngine {
 
         // A full circle has total turning angle of ~2π (or ~-2π)
         return abs(totalAngle) > 1.5 * .pi
+    }
+
+    private func isClosedLoopGesture(in region: CGRect) -> Bool {
+        guard points.count >= 6, let start = points.first, let end = points.last else {
+            return false
+        }
+
+        let xs = points.map(\.x)
+        let ys = points.map(\.y)
+        guard let minX = xs.min(), let maxX = xs.max(),
+              let minY = ys.min(), let maxY = ys.max() else {
+            return false
+        }
+
+        let pathWidth = maxX - minX
+        let pathHeight = maxY - minY
+        let minLoopSize = max(min(region.width, region.height) * 0.22, minSwipeDistance)
+        let returnedNearStart = distance(start, end) <= max(tapDistanceThreshold * 2, min(region.width, region.height) * 0.32)
+
+        return returnedNearStart && pathWidth >= minLoopSize && pathHeight >= minLoopSize
     }
 
     // MARK: - Helper: Vertical excursion detection

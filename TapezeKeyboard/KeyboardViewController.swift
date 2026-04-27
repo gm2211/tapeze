@@ -1,15 +1,17 @@
 import UIKit
 import SwiftUI
+import Combine
 
 class KeyboardViewController: UIInputViewController {
 
     private var keyboardState = KeyboardState()
     private var hostingController: UIHostingController<KeyboardView>?
     private var heightConstraint: NSLayoutConstraint?
+    private var heightCancellable: AnyCancellable?
 
     override func viewDidLoad() {
         super.viewDidLoad()
-        view.backgroundColor = .clear
+        configureTransparentBackgrounds()
 
         let heightConstraint = view.heightAnchor.constraint(equalToConstant: keyboardState.keyboardHeight)
         heightConstraint.priority = .defaultHigh
@@ -24,6 +26,12 @@ class KeyboardViewController: UIInputViewController {
             onBackspace: { [weak self] in
                 self?.textDocumentProxy.deleteBackward()
             },
+            onDeleteWord: { [weak self] in
+                self?.deletePreviousWord()
+            },
+            onDeleteLine: { [weak self] in
+                self?.deleteCurrentLineBeforeCursor()
+            },
             onEnter: { [weak self] in
                 self?.textDocumentProxy.insertText("\n")
             },
@@ -35,6 +43,7 @@ class KeyboardViewController: UIInputViewController {
         let hc = UIHostingController(rootView: keyboardView)
         hc.view.translatesAutoresizingMaskIntoConstraints = false
         hc.view.backgroundColor = .clear
+        hc.view.isOpaque = false
 
         addChild(hc)
         view.addSubview(hc.view)
@@ -48,18 +57,115 @@ class KeyboardViewController: UIInputViewController {
         ])
 
         hostingController = hc
+        bindKeyboardHeight()
+        updateInputContext()
+    }
+
+    override func viewWillAppear(_ animated: Bool) {
+        super.viewWillAppear(animated)
+        configureTransparentBackgrounds()
+        updateInputContext()
+    }
+
+    private func configureTransparentBackgrounds() {
+        view.backgroundColor = .clear
+        view.isOpaque = false
+        inputView?.backgroundColor = .clear
+        inputView?.isOpaque = false
     }
 
     override func viewWillLayoutSubviews() {
         super.viewWillLayoutSubviews()
-        heightConstraint?.constant = keyboardState.keyboardHeight
+        applyKeyboardHeight(keyboardState.keyboardHeight, animated: false)
+    }
+
+    private func bindKeyboardHeight() {
+        heightCancellable = keyboardState.$keyboardHeight
+            .removeDuplicates()
+            .receive(on: RunLoop.main)
+            .sink { [weak self] height in
+                self?.applyKeyboardHeight(height, animated: true)
+            }
+    }
+
+    private func applyKeyboardHeight(_ height: CGFloat, animated: Bool) {
+        guard heightConstraint?.constant != height else { return }
+
+        heightConstraint?.constant = height
+        preferredContentSize = CGSize(width: 0, height: height)
+
+        let updates = {
+            self.view.superview?.layoutIfNeeded()
+            self.view.layoutIfNeeded()
+        }
+
+        if animated {
+            UIView.animate(withDuration: 0.18, delay: 0, options: [.beginFromCurrentState, .curveEaseInOut], animations: updates)
+        } else {
+            updates()
+        }
+    }
+
+    private func deletePreviousWord() {
+        guard let context = textDocumentProxy.documentContextBeforeInput,
+              !context.isEmpty else {
+            textDocumentProxy.deleteBackward()
+            return
+        }
+
+        let characters = Array(context)
+        var index = characters.count
+        var deleteCount = 0
+
+        while index > 0, characters[index - 1].isWhitespace, characters[index - 1] != "\n" {
+            index -= 1
+            deleteCount += 1
+        }
+
+        while index > 0, !characters[index - 1].isWhitespace {
+            index -= 1
+            deleteCount += 1
+        }
+
+        deleteBackward(times: max(deleteCount, 1))
+    }
+
+    private func deleteCurrentLineBeforeCursor() {
+        guard let context = textDocumentProxy.documentContextBeforeInput,
+              !context.isEmpty else {
+            textDocumentProxy.deleteBackward()
+            return
+        }
+
+        var deleteCount = 0
+        for character in context.reversed() {
+            if character == "\n" { break }
+            deleteCount += 1
+        }
+
+        deleteBackward(times: max(deleteCount, 1))
+    }
+
+    private func deleteBackward(times count: Int) {
+        for _ in 0..<count {
+            textDocumentProxy.deleteBackward()
+        }
     }
 
     override func textWillChange(_ textInput: UITextInput?) {
-        // Called when the text is about to change
+        updateInputContext()
     }
 
     override func textDidChange(_ textInput: UITextInput?) {
-        // Called when the text has changed
+        updateInputContext()
+    }
+
+    private func updateInputContext() {
+        switch textDocumentProxy.keyboardType {
+        case .URL, .webSearch:
+            keyboardState.isURLField = true
+        default:
+            keyboardState.isURLField = false
+        }
     }
 }

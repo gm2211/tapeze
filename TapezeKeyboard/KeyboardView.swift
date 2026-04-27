@@ -7,6 +7,8 @@ struct KeyboardView: View {
     @ObservedObject var state: KeyboardState
     let onCharacter: (String) -> Void
     let onBackspace: () -> Void
+    let onDeleteWord: () -> Void
+    let onDeleteLine: () -> Void
     let onEnter: () -> Void
     let onNextKeyboard: (() -> Void)?
 
@@ -18,18 +20,47 @@ struct KeyboardView: View {
     private let gridRows = 3
     private let gridCols = 3
     private let spacing: CGFloat = 2
+    private let maxTrailDisplayPoints = 42
+    private let minTrailPointDistance: CGFloat = 7
 
     var body: some View {
         GeometryReader { outerGeo in
             let totalWidth = max(outerGeo.size.width, 1)
-            let commandColWidth = max(totalWidth * 0.22, 1)
-            let mainGridWidth: CGFloat = state.isFullWidth
-                ? max(totalWidth - commandColWidth - spacing, 1)
-                : max(totalWidth * 0.58, 1)
-
-            let mainRowHeight = (state.keyboardHeight - spacing * 3) / 4
+            let totalHeight = max(outerGeo.size.height, 1)
+            let mainRowHeight = (totalHeight - spacing * 3) / 4
+            let squareCommandColWidth = mainRowHeight
+            let squareMainGridWidth = mainRowHeight * CGFloat(gridCols) + spacing * CGFloat(gridCols - 1)
+            let squareLayoutWidth = squareMainGridWidth + squareCommandColWidth + spacing
+            let shouldDisableCompact = !state.isFullWidth && squareLayoutWidth > totalWidth
+            let usesFullWidth = state.isFullWidth || shouldDisableCompact
+            let maxEmptyColumnWidth = mainRowHeight
+            let squareLayoutWithEmptyColumnWidth = squareLayoutWidth + spacing + maxEmptyColumnWidth
+            let fullWidthKeySide = max((totalWidth - spacing * CGFloat(gridCols)) / CGFloat(gridCols + 1), 1)
+            let keySide: CGFloat = {
+                if usesFullWidth {
+                    return fullWidthKeySide
+                }
+                if !usesFullWidth && totalWidth > squareLayoutWithEmptyColumnWidth {
+                    return max((totalWidth - maxEmptyColumnWidth - spacing * 4) / CGFloat(gridCols + 1), 1)
+                }
+                return squareLayoutWidth <= totalWidth
+                    ? mainRowHeight
+                    : fullWidthKeySide
+            }()
+            let emptyColumnWidth: CGFloat = {
+                guard !usesFullWidth else { return 0 }
+                if totalWidth > squareLayoutWithEmptyColumnWidth {
+                    return maxEmptyColumnWidth
+                }
+                return min(maxEmptyColumnWidth, max(totalWidth - squareLayoutWidth - spacing, 0))
+            }()
+            let commandColWidth = keySide
+            let mainGridWidth = keySide * CGFloat(gridCols) + spacing * CGFloat(gridCols - 1)
             let mainGridHeight = mainRowHeight * 3 + spacing * 2
             let bottomRowHeight = mainRowHeight
+            let layoutWidth = usesFullWidth
+                ? totalWidth
+                : mainGridWidth + commandColWidth + spacing + (emptyColumnWidth > 0 ? emptyColumnWidth + spacing : 0)
 
             VStack(spacing: spacing) {
                 HStack(spacing: spacing) {
@@ -38,17 +69,16 @@ struct KeyboardView: View {
                         commandBar(width: commandColWidth, totalHeight: mainGridHeight)
                     }
 
-                    // Spacer for non-full-width mode (left side)
-                    if !state.isFullWidth && !state.commandBarOnRight {
-                        Spacer(minLength: 0)
+                    // Spacer sits opposite the command bar in compact mode.
+                    if !usesFullWidth && state.commandBarOnRight && emptyColumnWidth > 0 {
+                        compactEmptyColumn(width: emptyColumnWidth)
                     }
 
                     // Main 3x3 grid
                     mainGrid(width: mainGridWidth, height: mainGridHeight, rowHeight: mainRowHeight)
 
-                    // Spacer for non-full-width mode (right side)
-                    if !state.isFullWidth && state.commandBarOnRight {
-                        Spacer(minLength: 0)
+                    if !usesFullWidth && !state.commandBarOnRight && emptyColumnWidth > 0 {
+                        compactEmptyColumn(width: emptyColumnWidth)
                     }
 
                     // Command bar on right (if configured)
@@ -56,6 +86,8 @@ struct KeyboardView: View {
                         commandBar(width: commandColWidth, totalHeight: mainGridHeight)
                     }
                 }
+                .frame(width: layoutWidth, alignment: state.commandBarOnRight ? .trailing : .leading)
+                .frame(maxWidth: .infinity, alignment: state.commandBarOnRight ? .trailing : .leading)
 
                 // Bottom row: spacebar plus return key.
                 HStack(spacing: spacing) {
@@ -63,33 +95,45 @@ struct KeyboardView: View {
                         enterKey(width: commandColWidth, height: bottomRowHeight)
                     }
 
-                    if !state.isFullWidth && !state.commandBarOnRight {
-                        Spacer(minLength: 0)
+                    if !usesFullWidth && state.commandBarOnRight && emptyColumnWidth > 0 {
+                        compactEmptyColumn(width: emptyColumnWidth)
                     }
 
                     bottomRow(width: mainGridWidth, height: bottomRowHeight)
 
-                    if !state.isFullWidth && state.commandBarOnRight {
-                        Spacer(minLength: 0)
+                    if !usesFullWidth && !state.commandBarOnRight && emptyColumnWidth > 0 {
+                        compactEmptyColumn(width: emptyColumnWidth)
                     }
 
                     if state.commandBarOnRight {
                         enterKey(width: commandColWidth, height: bottomRowHeight)
                     }
                 }
+                .frame(width: layoutWidth, alignment: state.commandBarOnRight ? .trailing : .leading)
+                .frame(maxWidth: .infinity, alignment: state.commandBarOnRight ? .trailing : .leading)
             }
-            .frame(height: state.keyboardHeight)
+            .frame(maxWidth: .infinity, maxHeight: totalHeight)
             .background(state.theme.keyboardBackground)
+            .onAppear {
+                if shouldDisableCompact {
+                    state.isFullWidth = true
+                }
+            }
+            .onChange(of: shouldDisableCompact) { disableCompact in
+                if disableCompact {
+                    state.isFullWidth = true
+                }
+            }
             .gesture(
                 DragGesture(minimumDistance: 0, coordinateSpace: .named("keyboard"))
                     .onChanged { value in
                         if !gestureEngine.hasActiveGesture {
                             gestureEngine.touchBegan(at: value.startLocation)
-                            state.gestureTrailPoints = []
+                            resetGestureTrail(at: value.startLocation)
                         }
                         gestureEngine.touchMoved(to: value.location)
                         if state.showGestureTrail {
-                            state.gestureTrailPoints = gestureEngine.points
+                            appendGestureTrailPoint(value.location)
                         } else {
                             state.gestureTrailPoints = []
                         }
@@ -98,9 +142,10 @@ struct KeyboardView: View {
                     .onEnded { value in
                         if !gestureEngine.hasActiveGesture {
                             gestureEngine.touchBegan(at: value.startLocation)
+                            resetGestureTrail(at: value.startLocation)
                         }
                         if state.showGestureTrail {
-                            state.gestureTrailPoints = gestureEngine.points + [value.location]
+                            appendGestureTrailPoint(value.location, force: true)
                         }
                         let result = gestureEngine.touchEnded(at: value.location)
                         handleGestureResult(result)
@@ -129,6 +174,12 @@ struct KeyboardView: View {
 
     // MARK: - Main 3x3 Grid
 
+    private func compactEmptyColumn(width: CGFloat) -> some View {
+        state.theme.emptyColumnBackground
+            .frame(width: width)
+            .frame(maxHeight: .infinity)
+    }
+
     @ViewBuilder
     private func mainGrid(width: CGFloat, height: CGFloat, rowHeight: CGFloat) -> some View {
         let colWidth = max((width - spacing * CGFloat(gridCols - 1)) / CGFloat(gridCols), 1)
@@ -154,7 +205,8 @@ struct KeyboardView: View {
                             showSwipes: showSwipes,
                             showSymbolOverlay: isSymbolOverlay,
                             isShifted: state.isShifted || state.isCapsLocked,
-                            theme: state.theme
+                            theme: state.theme,
+                            cornerRadius: state.keyCornerRadius
                         )
                         .frame(width: colWidth, height: rowHeight)
                         .overlay(
@@ -196,7 +248,8 @@ struct KeyboardView: View {
                 CommandKeyView(
                     config: config,
                     isActive: state.activeKeyPosition == commandPos,
-                    theme: state.theme
+                    theme: state.theme,
+                    cornerRadius: state.keyCornerRadius
                 )
                 .frame(width: width, height: rowHeight)
                 .background(
@@ -229,7 +282,11 @@ struct KeyboardView: View {
     @ViewBuilder
     private func bottomRow(width: CGFloat, height: CGFloat) -> some View {
         if state.currentLayer == .letters {
-            SpaceBarView(isActive: state.activeKeyPosition == GridPosition(row: 3, col: 0), theme: state.theme)
+            SpaceBarView(
+                isActive: state.activeKeyPosition == GridPosition(row: 3, col: 0),
+                theme: state.theme,
+                cornerRadius: state.keyCornerRadius
+            )
                 .frame(width: width, height: height)
                 .background(
                     GeometryReader { geo in
@@ -252,13 +309,14 @@ struct KeyboardView: View {
                     BottomNumberKeyView(
                         config: config,
                         isActive: false,
-                        theme: state.theme
+                        theme: state.theme,
+                        cornerRadius: state.keyCornerRadius
                     )
                     .frame(height: height)
                 }
 
                 // Remaining space
-                SpaceBarView(isActive: false, theme: state.theme)
+                SpaceBarView(isActive: false, theme: state.theme, cornerRadius: state.keyCornerRadius)
                     .frame(height: height)
                     .background(
                         GeometryReader { geo in
@@ -287,7 +345,8 @@ struct KeyboardView: View {
         CommandKeyView(
             config: KeyConfig(tap: "", specialAction: .enter, displayLabel: "return"),
             isActive: state.activeKeyPosition == pos,
-            theme: state.theme
+            theme: state.theme,
+            cornerRadius: state.keyCornerRadius
         )
         .frame(width: width, height: height)
         .background(
@@ -341,12 +400,12 @@ struct KeyboardView: View {
                     .position(x: size.width * 0.1, y: size.height * 0.12)
             }
 
-            // ".com" on key (1,0)
-            if pos.row == 1 && pos.col == 0 && state.currentLayer == .letters && !state.isSymbolOverlayActive && state.showCenterLabels {
+            // URL shortcut on h key.
+            if pos == KeyboardLayoutData.dotComPosition && state.currentLayer == .letters && state.isURLField && state.showCenterLabels {
                 Text(".com")
-                    .font(.system(size: 9, weight: .medium))
+                    .font(.system(size: min(size.width, size.height) * 0.16, weight: .medium, design: .rounded))
                     .foregroundColor(state.theme.swipeColor)
-                    .position(x: size.width * 0.35, y: size.height * 0.88)
+                    .position(x: size.width * 0.5, y: size.height * 0.88)
             }
 
             // Punctuation on bottom keys (comma, period, colon, semicolon)
@@ -366,6 +425,37 @@ struct KeyboardView: View {
         if spaceBarRegion.contains(point) {
             state.activeKeyPosition = GridPosition(row: 3, col: 0)
         }
+    }
+
+    // MARK: - Gesture Trail
+
+    private func resetGestureTrail(at point: CGPoint) {
+        state.gestureTrailPoints = state.showGestureTrail ? [point] : []
+    }
+
+    private func appendGestureTrailPoint(_ point: CGPoint, force: Bool = false) {
+        guard state.showGestureTrail else {
+            state.gestureTrailPoints = []
+            return
+        }
+
+        guard let lastPoint = state.gestureTrailPoints.last else {
+            state.gestureTrailPoints = [point]
+            return
+        }
+
+        guard force || distance(point, lastPoint) >= minTrailPointDistance else { return }
+
+        state.gestureTrailPoints.append(point)
+        if state.gestureTrailPoints.count > maxTrailDisplayPoints {
+            state.gestureTrailPoints.removeFirst(state.gestureTrailPoints.count - maxTrailDisplayPoints)
+        }
+    }
+
+    private func distance(_ lhs: CGPoint, _ rhs: CGPoint) -> CGFloat {
+        let dx = lhs.x - rhs.x
+        let dy = lhs.y - rhs.y
+        return sqrt(dx * dx + dy * dy)
     }
 
     // MARK: - Gesture Result Handling
@@ -429,6 +519,10 @@ struct KeyboardView: View {
     }
 
     private func handleSwipe(from pos: GridPosition, direction: SwipeDirection, uppercase: Bool) {
+        if handleCommandSwipe(from: pos, isBackAndForth: uppercase) {
+            return
+        }
+
         let grid = state.currentGrid
         guard pos.row >= 0 && pos.row < grid.count,
               pos.col >= 0 && pos.col < grid[pos.row].count else { return }
@@ -446,8 +540,13 @@ struct KeyboardView: View {
             onCharacter("\t")
             return
         }
+        if state.currentLayer == .letters && state.isURLField && pos == KeyboardLayoutData.dotComPosition && direction == .bottom {
+            onCharacter(".com")
+            state.afterCharacterInserted()
+            return
+        }
 
-        if let char = config.swipes[direction] {
+        if let char = config.swipes[direction] ?? hiddenSymbolSwipe(from: pos, direction: direction) {
             let output: String
             if uppercase {
                 output = char.uppercased()
@@ -457,6 +556,30 @@ struct KeyboardView: View {
             onCharacter(output)
             state.afterCharacterInserted()
         }
+    }
+
+    private func hiddenSymbolSwipe(from pos: GridPosition, direction: SwipeDirection) -> String? {
+        guard state.currentLayer == .letters, !state.isSymbolOverlayActive else { return nil }
+        guard pos.row >= 0 && pos.row < KeyboardLayoutData.symbolOverlayGrid.count,
+              pos.col >= 0 && pos.col < KeyboardLayoutData.symbolOverlayGrid[pos.row].count else {
+            return nil
+        }
+
+        return KeyboardLayoutData.symbolOverlayGrid[pos.row][pos.col].swipes[direction]
+    }
+
+    private func handleCommandSwipe(from pos: GridPosition, isBackAndForth: Bool) -> Bool {
+        guard pos.col == 3 || pos.col == -1 else { return false }
+        let commands = state.currentCommandBar
+        guard pos.row >= 0 && pos.row < commands.count else { return false }
+        guard commands[pos.row].specialAction == .backspace else { return false }
+
+        if isBackAndForth {
+            onDeleteLine()
+        } else {
+            onDeleteWord()
+        }
+        return true
     }
 
     private func handleCircle(at pos: GridPosition) {
