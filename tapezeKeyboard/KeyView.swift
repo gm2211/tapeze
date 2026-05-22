@@ -3,8 +3,6 @@ import SwiftUI
 // MARK: - Theme
 
 struct KeyboardTheme: Identifiable {
-    static let defaultsKey = "keyboardTheme"
-
     let id: String
     let name: String
     let keyboardBackground: Color
@@ -91,122 +89,203 @@ struct KeyboardTheme: Identifiable {
         self.textureOpacity = textureOpacity
     }
 
-    static let classic = KeyboardTheme(
-        id: "classic",
-        name: "Classic",
-        keyboardBackground: Color(red: 0.12, green: 0.12, blue: 0.14),
-        emptyColumnBackground: Color(red: 0.18, green: 0.16, blue: 0.18),
-        keyBackground: Color(red: 0.17, green: 0.24, blue: 0.31),
-        commandBackground: Color(red: 0.75, green: 0.78, blue: 0.80),
-        spaceBackground: Color(red: 0.65, green: 0.68, blue: 0.70),
-        tapColor: Color(red: 0.78, green: 0.66, blue: 0.20),
-        swipeColor: Color(red: 0.60, green: 0.66, blue: 0.72),
-        specialTextColor: Color(red: 0.25, green: 0.30, blue: 0.35),
-        keyBorder: Color(red: 0.35, green: 0.40, blue: 0.45),
-        activeKeyBackground: Color(red: 0.25, green: 0.35, blue: 0.45)
-    )
-
-    static let liquidGlass = KeyboardTheme(
-        id: "liquidGlass",
-        name: "Liquid Glass",
-        keyboardBackground: Color.white.opacity(0.10),
-        emptyColumnBackground: Color.white.opacity(0.06),
-        keyBackground: Color.white.opacity(0.36),
-        commandBackground: Color.white.opacity(0.46),
-        spaceBackground: Color.white.opacity(0.24),
-        tapColor: Color(red: 0.08, green: 0.10, blue: 0.12),
-        swipeColor: Color(red: 0.30, green: 0.34, blue: 0.39),
-        specialTextColor: Color(red: 0.08, green: 0.10, blue: 0.12),
-        keyBorder: Color.white.opacity(0.78),
-        activeKeyBackground: Color.white.opacity(0.64)
-    )
-
-    static let graphite = KeyboardTheme(
-        id: "graphite",
-        name: "Graphite",
-        keyboardBackground: Color(red: 0.08, green: 0.09, blue: 0.11),
-        emptyColumnBackground: Color(red: 0.18, green: 0.16, blue: 0.13),
-        keyBackground: Color(red: 0.14, green: 0.16, blue: 0.19),
-        commandBackground: Color(red: 0.58, green: 0.61, blue: 0.66),
-        spaceBackground: Color(red: 0.42, green: 0.45, blue: 0.49),
-        tapColor: Color(red: 0.93, green: 0.78, blue: 0.16),
-        swipeColor: Color(red: 0.78, green: 0.82, blue: 0.88),
-        specialTextColor: Color(red: 0.10, green: 0.13, blue: 0.17),
-        keyBorder: Color(red: 0.28, green: 0.31, blue: 0.36),
-        activeKeyBackground: Color(red: 0.22, green: 0.25, blue: 0.30)
-    )
-
-    static let aurora = KeyboardTheme(
-        id: "aurora",
-        name: "Aurora",
-        keyboardBackground: Color(red: 0.07, green: 0.13, blue: 0.15),
-        emptyColumnBackground: Color(red: 0.18, green: 0.12, blue: 0.20),
-        keyBackground: Color(red: 0.08, green: 0.23, blue: 0.27),
-        commandBackground: Color(red: 0.72, green: 0.82, blue: 0.82),
-        spaceBackground: Color(red: 0.52, green: 0.63, blue: 0.64),
-        tapColor: Color(red: 0.93, green: 0.76, blue: 0.23),
-        swipeColor: Color(red: 0.60, green: 0.83, blue: 0.82),
-        specialTextColor: Color(red: 0.08, green: 0.15, blue: 0.18),
-        keyBorder: Color(red: 0.15, green: 0.38, blue: 0.43),
-        activeKeyBackground: Color(red: 0.12, green: 0.33, blue: 0.38)
-    )
-
-    static let roseQuartz = KeyboardTheme(
-        id: "roseQuartz",
-        name: "Rose Quartz",
-        keyboardBackground: Color(red: 0.21, green: 0.16, blue: 0.19),
-        emptyColumnBackground: Color(red: 0.16, green: 0.20, blue: 0.19),
-        keyBackground: Color(red: 0.33, green: 0.24, blue: 0.29),
-        commandBackground: Color(red: 0.84, green: 0.77, blue: 0.79),
-        spaceBackground: Color(red: 0.66, green: 0.58, blue: 0.61),
-        tapColor: Color(red: 0.98, green: 0.79, blue: 0.37),
-        swipeColor: Color(red: 0.86, green: 0.72, blue: 0.80),
-        specialTextColor: Color(red: 0.24, green: 0.19, blue: 0.23),
-        keyBorder: Color(red: 0.45, green: 0.34, blue: 0.40),
-        activeKeyBackground: Color(red: 0.43, green: 0.30, blue: 0.38)
-    )
-
     static let tapeze = KeyboardTheme(
         id: "tapeze",
-        name: "Tapeze",
-        keyboardBackground: Color(red: 0.14, green: 0.17, blue: 0.20),
-        emptyColumnBackground: Color(red: 0.18, green: 0.19, blue: 0.20),
-        keyBackground: Color(red: 0.18, green: 0.23, blue: 0.28),
-        commandBackground: Color(red: 0.61, green: 0.65, blue: 0.69),
-        spaceBackground: Color(red: 0.48, green: 0.52, blue: 0.56),
-        tapColor: Color(red: 0.86, green: 0.68, blue: 0.24),
-        swipeColor: Color(red: 0.58, green: 0.65, blue: 0.72),
-        specialTextColor: Color(red: 0.17, green: 0.21, blue: 0.26),
-        keyBorder: Color(red: 0.30, green: 0.36, blue: 0.42),
-        activeKeyBackground: Color(red: 0.24, green: 0.30, blue: 0.36),
-        keyGradientTop: Color(red: 0.24, green: 0.29, blue: 0.34),
-        keyGradientBottom: Color(red: 0.15, green: 0.19, blue: 0.24),
-        commandGradientTop: Color(red: 0.70, green: 0.74, blue: 0.78),
-        commandGradientBottom: Color(red: 0.52, green: 0.56, blue: 0.60),
-        spaceGradientTop: Color(red: 0.56, green: 0.60, blue: 0.63),
-        spaceGradientBottom: Color(red: 0.42, green: 0.46, blue: 0.50),
+        name: "tapeze",
+        keyboardBackground: Color(red: 0.54, green: 0.59, blue: 0.60),
+        emptyColumnBackground: Color(red: 0.47, green: 0.52, blue: 0.53),
+        keyBackground: Color(red: 0.15, green: 0.21, blue: 0.27),
+        commandBackground: Color(red: 0.16, green: 0.25, blue: 0.30),
+        spaceBackground: Color(red: 0.74, green: 0.77, blue: 0.77),
+        tapColor: Color(red: 0.50, green: 0.91, blue: 0.87),
+        swipeColor: Color(red: 0.72, green: 0.80, blue: 0.88),
+        specialTextColor: Color(red: 0.86, green: 0.95, blue: 0.96),
+        keyBorder: Color(red: 0.11, green: 0.13, blue: 0.14),
+        activeKeyBackground: Color(red: 0.15, green: 0.35, blue: 0.40),
+        keyGradientTop: Color(red: 0.21, green: 0.30, blue: 0.37),
+        keyGradientBottom: Color(red: 0.10, green: 0.15, blue: 0.20),
+        commandGradientTop: Color(red: 0.30, green: 0.45, blue: 0.50),
+        commandGradientBottom: Color(red: 0.16, green: 0.24, blue: 0.30),
+        spaceGradientTop: Color(red: 0.27, green: 0.34, blue: 0.41),
+        spaceGradientBottom: Color(red: 0.14, green: 0.19, blue: 0.25),
         keyBorderWidth: 1,
-        innerHighlight: Color.white.opacity(0.09),
-        keyShadowColor: Color.black.opacity(0.24),
+        innerHighlight: Color.white.opacity(0.11),
+        keyShadowColor: Color.black.opacity(0.32),
         keyShadowRadius: 2.2,
         keyShadowYOffset: 1.4,
-        labelShadowColor: Color.black.opacity(0.58),
-        labelShadowRadius: 1.9,
+        labelShadowColor: Color.black.opacity(0.52),
+        labelShadowRadius: 1.4,
         labelShadowYOffset: 2.1,
-        textureOpacity: 0.055
+        textureOpacity: 0.04
     )
 
-    static let all: [KeyboardTheme] = [.classic, .tapeze, .liquidGlass, .graphite, .aurora, .roseQuartz]
+    static let all: [KeyboardTheme] = [.tapeze]
 
     static func theme(for id: String) -> KeyboardTheme {
-        all.first { $0.id == id } ?? .classic
+        .tapeze
     }
 }
 
-private enum KeySurfaceRole {
+enum KeySurfaceRole {
     case character
     case command
     case space
+}
+
+enum CommandVisualSide {
+    case left
+    case right
+}
+
+enum KeyCorner: Hashable {
+    case topLeft
+    case topRight
+    case bottomRight
+    case bottomLeft
+}
+
+private struct DiamondControlSurface: View {
+    let isActive: Bool
+    let theme: KeyboardTheme
+    let cornerRadius: CGFloat
+
+    var body: some View {
+        let shape = DiamondKeyShape(cornerRadius: cornerRadius)
+        let base = isActive ? theme.activeKeyBackground : theme.commandBackground
+        let top = isActive ? theme.activeKeyBackground : (theme.commandGradientTop ?? base)
+        let bottom = isActive ? theme.activeKeyBackground : (theme.commandGradientBottom ?? base)
+
+        shape
+            .fill(
+                LinearGradient(
+                    colors: [top, base, bottom],
+                    startPoint: .topLeading,
+                    endPoint: .bottomTrailing
+                )
+            )
+            .shadow(color: theme.keyShadowColor, radius: theme.keyShadowRadius + 0.5, x: 0, y: theme.keyShadowYOffset + 0.8)
+            .overlay(
+                shape
+                    .strokeBorder(theme.innerHighlight, lineWidth: 1)
+                    .blendMode(.screen)
+                    .padding(theme.keyBorderWidth)
+            )
+            .overlay(
+                shape
+                    .strokeBorder(theme.keyBorder, lineWidth: theme.keyBorderWidth)
+            )
+            .overlay {
+                if theme.textureOpacity > 0 {
+                    KeycapTexture(opacity: theme.textureOpacity)
+                        .clipShape(shape)
+                        .allowsHitTesting(false)
+                }
+            }
+    }
+}
+
+private struct FloatingControlSurface: View {
+    let isActive: Bool
+    let theme: KeyboardTheme
+    let cornerRadius: CGFloat
+
+    var body: some View {
+        let shape = OctagonalKeyShape(cornerRadius: cornerRadius)
+        let base = isActive ? theme.activeKeyBackground : theme.commandBackground
+        let top = isActive ? theme.activeKeyBackground : (theme.commandGradientTop ?? base)
+        let bottom = isActive ? theme.activeKeyBackground : (theme.commandGradientBottom ?? base)
+
+        shape
+            .fill(
+                LinearGradient(
+                    colors: [top, base, bottom],
+                    startPoint: .topLeading,
+                    endPoint: .bottomTrailing
+                )
+            )
+            .shadow(color: theme.keyShadowColor, radius: theme.keyShadowRadius + 0.4, x: 0, y: theme.keyShadowYOffset + 0.8)
+            .overlay(
+                shape
+                    .strokeBorder(theme.innerHighlight, lineWidth: 1)
+                    .blendMode(.screen)
+            )
+            .overlay(
+                shape
+                    .strokeBorder(theme.keyBorder.opacity(0.55), lineWidth: 0.8)
+            )
+    }
+}
+
+struct LatticeFillerDiamondView: View {
+    let role: KeySurfaceRole
+    let theme: KeyboardTheme
+    let cornerRadius: CGFloat
+
+    var body: some View {
+        let shape = DiamondKeyShape(cornerRadius: cornerRadius)
+        let base = baseColor
+        let top = gradientTop ?? base
+        let bottom = gradientBottom ?? base
+
+        shape
+            .fill(
+                LinearGradient(
+                    colors: [top, base, bottom],
+                    startPoint: .topLeading,
+                    endPoint: .bottomTrailing
+                )
+            )
+            .overlay(
+                shape
+                    .strokeBorder(theme.innerHighlight, lineWidth: max(theme.keyBorderWidth, 1))
+                    .blendMode(.screen)
+                    .padding(theme.keyBorderWidth)
+            )
+            .overlay(
+                shape
+                    .strokeBorder(theme.keyBorder, lineWidth: theme.keyBorderWidth)
+            )
+            .overlay {
+                if theme.textureOpacity > 0 {
+                    KeycapTexture(opacity: theme.textureOpacity)
+                        .clipShape(shape)
+                        .allowsHitTesting(false)
+                }
+            }
+    }
+
+    private var baseColor: Color {
+        switch role {
+        case .character:
+            return theme.keyBackground
+        case .command:
+            return theme.commandBackground
+        case .space:
+            return theme.spaceBackground
+        }
+    }
+
+    private var gradientTop: Color? {
+        switch role {
+        case .character:
+            return theme.keyGradientTop
+        case .command:
+            return theme.commandGradientTop
+        case .space:
+            return theme.spaceGradientTop
+        }
+    }
+
+    private var gradientBottom: Color? {
+        switch role {
+        case .character:
+            return theme.keyGradientBottom
+        case .command:
+            return theme.commandGradientBottom
+        case .space:
+            return theme.spaceGradientBottom
+        }
+    }
 }
 
 private struct KeySurface: View {
@@ -214,9 +293,24 @@ private struct KeySurface: View {
     let isActive: Bool
     let theme: KeyboardTheme
     let cornerRadius: CGFloat
+    let cutCorners: Set<KeyCorner>
+
+    init(
+        role: KeySurfaceRole,
+        isActive: Bool,
+        theme: KeyboardTheme,
+        cornerRadius: CGFloat,
+        cutCorners: Set<KeyCorner> = []
+    ) {
+        self.role = role
+        self.isActive = isActive
+        self.theme = theme
+        self.cornerRadius = cornerRadius
+        self.cutCorners = cutCorners
+    }
 
     var body: some View {
-        let shape = RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
+        let shape = SelectiveCornerKeyShape(cornerRadius: cornerRadius, cutCorners: cutCorners)
 
         shape
             .fill(fillStyle)
@@ -286,6 +380,206 @@ private struct KeySurface: View {
     }
 }
 
+struct SelectiveCornerKeyShape: InsettableShape {
+    var cornerRadius: CGFloat
+    var cutCorners: Set<KeyCorner>
+    var insetAmount: CGFloat = 0
+
+    func inset(by amount: CGFloat) -> SelectiveCornerKeyShape {
+        var copy = self
+        copy.insetAmount += amount
+        return copy
+    }
+
+    func path(in rect: CGRect) -> Path {
+        let r = rect.insetBy(dx: insetAmount, dy: insetAmount)
+        let cut = min(min(r.width, r.height) * 0.30, min(r.width, r.height) * 0.5)
+        var points: [CGPoint] = []
+
+        if cutCorners.contains(.topLeft) {
+            points.append(CGPoint(x: r.minX + cut, y: r.minY))
+        } else {
+            points.append(CGPoint(x: r.minX, y: r.minY))
+        }
+
+        if cutCorners.contains(.topRight) {
+            points.append(CGPoint(x: r.maxX - cut, y: r.minY))
+            points.append(CGPoint(x: r.maxX, y: r.minY + cut))
+        } else {
+            points.append(CGPoint(x: r.maxX, y: r.minY))
+        }
+
+        if cutCorners.contains(.bottomRight) {
+            points.append(CGPoint(x: r.maxX, y: r.maxY - cut))
+            points.append(CGPoint(x: r.maxX - cut, y: r.maxY))
+        } else {
+            points.append(CGPoint(x: r.maxX, y: r.maxY))
+        }
+
+        if cutCorners.contains(.bottomLeft) {
+            points.append(CGPoint(x: r.minX + cut, y: r.maxY))
+            points.append(CGPoint(x: r.minX, y: r.maxY - cut))
+        } else {
+            points.append(CGPoint(x: r.minX, y: r.maxY))
+        }
+
+        if cutCorners.contains(.topLeft) {
+            points.append(CGPoint(x: r.minX, y: r.minY + cut))
+        }
+
+        let radius = min(max(cornerRadius, 0), min(r.width, r.height) * 0.10)
+        guard radius > 0 else {
+            var path = Path()
+            path.addLines(points)
+            path.closeSubpath()
+            return path
+        }
+
+        var path = Path()
+        for index in points.indices {
+            let current = points[index]
+            let previous = points[(index + points.count - 1) % points.count]
+            let next = points[(index + 1) % points.count]
+            let start = point(from: current, toward: previous, distance: radius)
+            let end = point(from: current, toward: next, distance: radius)
+
+            if index == points.startIndex {
+                path.move(to: start)
+            } else {
+                path.addLine(to: start)
+            }
+            path.addQuadCurve(to: end, control: current)
+        }
+        path.closeSubpath()
+        return path
+    }
+
+    private func point(from origin: CGPoint, toward target: CGPoint, distance: CGFloat) -> CGPoint {
+        let dx = target.x - origin.x
+        let dy = target.y - origin.y
+        let length = max(sqrt(dx * dx + dy * dy), 0.001)
+        let scale = min(distance / length, 0.45)
+        return CGPoint(x: origin.x + dx * scale, y: origin.y + dy * scale)
+    }
+}
+
+struct DiamondKeyShape: InsettableShape {
+    var cornerRadius: CGFloat
+    var insetAmount: CGFloat = 0
+
+    func inset(by amount: CGFloat) -> DiamondKeyShape {
+        var copy = self
+        copy.insetAmount += amount
+        return copy
+    }
+
+    func path(in rect: CGRect) -> Path {
+        let r = rect.insetBy(dx: insetAmount, dy: insetAmount)
+        let points = [
+            CGPoint(x: r.midX, y: r.minY),
+            CGPoint(x: r.maxX, y: r.midY),
+            CGPoint(x: r.midX, y: r.maxY),
+            CGPoint(x: r.minX, y: r.midY)
+        ]
+        let radius = min(max(cornerRadius, 0), min(r.width, r.height) * 0.09)
+        guard radius > 0 else {
+            var path = Path()
+            path.addLines(points)
+            path.closeSubpath()
+            return path
+        }
+
+        var path = Path()
+        for index in points.indices {
+            let current = points[index]
+            let previous = points[(index + points.count - 1) % points.count]
+            let next = points[(index + 1) % points.count]
+            let start = point(from: current, toward: previous, distance: radius)
+            let end = point(from: current, toward: next, distance: radius)
+
+            if index == points.startIndex {
+                path.move(to: start)
+            } else {
+                path.addLine(to: start)
+            }
+            path.addQuadCurve(to: end, control: current)
+        }
+        path.closeSubpath()
+        return path
+    }
+
+    private func point(from origin: CGPoint, toward target: CGPoint, distance: CGFloat) -> CGPoint {
+        let dx = target.x - origin.x
+        let dy = target.y - origin.y
+        let length = max(sqrt(dx * dx + dy * dy), 0.001)
+        let scale = min(distance / length, 0.45)
+        return CGPoint(x: origin.x + dx * scale, y: origin.y + dy * scale)
+    }
+}
+
+struct OctagonalKeyShape: InsettableShape {
+    var cornerRadius: CGFloat
+    var insetAmount: CGFloat = 0
+
+    func inset(by amount: CGFloat) -> OctagonalKeyShape {
+        var copy = self
+        copy.insetAmount += amount
+        return copy
+    }
+
+    func path(in rect: CGRect) -> Path {
+        let insetRect = rect.insetBy(dx: insetAmount, dy: insetAmount)
+        let w = insetRect.width
+        let h = insetRect.height
+        let sideCut = min(min(w, h) * 0.30, min(w, h) * 0.5)
+        let points = [
+            CGPoint(x: insetRect.minX + sideCut, y: insetRect.minY),
+            CGPoint(x: insetRect.maxX - sideCut, y: insetRect.minY),
+            CGPoint(x: insetRect.maxX, y: insetRect.minY + sideCut),
+            CGPoint(x: insetRect.maxX, y: insetRect.maxY - sideCut),
+            CGPoint(x: insetRect.maxX - sideCut, y: insetRect.maxY),
+            CGPoint(x: insetRect.minX + sideCut, y: insetRect.maxY),
+            CGPoint(x: insetRect.minX, y: insetRect.maxY - sideCut),
+            CGPoint(x: insetRect.minX, y: insetRect.minY + sideCut)
+        ]
+        let maxRadius = min(w, h) * 0.10
+        let radius = min(max(cornerRadius, 0), maxRadius)
+
+        guard radius > 0 else {
+            var path = Path()
+            path.addLines(points)
+            path.closeSubpath()
+            return path
+        }
+
+        var path = Path()
+        for index in points.indices {
+            let current = points[index]
+            let previous = points[(index + points.count - 1) % points.count]
+            let next = points[(index + 1) % points.count]
+            let start = point(from: current, toward: previous, distance: radius)
+            let end = point(from: current, toward: next, distance: radius)
+
+            if index == points.startIndex {
+                path.move(to: start)
+            } else {
+                path.addLine(to: start)
+            }
+            path.addQuadCurve(to: end, control: current)
+        }
+        path.closeSubpath()
+        return path
+    }
+
+    private func point(from origin: CGPoint, toward target: CGPoint, distance: CGFloat) -> CGPoint {
+        let dx = target.x - origin.x
+        let dy = target.y - origin.y
+        let length = max(sqrt(dx * dx + dy * dy), 0.001)
+        let scale = min(distance / length, 0.45)
+        return CGPoint(x: origin.x + dx * scale, y: origin.y + dy * scale)
+    }
+}
+
 private struct KeycapTexture: View {
     let opacity: CGFloat
 
@@ -307,7 +601,7 @@ private struct KeycapTexture: View {
     }
 }
 
-private extension View {
+extension View {
     func labelDepth(for theme: KeyboardTheme) -> some View {
         self
             .shadow(
@@ -359,16 +653,14 @@ struct CharacterKeyView: View {
     let isShifted: Bool
     let theme: KeyboardTheme
     let cornerRadius: CGFloat
+    let cutCorners: Set<KeyCorner>
 
     var body: some View {
         GeometryReader { geo in
             ZStack {
-                // Background
-                KeySurface(role: .character, isActive: isActive, theme: theme, cornerRadius: cornerRadius)
+                KeySurface(role: .character, isActive: isActive, theme: theme, cornerRadius: cornerRadius, cutCorners: cutCorners)
 
-                // Labels
                 ZStack {
-                    // Center tap label
                     if showCenter {
                         Text(displayText(config.tap))
                             .font(.system(size: centerFontSize(geo), weight: .bold, design: .rounded))
@@ -395,13 +687,18 @@ struct CharacterKeyView: View {
                     }
 
                     if showSwipes {
-                        // Swipe direction labels
                         ForEach(swipeLabelDirections, id: \.self) { dir in
                             if let char = displayedSwipeLabels[dir] {
                                 Text(displayText(char))
                                     .font(.system(size: swipeFontSize(geo), weight: .medium, design: .rounded))
                                     .foregroundColor(theme.swipeColor)
                                     .labelDepth(for: theme)
+                                    .lineLimit(1)
+                                    .minimumScaleFactor(0.7)
+                                    .frame(
+                                        width: swipeLabelSize(geo),
+                                        height: swipeLabelSize(geo)
+                                    )
                                     .position(positionForDirection(dir, in: geo.size))
                             }
                         }
@@ -438,15 +735,19 @@ struct CharacterKeyView: View {
     }
 
     private func centerFontSize(_ geo: GeometryProxy) -> CGFloat {
-        min(geo.size.width, geo.size.height) * 0.4
+        min(geo.size.width, geo.size.height) * 0.40
     }
 
     private func swipeFontSize(_ geo: GeometryProxy) -> CGFloat {
-        min(geo.size.width, geo.size.height) * 0.26
+        min(geo.size.width, geo.size.height) * 0.20
     }
 
     private func symbolOverlayFontSize(_ geo: GeometryProxy) -> CGFloat {
-        min(geo.size.width, geo.size.height) * 0.17
+        min(geo.size.width, geo.size.height) * 0.15
+    }
+
+    private func swipeLabelSize(_ geo: GeometryProxy) -> CGFloat {
+        min(geo.size.width, geo.size.height) * 0.26
     }
 
     private func symbolOverlayLabelSize(_ geo: GeometryProxy) -> CGFloat {
@@ -454,9 +755,9 @@ struct CharacterKeyView: View {
     }
 
     private func positionForDirection(_ dir: SwipeDirection, in size: CGSize) -> CGPoint {
-        let xInset: CGFloat = 0.11
-        let topInset: CGFloat = 0.13
-        let bottomInset: CGFloat = 0.19
+        let xInset: CGFloat = 0.28
+        let topInset: CGFloat = 0.25
+        let bottomInset: CGFloat = 0.18
         let xPositions: [CGFloat] = [xInset, 0.5, 1.0 - xInset]
         let yPositions: [CGFloat] = [topInset, 0.5, 1.0 - bottomInset]
 
@@ -481,9 +782,9 @@ struct CharacterKeyView: View {
     }
 
     private func symbolOverlayPositionForDirection(_ dir: SwipeDirection, in size: CGSize) -> CGPoint {
-        let xInset: CGFloat = 0.13
-        let topInset: CGFloat = 0.15
-        let bottomInset: CGFloat = 0.22
+        let xInset: CGFloat = 0.28
+        let topInset: CGFloat = 0.25
+        let bottomInset: CGFloat = 0.18
         let xPositions: [CGFloat] = [xInset, 0.5, 1.0 - xInset]
         let yPositions: [CGFloat] = [topInset, 0.5, 1.0 - bottomInset]
 
@@ -510,6 +811,136 @@ struct CharacterKeyView: View {
 
 // MARK: - Command Key View
 
+struct DiamondCommandKeyView: View {
+    let config: KeyConfig
+    let isActive: Bool
+    let isShifted: Bool
+    let isCapsLocked: Bool
+    let theme: KeyboardTheme
+    let cornerRadius: CGFloat
+
+    init(
+        config: KeyConfig,
+        isActive: Bool,
+        isShifted: Bool = false,
+        isCapsLocked: Bool = false,
+        theme: KeyboardTheme,
+        cornerRadius: CGFloat
+    ) {
+        self.config = config
+        self.isActive = isActive
+        self.isShifted = isShifted
+        self.isCapsLocked = isCapsLocked
+        self.theme = theme
+        self.cornerRadius = cornerRadius
+    }
+
+    var body: some View {
+        GeometryReader { geo in
+            ZStack {
+                DiamondControlSurface(isActive: isActive, theme: theme, cornerRadius: cornerRadius)
+                commandContent(size: geo.size)
+            }
+        }
+    }
+
+    @ViewBuilder
+    private func commandContent(size: CGSize) -> some View {
+        switch config.specialAction {
+        case .globe:
+            Image(systemName: "globe")
+                .font(.system(size: size.height * 0.34))
+                .foregroundColor(theme.specialTextColor)
+                .commandLabelDepth(for: theme)
+
+        case .enter:
+            Image(systemName: "return")
+                .font(.system(size: size.height * 0.34))
+                .foregroundColor(theme.specialTextColor)
+                .commandLabelDepth(for: theme)
+
+        case .shift:
+            Image(systemName: isCapsLocked ? "capslock.fill" : (isShifted ? "shift.fill" : "shift"))
+                .font(.system(size: size.height * 0.34))
+                .foregroundColor(theme.tapColor)
+                .commandLabelDepth(for: theme)
+
+        case .toggleLayer:
+            Text(config.displayLabel ?? "")
+                .font(.system(size: size.height * 0.28, weight: .medium, design: .rounded))
+                .foregroundColor(theme.specialTextColor)
+                .commandLabelDepth(for: theme)
+                .minimumScaleFactor(0.65)
+                .lineLimit(1)
+
+        default:
+            Text(config.displayLabel ?? config.tap)
+                .font(.system(size: size.height * 0.26, weight: .medium, design: .rounded))
+                .foregroundColor(theme.specialTextColor)
+                .commandLabelDepth(for: theme)
+        }
+    }
+}
+
+struct DeleteColumnKeyView: View {
+    let isActive: Bool
+    let side: CommandVisualSide
+    let theme: KeyboardTheme
+    let cornerRadius: CGFloat
+
+    var body: some View {
+        let shape = DeleteColumnFangShape(side: side, cornerRadius: cornerRadius)
+        let base = isActive ? theme.activeKeyBackground : theme.commandBackground
+        let top = isActive ? theme.activeKeyBackground : (theme.commandGradientTop ?? base)
+        let bottom = isActive ? theme.activeKeyBackground : (theme.commandGradientBottom ?? base)
+
+        shape
+            .fill(
+                LinearGradient(
+                    colors: [top, base, bottom],
+                    startPoint: .topLeading,
+                    endPoint: .bottomTrailing
+                )
+            )
+            .shadow(color: theme.keyShadowColor, radius: theme.keyShadowRadius + 0.4, x: 0, y: theme.keyShadowYOffset + 0.4)
+            .overlay(
+                shape
+                    .strokeBorder(theme.innerHighlight, lineWidth: max(theme.keyBorderWidth, 1))
+                    .blendMode(.screen)
+                    .padding(theme.keyBorderWidth)
+            )
+            .overlay(
+                shape
+                    .strokeBorder(theme.keyBorder, lineWidth: theme.keyBorderWidth)
+            )
+            .overlay {
+                if theme.textureOpacity > 0 {
+                    KeycapTexture(opacity: theme.textureOpacity)
+                        .clipShape(shape)
+                        .allowsHitTesting(false)
+                }
+            }
+    }
+}
+
+struct DeleteColumnFangShape: InsettableShape {
+    var side: CommandVisualSide
+    var cornerRadius: CGFloat
+    var insetAmount: CGFloat = 0
+
+    func inset(by amount: CGFloat) -> DeleteColumnFangShape {
+        var copy = self
+        copy.insetAmount += amount
+        return copy
+    }
+
+    func path(in rect: CGRect) -> Path {
+        let r = rect.insetBy(dx: insetAmount, dy: insetAmount)
+        let radius = min(max(cornerRadius, 0), min(r.width, r.height) * 0.10)
+        return Path(roundedRect: r, cornerSize: CGSize(width: radius, height: radius))
+    }
+}
+
 struct CommandKeyView: View {
     let config: KeyConfig
     let isActive: Bool
@@ -519,9 +950,14 @@ struct CommandKeyView: View {
     var body: some View {
         GeometryReader { geo in
             ZStack {
-                KeySurface(role: .command, isActive: isActive, theme: theme, cornerRadius: cornerRadius)
-
-                commandContent(size: geo.size)
+                if config.specialAction == .backspace {
+                    DeleteFangSurface(isActive: isActive, theme: theme, cornerRadius: cornerRadius)
+                    commandContent(size: geo.size)
+                } else {
+                    FloatingControlSurface(isActive: isActive, theme: theme, cornerRadius: cornerRadius)
+                        .frame(width: min(geo.size.width, geo.size.height) * 0.82, height: min(geo.size.width, geo.size.height) * 0.82)
+                    commandContent(size: CGSize(width: min(geo.size.width, geo.size.height) * 0.82, height: min(geo.size.width, geo.size.height) * 0.82))
+                }
             }
         }
     }
@@ -564,15 +1000,180 @@ struct CommandKeyView: View {
 
 // MARK: - Space Bar View
 
-struct SpaceBarView: View {
+private struct DeleteFangSurface: View {
     let isActive: Bool
     let theme: KeyboardTheme
     let cornerRadius: CGFloat
 
     var body: some View {
-        GeometryReader { geo in
-            KeySurface(role: .space, isActive: isActive, theme: theme, cornerRadius: cornerRadius)
+        let shape = DeleteFangShape(cornerRadius: cornerRadius)
+        let base = isActive ? theme.activeKeyBackground : theme.commandBackground
+        let top = isActive ? theme.activeKeyBackground : (theme.commandGradientTop ?? base)
+        let bottom = isActive ? theme.activeKeyBackground : (theme.commandGradientBottom ?? base)
+
+        shape
+            .fill(
+                LinearGradient(
+                    colors: [top, base, bottom],
+                    startPoint: .topLeading,
+                    endPoint: .bottomTrailing
+                )
+            )
+            .shadow(color: theme.keyShadowColor, radius: theme.keyShadowRadius, x: 0, y: theme.keyShadowYOffset)
+            .overlay(
+                shape
+                    .strokeBorder(theme.innerHighlight, lineWidth: max(theme.keyBorderWidth, 1))
+                    .blendMode(.screen)
+                    .padding(theme.keyBorderWidth)
+            )
+            .overlay(
+                shape
+                    .strokeBorder(theme.keyBorder, lineWidth: theme.keyBorderWidth)
+            )
+            .overlay {
+                if theme.textureOpacity > 0 {
+                    KeycapTexture(opacity: theme.textureOpacity)
+                        .clipShape(shape)
+                        .allowsHitTesting(false)
+                }
+            }
+    }
+}
+
+private struct DeleteFangShape: InsettableShape {
+    var cornerRadius: CGFloat
+    var insetAmount: CGFloat = 0
+
+    func inset(by amount: CGFloat) -> DeleteFangShape {
+        var copy = self
+        copy.insetAmount += amount
+        return copy
+    }
+
+    func path(in rect: CGRect) -> Path {
+        let r = rect.insetBy(dx: insetAmount, dy: insetAmount)
+        let cut = min(r.width * 0.32, r.height * 0.22)
+        let midY = r.midY
+        let points = [
+            CGPoint(x: r.minX + cut, y: r.minY),
+            CGPoint(x: r.maxX, y: r.minY),
+            CGPoint(x: r.maxX, y: r.maxY),
+            CGPoint(x: r.minX + cut, y: r.maxY),
+            CGPoint(x: r.minX, y: midY)
+        ]
+
+        let radius = min(max(cornerRadius, 0), min(r.width, r.height) * 0.10)
+        guard radius > 0 else {
+            var path = Path()
+            path.addLines(points)
+            path.closeSubpath()
+            return path
         }
+
+        var path = Path()
+        for index in points.indices {
+            let current = points[index]
+            let previous = points[(index + points.count - 1) % points.count]
+            let next = points[(index + 1) % points.count]
+            let start = point(from: current, toward: previous, distance: radius)
+            let end = point(from: current, toward: next, distance: radius)
+
+            if index == points.startIndex {
+                path.move(to: start)
+            } else {
+                path.addLine(to: start)
+            }
+            path.addQuadCurve(to: end, control: current)
+        }
+        path.closeSubpath()
+        return path
+    }
+
+    private func point(from origin: CGPoint, toward target: CGPoint, distance: CGFloat) -> CGPoint {
+        let dx = target.x - origin.x
+        let dy = target.y - origin.y
+        let length = max(sqrt(dx * dx + dy * dy), 0.001)
+        let scale = min(distance / length, 0.45)
+        return CGPoint(x: origin.x + dx * scale, y: origin.y + dy * scale)
+    }
+}
+
+struct SpaceBarView: View {
+    let isActive: Bool
+    let theme: KeyboardTheme
+    let cornerRadius: CGFloat
+    let fangCenters: [CGFloat]
+
+    init(isActive: Bool, theme: KeyboardTheme, cornerRadius: CGFloat, fangCenters: [CGFloat] = []) {
+        self.isActive = isActive
+        self.theme = theme
+        self.cornerRadius = cornerRadius
+        self.fangCenters = fangCenters
+    }
+
+    var body: some View {
+        GeometryReader { geo in
+            SpaceFangSurface(isActive: isActive, theme: theme, cornerRadius: cornerRadius, fangCenters: fangCenters)
+        }
+    }
+}
+
+private struct SpaceFangSurface: View {
+    let isActive: Bool
+    let theme: KeyboardTheme
+    let cornerRadius: CGFloat
+    let fangCenters: [CGFloat]
+
+    var body: some View {
+        let shape = SpaceFangShape(cornerRadius: cornerRadius, fangCenters: fangCenters)
+        let base = isActive ? theme.activeKeyBackground : theme.spaceBackground
+        let top = isActive ? theme.activeKeyBackground : (theme.spaceGradientTop ?? base)
+        let bottom = isActive ? theme.activeKeyBackground : (theme.spaceGradientBottom ?? base)
+
+        shape
+            .fill(
+                LinearGradient(
+                    colors: [top, base, bottom],
+                    startPoint: .topLeading,
+                    endPoint: .bottomTrailing
+                )
+            )
+            .shadow(color: theme.keyShadowColor, radius: theme.keyShadowRadius, x: 0, y: theme.keyShadowYOffset)
+            .overlay(
+                shape
+                    .strokeBorder(theme.innerHighlight, lineWidth: max(theme.keyBorderWidth, 1))
+                    .blendMode(.screen)
+                    .padding(theme.keyBorderWidth)
+            )
+            .overlay(
+                shape
+                    .strokeBorder(theme.keyBorder, lineWidth: theme.keyBorderWidth)
+            )
+            .overlay {
+                if theme.textureOpacity > 0 {
+                    KeycapTexture(opacity: theme.textureOpacity)
+                        .clipShape(shape)
+                        .allowsHitTesting(false)
+                }
+            }
+    }
+}
+
+struct SpaceFangShape: InsettableShape {
+    var cornerRadius: CGFloat
+    var fangCenters: [CGFloat]
+    var insetAmount: CGFloat = 0
+
+    func inset(by amount: CGFloat) -> SpaceFangShape {
+        var copy = self
+        copy.insetAmount += amount
+        return copy
+    }
+
+    func path(in rect: CGRect) -> Path {
+        let r = rect.insetBy(dx: insetAmount, dy: insetAmount)
+        let radius = min(max(cornerRadius, 0), r.height * 0.12)
+        return Path(roundedRect: r, cornerSize: CGSize(width: radius, height: radius))
     }
 }
 

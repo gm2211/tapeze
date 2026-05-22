@@ -1,6 +1,6 @@
-name: Tapeze
+name: tapeze
 options:
-  bundleIdPrefix: com.gmecocci
+  bundleIdPrefix: com.gm2211
   deploymentTarget:
     iOS: "16.0"
   xcodeVersion: "15.0"
@@ -9,38 +9,45 @@ settings:
   base:
     SWIFT_VERSION: "5.9"
     TARGETED_DEVICE_FAMILY: "1,2"
+    MARKETING_VERSION: "1.0"
+    CURRENT_PROJECT_VERSION: "2"
 
 targets:
-  Tapeze:
+  tapeze:
     type: application
     platform: iOS
     sources:
-      - path: Tapeze
+      - path: tapeze
+      - path: tapezeKeyboard/KeyboardView.swift
+      - path: tapezeKeyboard/KeyView.swift
+      - path: tapezeKeyboard/KeyboardLayout.swift
+      - path: tapezeKeyboard/KeyboardState.swift
+      - path: tapezeKeyboard/GestureEngine.swift
     resources:
-      - path: Tapeze/PrivacyInfo.xcprivacy
+      - path: tapeze/PrivacyInfo.xcprivacy
     settings:
       base:
-        PRODUCT_BUNDLE_IDENTIFIER: com.gmecocci.tapeze
-        INFOPLIST_FILE: Tapeze/Info.plist
-        CODE_SIGN_ENTITLEMENTS: Tapeze/Tapeze.entitlements
+        PRODUCT_BUNDLE_IDENTIFIER: com.gm2211.tapeze
+        INFOPLIST_FILE: tapeze/Info.plist
+        CODE_SIGN_ENTITLEMENTS: tapeze/tapeze.entitlements
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
         CODE_SIGN_STYLE: Automatic
         DEVELOPMENT_TEAM: 6KQV68SJ5P
     dependencies:
-      - target: TapezeKeyboard
+      - target: tapezeKeyboard
 
-  TapezeKeyboard:
+  tapezeKeyboard:
     type: app-extension
     platform: iOS
     sources:
-      - path: TapezeKeyboard
+      - path: tapezeKeyboard
     resources:
-      - path: TapezeKeyboard/PrivacyInfo.xcprivacy
+      - path: tapezeKeyboard/PrivacyInfo.xcprivacy
     settings:
       base:
-        PRODUCT_BUNDLE_IDENTIFIER: com.gmecocci.tapeze.keyboard
-        INFOPLIST_FILE: TapezeKeyboard/Info.plist
-        CODE_SIGN_ENTITLEMENTS: TapezeKeyboard/TapezeKeyboard.entitlements
+        PRODUCT_BUNDLE_IDENTIFIER: com.gm2211.tapeze.keyboard
+        INFOPLIST_FILE: tapezeKeyboard/Info.plist
+        CODE_SIGN_ENTITLEMENTS: tapezeKeyboard/tapezeKeyboard.entitlements
         CODE_SIGN_STYLE: Automatic
         DEVELOPMENT_TEAM: 6KQV68SJ5P
         ENABLE_DEBUG_DYLIB: "NO"

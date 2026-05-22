@@ -2,10 +2,12 @@ import Foundation
 
 // MARK: - Direction
 
-enum SwipeDirection: CaseIterable {
+enum SwipeDirection: String, CaseIterable, Codable, Identifiable {
     case topLeft, top, topRight
     case left, right
     case bottomLeft, bottom, bottomRight
+
+    var id: String { rawValue }
 
     var rowOffset: Int {
         switch self {
@@ -112,6 +114,7 @@ enum KeyboardLayer: CaseIterable {
 // MARK: - Layout Data
 
 struct KeyboardLayoutData {
+    static let customLayoutDefaultsKey = "customKeyboardLayout"
 
     // MARK: Letter Layer - Main 3x3 Grid
 
@@ -278,4 +281,126 @@ struct KeyboardLayoutData {
 
     /// ".com" shortcut on h key
     static let dotComPosition = GridPosition(row: 1, col: 0)
+
+    static func activeLetterGrid() -> [[KeyConfig]] {
+        savedEditableLayout()?.letterGrid.map { row in row.map(\.keyConfig) } ?? letterGrid
+    }
+
+    static func activeNumberGrid() -> [[KeyConfig]] {
+        savedEditableLayout()?.numberGrid.map { row in row.map(\.keyConfig) } ?? numberGrid
+    }
+
+    static func activeSymbolOverlayGrid() -> [[KeyConfig]] {
+        savedEditableLayout()?.symbolOverlayGrid.map { row in row.map(\.keyConfig) } ?? symbolOverlayGrid
+    }
+
+    static func savedEditableLayout() -> EditableKeyboardLayout? {
+        guard let data = UserDefaults(suiteName: KeyboardState.appGroupSuiteName)?.data(forKey: customLayoutDefaultsKey) else {
+            return nil
+        }
+        return try? JSONDecoder().decode(EditableKeyboardLayout.self, from: data)
+    }
+
+    static func saveEditableLayout(_ layout: EditableKeyboardLayout) {
+        guard let data = try? JSONEncoder().encode(layout) else { return }
+        UserDefaults(suiteName: KeyboardState.appGroupSuiteName)?.set(data, forKey: customLayoutDefaultsKey)
+    }
+
+    static func restoreDefaultEditableLayout() {
+        UserDefaults(suiteName: KeyboardState.appGroupSuiteName)?.removeObject(forKey: customLayoutDefaultsKey)
+    }
+}
+
+enum KeyCellPosition: String, CaseIterable, Codable, Identifiable {
+    case topLeft, top, topRight
+    case left, center, right
+    case bottomLeft, bottom, bottomRight
+
+    var id: String { rawValue }
+
+    var swipeDirection: SwipeDirection? {
+        switch self {
+        case .topLeft: return .topLeft
+        case .top: return .top
+        case .topRight: return .topRight
+        case .left: return .left
+        case .center: return nil
+        case .right: return .right
+        case .bottomLeft: return .bottomLeft
+        case .bottom: return .bottom
+        case .bottomRight: return .bottomRight
+        }
+    }
+
+    init(direction: SwipeDirection) {
+        switch direction {
+        case .topLeft: self = .topLeft
+        case .top: self = .top
+        case .topRight: self = .topRight
+        case .left: self = .left
+        case .right: self = .right
+        case .bottomLeft: self = .bottomLeft
+        case .bottom: self = .bottom
+        case .bottomRight: self = .bottomRight
+        }
+    }
+}
+
+struct EditableKeyConfig: Codable, Equatable {
+    var cells: [KeyCellPosition: String]
+
+    init(cells: [KeyCellPosition: String] = [:]) {
+        self.cells = cells.filter { !$0.value.isEmpty }
+    }
+
+    init(keyConfig: KeyConfig) {
+        var cells: [KeyCellPosition: String] = [:]
+        if !keyConfig.tap.isEmpty {
+            cells[.center] = keyConfig.tap
+        }
+        for (direction, value) in keyConfig.swipes where !value.isEmpty {
+            cells[KeyCellPosition(direction: direction)] = value
+        }
+        self.cells = cells
+    }
+
+    var keyConfig: KeyConfig {
+        var swipes: [SwipeDirection: String] = [:]
+        for (position, value) in cells where position != .center && !value.isEmpty {
+            if let direction = position.swipeDirection {
+                swipes[direction] = value
+            }
+        }
+        return KeyConfig(tap: cells[.center] ?? "", swipes: swipes)
+    }
+
+    func value(at position: KeyCellPosition) -> String {
+        cells[position] ?? ""
+    }
+
+    mutating func setValue(_ value: String, at position: KeyCellPosition) {
+        if value.isEmpty {
+            cells.removeValue(forKey: position)
+        } else {
+            cells[position] = value
+        }
+    }
+}
+
+struct EditableKeyboardLayout: Codable, Equatable {
+    var letterGrid: [[EditableKeyConfig]]
+    var numberGrid: [[EditableKeyConfig]]
+    var symbolOverlayGrid: [[EditableKeyConfig]]
+
+    static var `default`: EditableKeyboardLayout {
+        EditableKeyboardLayout(
+            letterGrid: KeyboardLayoutData.letterGrid.map { row in row.map(EditableKeyConfig.init(keyConfig:)) },
+            numberGrid: KeyboardLayoutData.numberGrid.map { row in row.map(EditableKeyConfig.init(keyConfig:)) },
+            symbolOverlayGrid: KeyboardLayoutData.symbolOverlayGrid.map { row in row.map(EditableKeyConfig.init(keyConfig:)) }
+        )
+    }
+
+    static var savedOrDefault: EditableKeyboardLayout {
+        KeyboardLayoutData.savedEditableLayout() ?? .default
+    }
 }

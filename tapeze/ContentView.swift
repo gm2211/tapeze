@@ -1,10 +1,11 @@
 import SwiftUI
+import UniformTypeIdentifiers
 
 struct ContentView: View {
     @AppStorage(KeyboardState.showGestureTrailDefaultsKey, store: KeyboardState.settingsDefaults) private var showGestureTrail = true
-    @AppStorage(KeyboardState.selectedThemeDefaultsKey, store: KeyboardState.settingsDefaults) private var selectedThemeID = KeyboardTheme.classic.id
     @AppStorage(KeyboardState.keyCornerRadiusDefaultsKey, store: KeyboardState.settingsDefaults) private var keyCornerRadius = Double(KeyboardState.defaultKeyCornerRadius)
     @State private var testText: String = ""
+    @State private var isLayoutEditorPresented = false
     @StateObject private var previewState = KeyboardState()
 
     var body: some View {
@@ -22,26 +23,29 @@ struct ContentView: View {
         .background(Color(.systemGroupedBackground))
         .onAppear {
             previewState.showGestureTrail = showGestureTrail
-            previewState.selectedThemeID = selectedThemeID
             previewState.keyCornerRadius = CGFloat(keyCornerRadius)
         }
         .onChange(of: showGestureTrail) { newValue in
             previewState.showGestureTrail = newValue
         }
-        .onChange(of: selectedThemeID) { newValue in
-            previewState.selectedThemeID = newValue
-        }
         .onChange(of: keyCornerRadius) { newValue in
             previewState.keyCornerRadius = CGFloat(newValue)
+        }
+        .sheet(isPresented: $isLayoutEditorPresented, onDismiss: {
+            previewState.refreshLayout()
+        }) {
+            LayoutEditorView {
+                previewState.refreshLayout()
+            }
         }
     }
 
     private var headerView: some View {
         VStack(alignment: .leading, spacing: 4) {
-            Text("Tapeze")
+            Text("tapeze")
                 .font(.system(.largeTitle, design: .rounded, weight: .bold))
 
-            Text("Gesture keyboard setup, themes, and preview.")
+            Text("Compact gesture keyboard setup and preview.")
                 .font(.subheadline)
                 .foregroundColor(.secondary)
         }
@@ -54,7 +58,7 @@ struct ContentView: View {
                 Text("Keyboard Preview")
                     .font(.headline)
 
-                Text("A non-functional preview using the selected theme.")
+                Text("Try the keyboard below with the selected settings.")
                     .font(.caption)
                     .foregroundColor(.secondary)
             }
@@ -85,21 +89,7 @@ struct ContentView: View {
     }
 
     private var keyboardPreviewBackdrop: some View {
-        Group {
-            if selectedThemeID == KeyboardTheme.liquidGlass.id {
-                LinearGradient(
-                    colors: [
-                        Color(red: 0.95, green: 0.90, blue: 0.82),
-                        Color(red: 0.78, green: 0.86, blue: 0.91),
-                        Color(red: 0.88, green: 0.82, blue: 0.92)
-                    ],
-                    startPoint: .topLeading,
-                    endPoint: .bottomTrailing
-                )
-            } else {
-                Color.clear
-            }
-        }
+        Color.clear
     }
 
     private func deletePreviousPreviewWord() {
@@ -141,9 +131,9 @@ struct ContentView: View {
 
             instructionRow(number: 1, text: "Open Settings → General → Keyboard → Keyboards")
             instructionRow(number: 2, text: "Tap \"Add New Keyboard...\"")
-            instructionRow(number: 3, text: "Select \"Tapeze\"")
+            instructionRow(number: 3, text: "Select \"tapeze\"")
             instructionRow(number: 4, text: "Open Notes or the test field below")
-            instructionRow(number: 5, text: "Long-press 🌐 and select \"Tapeze\"")
+            instructionRow(number: 5, text: "Long-press 🌐 and select \"tapeze\"")
 
             Text("Some system fields, including password fields and Safari's address bar, may force Apple's keyboard.")
                 .font(.caption)
@@ -157,38 +147,12 @@ struct ContentView: View {
 
     private var settingsView: some View {
         VStack(alignment: .leading, spacing: 12) {
-            HStack(alignment: .firstTextBaseline) {
-                Text("Settings")
-                    .font(.headline)
-                Spacer()
-                Text(KeyboardTheme.theme(for: selectedThemeID).name)
-                    .font(.subheadline.weight(.semibold))
-                    .foregroundColor(.secondary)
-            }
-
-            VStack(alignment: .leading, spacing: 8) {
-                Text("Theme")
-                    .font(.caption.weight(.semibold))
-                    .foregroundColor(.secondary)
-                    .textCase(.uppercase)
-
-                ScrollView(.horizontal, showsIndicators: false) {
-                    HStack(spacing: 10) {
-                        ForEach(KeyboardTheme.all) { theme in
-                            Button {
-                                selectedThemeID = theme.id
-                            } label: {
-                                ThemeSwatch(theme: theme, isSelected: selectedThemeID == theme.id)
-                            }
-                            .buttonStyle(.plain)
-                        }
-                    }
-                }
-            }
+            Text("Settings")
+                .font(.headline)
 
             VStack(alignment: .leading, spacing: 8) {
                 HStack {
-                    Text("Border radius")
+                    Text("Edge softness")
                         .font(.caption.weight(.semibold))
                         .foregroundColor(.secondary)
                         .textCase(.uppercase)
@@ -206,13 +170,21 @@ struct ContentView: View {
                             previewState.keyCornerRadius = CGFloat(newValue)
                         }
                     ),
-                    in: 0...18,
+                    in: 0...14,
                     step: 1
                 )
             }
 
             Toggle("Show gesture trail", isOn: $showGestureTrail)
                 .font(.subheadline)
+
+            Button {
+                isLayoutEditorPresented = true
+            } label: {
+                Label("Edit layout", systemImage: "square.grid.3x3")
+                    .frame(maxWidth: .infinity)
+            }
+            .buttonStyle(.borderedProminent)
         }
         .padding(14)
         .background(sectionBackground)
@@ -235,43 +207,276 @@ struct ContentView: View {
     }
 }
 
-private struct ThemeSwatch: View {
-    let theme: KeyboardTheme
-    let isSelected: Bool
+private enum LayoutEditorLayer: String, CaseIterable, Identifiable {
+    case letters
+    case symbols
+    case numbers
+
+    var id: String { rawValue }
+
+    var title: String {
+        switch self {
+        case .letters: return "Letters"
+        case .symbols: return "Symbols"
+        case .numbers: return "Numbers"
+        }
+    }
+}
+
+private struct LayoutCellReference {
+    let layer: LayoutEditorLayer
+    let row: Int
+    let col: Int
+    let position: KeyCellPosition
+
+    init(layer: LayoutEditorLayer, row: Int, col: Int, position: KeyCellPosition) {
+        self.layer = layer
+        self.row = row
+        self.col = col
+        self.position = position
+    }
+
+    init?(payload: String) {
+        let parts = payload.split(separator: "|").map(String.init)
+        guard parts.count == 4,
+              let layer = LayoutEditorLayer(rawValue: parts[0]),
+              let row = Int(parts[1]),
+              let col = Int(parts[2]),
+              let position = KeyCellPosition(rawValue: parts[3]) else {
+            return nil
+        }
+
+        self.layer = layer
+        self.row = row
+        self.col = col
+        self.position = position
+    }
+
+    var payload: String {
+        "\(layer.rawValue)|\(row)|\(col)|\(position.rawValue)"
+    }
+}
+
+private struct LayoutEditorView: View {
+    @Environment(\.dismiss) private var dismiss
+    @State private var selectedLayer: LayoutEditorLayer = .letters
+    @State private var layout = EditableKeyboardLayout.savedOrDefault
+    @State private var savedMarker = false
+
+    let onLayoutChanged: () -> Void
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            ZStack {
-                RoundedRectangle(cornerRadius: 9, style: .continuous)
-                    .fill(theme.keyBackground)
-                    .overlay(
-                        RoundedRectangle(cornerRadius: 9, style: .continuous)
-                            .strokeBorder(isSelected ? theme.tapColor : Color(.separator).opacity(0.45), lineWidth: isSelected ? 2 : 1)
-                    )
+        NavigationStack {
+            VStack(spacing: 16) {
+                Picker("Layer", selection: $selectedLayer) {
+                    ForEach(LayoutEditorLayer.allCases) { layer in
+                        Text(layer.title).tag(layer)
+                    }
+                }
+                .pickerStyle(.segmented)
 
-                Circle()
-                    .fill(theme.tapColor)
-                    .frame(width: 16, height: 16)
-                    .offset(x: -15, y: -8)
+                VStack(spacing: 8) {
+                    ForEach(0..<3, id: \.self) { row in
+                        HStack(spacing: 8) {
+                            ForEach(0..<3, id: \.self) { col in
+                                EditableKeyTile(
+                                    layer: selectedLayer,
+                                    row: row,
+                                    col: col,
+                                    key: key(atRow: row, col: col),
+                                    onDropCell: moveCell
+                                )
+                            }
+                        }
+                    }
+                }
+                .padding(.top, 10)
 
-                Circle()
-                    .fill(theme.swipeColor)
-                    .frame(width: 10, height: 10)
-                    .offset(x: 16, y: 9)
+                Spacer(minLength: 0)
             }
-            .frame(width: 64, height: 44)
+            .padding()
+            .background(Color(.systemGroupedBackground))
+            .navigationTitle("Layout")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Done") {
+                        dismiss()
+                    }
+                }
 
-            Text(theme.name)
-                .font(.caption2.weight(isSelected ? .semibold : .regular))
-                .foregroundColor(isSelected ? .primary : .secondary)
-                .lineLimit(1)
-                .minimumScaleFactor(0.75)
-                .frame(width: 72, alignment: .leading)
+                ToolbarItemGroup(placement: .confirmationAction) {
+                    Button("Restore") {
+                        layout = .default
+                        KeyboardLayoutData.restoreDefaultEditableLayout()
+                        savedMarker.toggle()
+                        onLayoutChanged()
+                    }
+
+                    Button("Save") {
+                        KeyboardLayoutData.saveEditableLayout(layout)
+                        savedMarker.toggle()
+                        onLayoutChanged()
+                    }
+                    .fontWeight(.semibold)
+                }
+            }
         }
-        .padding(8)
+    }
+
+    private func key(atRow row: Int, col: Int) -> EditableKeyConfig {
+        grid(for: selectedLayer)[row][col]
+    }
+
+    private func grid(for layer: LayoutEditorLayer) -> [[EditableKeyConfig]] {
+        switch layer {
+        case .letters:
+            return layout.letterGrid
+        case .symbols:
+            return layout.symbolOverlayGrid
+        case .numbers:
+            return layout.numberGrid
+        }
+    }
+
+    private func value(for reference: LayoutCellReference) -> String {
+        guard reference.row >= 0, reference.row < 3, reference.col >= 0, reference.col < 3 else {
+            return ""
+        }
+        return grid(for: reference.layer)[reference.row][reference.col].value(at: reference.position)
+    }
+
+    private func moveCell(payload: String, toRow row: Int, col: Int, position: KeyCellPosition) {
+        guard let source = LayoutCellReference(payload: payload) else { return }
+        let target = LayoutCellReference(layer: selectedLayer, row: row, col: col, position: position)
+        guard source.payload != target.payload else { return }
+
+        let sourceValue = value(for: source)
+        guard !sourceValue.isEmpty else { return }
+
+        let targetValue = value(for: target)
+        setValue(sourceValue, for: target)
+        setValue(targetValue, for: source)
+    }
+
+    private func setValue(_ value: String, for reference: LayoutCellReference) {
+        guard reference.row >= 0, reference.row < 3, reference.col >= 0, reference.col < 3 else { return }
+
+        switch reference.layer {
+        case .letters:
+            layout.letterGrid[reference.row][reference.col].setValue(value, at: reference.position)
+        case .symbols:
+            layout.symbolOverlayGrid[reference.row][reference.col].setValue(value, at: reference.position)
+        case .numbers:
+            layout.numberGrid[reference.row][reference.col].setValue(value, at: reference.position)
+        }
+    }
+}
+
+private struct EditableKeyTile: View {
+    let layer: LayoutEditorLayer
+    let row: Int
+    let col: Int
+    let key: EditableKeyConfig
+    let onDropCell: (String, Int, Int, KeyCellPosition) -> Void
+
+    var body: some View {
+        GeometryReader { geo in
+            let cellSide = geo.size.width / 3
+
+            ZStack {
+                ForEach(Array(KeyCellPosition.allCases), id: \.self) { position in
+                    let value = key.value(at: position)
+                    let reference = LayoutCellReference(layer: layer, row: row, col: col, position: position)
+
+                    Text(value)
+                        .font(.system(size: position == .center ? cellSide * 0.56 : cellSide * 0.34, weight: position == .center ? .bold : .semibold, design: .rounded))
+                        .foregroundStyle(position == .center ? KeyboardTheme.tapeze.tapColor : KeyboardTheme.tapeze.swipeColor)
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.45)
+                        .frame(width: cellSide, height: cellSide)
+                        .background(
+                            RoundedRectangle(cornerRadius: 6, style: .continuous)
+                                .fill(position == .center ? KeyboardTheme.tapeze.activeKeyBackground.opacity(0.38) : Color.white.opacity(0.055))
+                        )
+                        .position(cellCenter(for: position, cellSide: cellSide))
+                        .onDrag {
+                            NSItemProvider(object: reference.payload as NSString)
+                        } preview: {
+                            Text(value.isEmpty ? " " : value)
+                                .font(.title2.bold())
+                                .foregroundStyle(position == .center ? KeyboardTheme.tapeze.tapColor : KeyboardTheme.tapeze.swipeColor)
+                                .padding(12)
+                                .background(.thinMaterial, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+                        }
+                        .onDrop(
+                            of: [UTType.plainText],
+                            delegate: LayoutCellDropDelegate(
+                                row: row,
+                                col: col,
+                                position: position,
+                                onDropCell: onDropCell
+                            )
+                        )
+                }
+            }
+        }
+        .padding(5)
         .background(
-            RoundedRectangle(cornerRadius: 12, style: .continuous)
-                .fill(isSelected ? Color(.tertiarySystemGroupedBackground) : Color.clear)
+            OctagonalKeyShape(cornerRadius: 8)
+                .fill(
+                    LinearGradient(
+                        colors: [KeyboardTheme.tapeze.keyGradientTop ?? KeyboardTheme.tapeze.keyBackground, KeyboardTheme.tapeze.keyGradientBottom ?? KeyboardTheme.tapeze.keyBackground],
+                        startPoint: .topLeading,
+                        endPoint: .bottomTrailing
+                    )
+                )
+                .overlay(
+                    OctagonalKeyShape(cornerRadius: 8)
+                        .stroke(KeyboardTheme.tapeze.keyBorder, lineWidth: 1)
+                )
         )
+        .aspectRatio(1, contentMode: .fit)
+    }
+
+    private func cellCenter(for position: KeyCellPosition, cellSide: CGFloat) -> CGPoint {
+        let index = KeyCellPosition.allCases.firstIndex(of: position) ?? 0
+        let row = index / 3
+        let col = index % 3
+        return CGPoint(
+            x: CGFloat(col) * cellSide + cellSide / 2,
+            y: CGFloat(row) * cellSide + cellSide / 2
+        )
+    }
+}
+
+private struct LayoutCellDropDelegate: DropDelegate {
+    let row: Int
+    let col: Int
+    let position: KeyCellPosition
+    let onDropCell: (String, Int, Int, KeyCellPosition) -> Void
+
+    func performDrop(info: DropInfo) -> Bool {
+        guard let provider = info.itemProviders(for: [UTType.plainText]).first else { return false }
+
+        provider.loadItem(forTypeIdentifier: UTType.plainText.identifier, options: nil) { item, _ in
+            let payload: String?
+            if let data = item as? Data {
+                payload = String(data: data, encoding: .utf8)
+            } else if let string = item as? String {
+                payload = string
+            } else if let nsString = item as? NSString {
+                payload = nsString as String
+            } else {
+                payload = nil
+            }
+
+            guard let payload else { return }
+            DispatchQueue.main.async {
+                onDropCell(payload, row, col, position)
+            }
+        }
+
+        return true
     }
 }

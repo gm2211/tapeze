@@ -14,6 +14,8 @@ enum GestureResult {
     enum SpecialSwipe {
         case spaceSwipeUp          // toggle symbols
         case spaceSwipeUpAndBack   // toggle center labels
+        case keyboardSpace         // long horizontal stroke across three keys
+        case keyboardBackspace     // long vertical stroke across three keys
         case globeSwipeLeft        // toggle full width
         case globeSwipeRight       // toggle full width
         case globeSwipeUp          // increase size
@@ -29,6 +31,7 @@ class GestureEngine {
     private var keyRegions: [GridPosition: CGRect] = [:]
     private var spaceBarRegion: CGRect = .zero
     private var globeRegion: CGRect = .zero
+    private var resizeRegion: CGRect = .zero
 
     var hasActiveGesture: Bool { !points.isEmpty }
 
@@ -49,6 +52,14 @@ class GestureEngine {
 
     func updateGlobeRegion(_ region: CGRect) {
         self.globeRegion = region
+    }
+
+    func updateResizeRegion(_ region: CGRect) {
+        self.resizeRegion = region
+    }
+
+    func keyPosition(at point: CGPoint) -> GridPosition? {
+        keyAt(point)
     }
 
     // MARK: - Touch Tracking
@@ -80,11 +91,18 @@ class GestureEngine {
         }
 
         // Check special regions first
-        if spaceBarRegion.contains(start) {
+        if !spaceBarRegion.isEmpty && spaceBarRegion.contains(start) {
             return analyzeSpaceBarGesture()
         }
-        if globeRegion.contains(start) {
+        if !globeRegion.isEmpty && globeRegion.contains(start) {
             return analyzeGlobeGesture()
+        }
+        if !resizeRegion.isEmpty && resizeRegion.contains(start) {
+            return analyzeResizeGesture()
+        }
+
+        if let chordGesture = analyzeKeyboardChordGesture() {
+            return .specialSwipe(chordGesture)
         }
 
         guard let startKey = keyAt(start) else { return .none }
@@ -102,7 +120,7 @@ class GestureEngine {
 
         // Finger returned to the same key: resolve against the 3x3 subcells.
         if endKey == startKey {
-            if isCircularMotion() {
+            if let region = keyRegions[startKey], isCircularMotion(in: region) {
                 return .circle(startKey)
             }
             if let direction = subcellDirection {
@@ -161,7 +179,7 @@ class GestureEngine {
         let totalDist = distance(start, end)
 
         // Check for circle before tap: a good loop often ends near its start.
-        if isCircularMotion() || isClosedLoopGesture(in: globeRegion) {
+        if isCircularMotion(in: globeRegion) || isClosedLoopGesture(in: globeRegion) {
             return .specialSwipe(.globeCircle)
         }
 
@@ -189,6 +207,105 @@ class GestureEngine {
         }
 
         return .none
+    }
+
+    private func analyzeResizeGesture() -> GestureResult {
+        guard let start = points.first, let end = points.last else { return .none }
+
+        let dx = end.x - start.x
+        let dy = end.y - start.y
+        let totalDist = distance(start, end)
+
+        if isCircularMotion(in: resizeRegion) || isClosedLoopGesture(in: resizeRegion) {
+            return .specialSwipe(.globeCircle)
+        }
+
+        if let horizontalToggle = resizeBackAndForthSwipe(from: start, to: end) {
+            return .specialSwipe(horizontalToggle)
+        }
+
+        if totalDist < tapDistanceThreshold {
+            return .tap(GridPosition(row: 3, col: 3))
+        }
+
+        if abs(dx) > abs(dy) {
+            if dx > minSwipeDistance {
+                return .specialSwipe(.globeSwipeRight)
+            } else if dx < -minSwipeDistance {
+                return .specialSwipe(.globeSwipeLeft)
+            }
+        } else {
+            if dy < -minSwipeDistance {
+                return .specialSwipe(.globeSwipeUp)
+            } else if dy > minSwipeDistance {
+                return .specialSwipe(.globeSwipeDown)
+            }
+        }
+
+        return .tap(GridPosition(row: 3, col: 3))
+    }
+
+    private func analyzeKeyboardChordGesture() -> GestureResult.SpecialSwipe? {
+        guard points.count >= 2,
+              let start = points.first,
+              let end = points.last else { return nil }
+
+        let bounds = pathBounds()
+        let dx = end.x - start.x
+        let dy = end.y - start.y
+        let crossed = crossedMainGridKeys()
+        let horizontalThreshold = averageMainKeyWidth() * 2.15
+        let verticalThreshold = averageMainKeyHeight() * 2.15
+
+        if abs(dx) >= horizontalThreshold,
+           bounds.width >= horizontalThreshold,
+           bounds.width > bounds.height * 1.35 {
+            for row in 0..<3 {
+                let cols = Set(crossed.filter { $0.row == row }.map(\.col))
+                if cols == Set(0..<3) {
+                    return .keyboardSpace
+                }
+            }
+        }
+
+        if abs(dy) >= verticalThreshold,
+           bounds.height >= verticalThreshold,
+           bounds.height > bounds.width * 1.35 {
+            for col in 0..<3 {
+                let rows = Set(crossed.filter { $0.col == col }.map(\.row))
+                if rows == Set(0..<3) {
+                    return .keyboardBackspace
+                }
+            }
+        }
+
+        return nil
+    }
+
+    private func resizeBackAndForthSwipe(from start: CGPoint, to end: CGPoint) -> GestureResult.SpecialSwipe? {
+        guard points.count >= 4 else { return nil }
+
+        var maxLeft: CGFloat = 0
+        var maxRight: CGFloat = 0
+        var maxVertical: CGFloat = 0
+
+        for point in points {
+            let dx = point.x - start.x
+            maxLeft = max(maxLeft, -dx)
+            maxRight = max(maxRight, dx)
+            maxVertical = max(maxVertical, abs(point.y - start.y))
+        }
+
+        let horizontalExcursion = max(maxLeft, maxRight)
+        let returnedNearStart = distance(start, end) <= max(tapDistanceThreshold * 2, min(resizeRegion.width, resizeRegion.height) * 0.35)
+
+        guard returnedNearStart,
+              horizontalExcursion > minSwipeDistance,
+              horizontalExcursion > maxVertical * 1.35 else {
+            return nil
+        }
+
+        return maxRight >= maxLeft ? .globeSwipeRight : .globeSwipeLeft
     }
 
     private func globeBackAndForthSwipe(from start: CGPoint, to end: CGPoint) -> GestureResult.SpecialSwipe? {
@@ -220,12 +337,121 @@ class GestureEngine {
     // MARK: - Helper: Find key at point
 
     private func keyAt(_ point: CGPoint) -> GridPosition? {
-        for (pos, rect) in keyRegions {
-            if rect.contains(point) {
-                return pos
+        let candidates = keyRegions.filter { pos, rect in
+            guard rect.contains(point) else { return false }
+            guard isCommandDiamond(pos) else { return true }
+            return diamondContains(point, in: rect)
+        }
+
+        return candidates.sorted { lhs, rhs in
+            let leftPriority = hitPriority(for: lhs.key)
+            let rightPriority = hitPriority(for: rhs.key)
+            if leftPriority != rightPriority {
+                return leftPriority < rightPriority
+            }
+            return area(lhs.value) < area(rhs.value)
+        }.first?.key
+    }
+
+    private func hitPriority(for pos: GridPosition) -> Int {
+        guard isCommandPosition(pos) else { return 2 }
+        return pos.row == 2 ? 1 : 0
+    }
+
+    private func isCommandPosition(_ pos: GridPosition) -> Bool {
+        pos.col == 3 || pos.col == -1
+    }
+
+    private func isMainGridPosition(_ pos: GridPosition) -> Bool {
+        (0..<3).contains(pos.row) && (0..<3).contains(pos.col)
+    }
+
+    private func isCommandDiamond(_ pos: GridPosition) -> Bool {
+        isCommandPosition(pos) && pos.row != 2
+    }
+
+    private func diamondContains(_ point: CGPoint, in rect: CGRect) -> Bool {
+        guard rect.width > 0, rect.height > 0 else { return false }
+        let normalizedX = abs(point.x - rect.midX) / (rect.width / 2)
+        let normalizedY = abs(point.y - rect.midY) / (rect.height / 2)
+        return normalizedX + normalizedY <= 1.08
+    }
+
+    private func area(_ rect: CGRect) -> CGFloat {
+        rect.width * rect.height
+    }
+
+    private func crossedMainGridKeys() -> Set<GridPosition> {
+        let mainRegions = keyRegions.filter { isMainGridPosition($0.key) }
+        guard !mainRegions.isEmpty else { return [] }
+
+        var crossed = Set<GridPosition>()
+        let expandedRegions = mainRegions.mapValues { $0.insetBy(dx: -8, dy: -8) }
+
+        for point in points {
+            for (pos, rect) in expandedRegions where rect.contains(point) {
+                crossed.insert(pos)
             }
         }
-        return nil
+
+        guard points.count >= 2 else { return crossed }
+
+        for index in 1..<points.count {
+            let start = points[index - 1]
+            let end = points[index]
+            for (pos, rect) in expandedRegions where segmentIntersectsRect(from: start, to: end, rect: rect) {
+                crossed.insert(pos)
+            }
+        }
+
+        return crossed
+    }
+
+    private func averageMainKeyWidth() -> CGFloat {
+        let widths = keyRegions.filter { isMainGridPosition($0.key) }.map(\.value.width)
+        guard !widths.isEmpty else { return minSwipeDistance * 3 }
+        return widths.reduce(0, +) / CGFloat(widths.count)
+    }
+
+    private func averageMainKeyHeight() -> CGFloat {
+        let heights = keyRegions.filter { isMainGridPosition($0.key) }.map(\.value.height)
+        guard !heights.isEmpty else { return minSwipeDistance * 3 }
+        return heights.reduce(0, +) / CGFloat(heights.count)
+    }
+
+    private func segmentIntersectsRect(from start: CGPoint, to end: CGPoint, rect: CGRect) -> Bool {
+        if rect.contains(start) || rect.contains(end) {
+            return true
+        }
+
+        let corners = [
+            CGPoint(x: rect.minX, y: rect.minY),
+            CGPoint(x: rect.maxX, y: rect.minY),
+            CGPoint(x: rect.maxX, y: rect.maxY),
+            CGPoint(x: rect.minX, y: rect.maxY)
+        ]
+
+        for index in corners.indices {
+            let next = corners[(index + 1) % corners.count]
+            if segmentsIntersect(start, end, corners[index], next) {
+                return true
+            }
+        }
+
+        return false
+    }
+
+    private func segmentsIntersect(_ p1: CGPoint, _ p2: CGPoint, _ q1: CGPoint, _ q2: CGPoint) -> Bool {
+        let d1 = orientation(p1, p2, q1)
+        let d2 = orientation(p1, p2, q2)
+        let d3 = orientation(q1, q2, p1)
+        let d4 = orientation(q1, q2, p2)
+
+        return d1 * d2 <= 0 && d3 * d4 <= 0
+    }
+
+    private func orientation(_ a: CGPoint, _ b: CGPoint, _ c: CGPoint) -> CGFloat {
+        (b.x - a.x) * (c.y - a.y) - (b.y - a.y) * (c.x - a.x)
     }
 
     // MARK: - Helper: Peak swipe direction
@@ -331,8 +557,26 @@ class GestureEngine {
 
     // MARK: - Helper: Circle detection
 
-    private func isCircularMotion() -> Bool {
-        guard points.count >= 10 else { return false }
+    private func isCircularMotion(in region: CGRect) -> Bool {
+        guard points.count >= 12,
+              region.width > 0,
+              region.height > 0,
+              let start = points.first,
+              let end = points.last else { return false }
+
+        let bounds = pathBounds()
+        let pathWidth = bounds.width
+        let pathHeight = bounds.height
+        let minRegionSide = min(region.width, region.height)
+        let minLoopSize = max(minRegionSide * 0.30, minSwipeDistance * 1.2)
+        let returnedNearStart = distance(start, end) <= max(tapDistanceThreshold * 1.6, minRegionSide * 0.22)
+
+        guard returnedNearStart,
+              pathWidth >= minLoopSize,
+              pathHeight >= minLoopSize,
+              pathLength() >= minRegionSide * 1.75 else {
+            return false
+        }
 
         // Compute total turning angle using cross products
         var totalAngle: Double = 0
@@ -365,7 +609,7 @@ class GestureEngine {
         }
 
         // A full circle has total turning angle of ~2π (or ~-2π)
-        return abs(totalAngle) > 1.5 * .pi
+        return abs(totalAngle) > 1.75 * .pi
     }
 
     private func isClosedLoopGesture(in region: CGRect) -> Bool {
@@ -407,6 +651,34 @@ class GestureEngine {
         let dx = b.x - a.x
         let dy = b.y - a.y
         return sqrt(dx * dx + dy * dy)
+    }
+
+    private func pathBounds() -> CGRect {
+        guard let first = points.first else { return .zero }
+
+        var minX = first.x
+        var maxX = first.x
+        var minY = first.y
+        var maxY = first.y
+
+        for point in points.dropFirst() {
+            minX = min(minX, point.x)
+            maxX = max(maxX, point.x)
+            minY = min(minY, point.y)
+            maxY = max(maxY, point.y)
+        }
+
+        return CGRect(x: minX, y: minY, width: maxX - minX, height: maxY - minY)
+    }
+
+    private func pathLength() -> CGFloat {
+        guard points.count >= 2 else { return 0 }
+
+        var total: CGFloat = 0
+        for index in 1..<points.count {
+            total += distance(points[index - 1], points[index])
+        }
+        return total
     }
 
     private func maxDistance(from start: CGPoint) -> CGFloat {

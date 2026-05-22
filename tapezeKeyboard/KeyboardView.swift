@@ -19,7 +19,7 @@ struct KeyboardView: View {
 
     private let gridRows = 3
     private let gridCols = 3
-    private let spacing: CGFloat = 2
+    private let spacing: CGFloat = 1
     private let maxTrailDisplayPoints = 42
     private let minTrailPointDistance: CGFloat = 7
 
@@ -27,102 +27,58 @@ struct KeyboardView: View {
         GeometryReader { outerGeo in
             let totalWidth = max(outerGeo.size.width, 1)
             let totalHeight = max(outerGeo.size.height, 1)
-            let mainRowHeight = (totalHeight - spacing * 3) / 4
-            let squareCommandColWidth = mainRowHeight
-            let squareMainGridWidth = mainRowHeight * CGFloat(gridCols) + spacing * CGFloat(gridCols - 1)
-            let squareLayoutWidth = squareMainGridWidth + squareCommandColWidth + spacing
-            let shouldDisableCompact = !state.isFullWidth && squareLayoutWidth > totalWidth
-            let usesFullWidth = state.isFullWidth || shouldDisableCompact
-            let maxEmptyColumnWidth = mainRowHeight
-            let squareLayoutWithEmptyColumnWidth = squareLayoutWidth + spacing + maxEmptyColumnWidth
-            let fullWidthKeySide = max((totalWidth - spacing * CGFloat(gridCols)) / CGFloat(gridCols + 1), 1)
-            let keySide: CGFloat = {
-                if usesFullWidth {
-                    return fullWidthKeySide
-                }
-                if !usesFullWidth && totalWidth > squareLayoutWithEmptyColumnWidth {
-                    return max((totalWidth - maxEmptyColumnWidth - spacing * 4) / CGFloat(gridCols + 1), 1)
-                }
-                return squareLayoutWidth <= totalWidth
-                    ? mainRowHeight
-                    : fullWidthKeySide
-            }()
-            let emptyColumnWidth: CGFloat = {
-                guard !usesFullWidth else { return 0 }
-                if totalWidth > squareLayoutWithEmptyColumnWidth {
-                    return maxEmptyColumnWidth
-                }
-                return min(maxEmptyColumnWidth, max(totalWidth - squareLayoutWidth - spacing, 0))
-            }()
-            let commandColWidth = keySide
+            let keySide = max(
+                min(
+                    (totalWidth - spacing * CGFloat(gridCols - 1)) / CGFloat(gridCols),
+                    (totalHeight - spacing * CGFloat(gridRows - 1)) / CGFloat(gridRows)
+                ),
+                1
+            )
+            let shouldDisableCompact = false
+            let commandColWidth: CGFloat = 0
             let mainGridWidth = keySide * CGFloat(gridCols) + spacing * CGFloat(gridCols - 1)
-            let mainGridHeight = mainRowHeight * 3 + spacing * 2
-            let bottomRowHeight = mainRowHeight
-            let layoutWidth = usesFullWidth
-                ? totalWidth
-                : mainGridWidth + commandColWidth + spacing + (emptyColumnWidth > 0 ? emptyColumnWidth + spacing : 0)
+            let mainGridHeight = keySide * CGFloat(gridRows) + spacing * CGFloat(gridRows - 1)
+            let bottomRowHeight: CGFloat = 0
+            let layoutWidth = mainGridWidth
+            let layoutOriginX = (totalWidth - layoutWidth) / 2
+            let hitLayout = LatticeHitLayout(
+                originX: layoutOriginX,
+                layoutWidth: layoutWidth,
+                mainGridWidth: mainGridWidth,
+                mainGridHeight: mainGridHeight,
+                commandColWidth: commandColWidth,
+                keySide: keySide,
+                rowHeight: keySide,
+                bottomRowHeight: bottomRowHeight,
+                commandBarOnRight: state.commandBarOnRight
+            )
 
-            VStack(spacing: spacing) {
-                HStack(spacing: spacing) {
-                    // Command bar on left (if configured)
-                    if !state.commandBarOnRight {
-                        commandBar(width: commandColWidth, totalHeight: mainGridHeight)
-                    }
-
-                    // Spacer sits opposite the command bar in compact mode.
-                    if !usesFullWidth && state.commandBarOnRight && emptyColumnWidth > 0 {
-                        compactEmptyColumn(width: emptyColumnWidth)
-                    }
-
-                    // Main 3x3 grid
-                    mainGrid(width: mainGridWidth, height: mainGridHeight, rowHeight: mainRowHeight)
-
-                    if !usesFullWidth && !state.commandBarOnRight && emptyColumnWidth > 0 {
-                        compactEmptyColumn(width: emptyColumnWidth)
-                    }
-
-                    // Command bar on right (if configured)
-                    if state.commandBarOnRight {
-                        commandBar(width: commandColWidth, totalHeight: mainGridHeight)
-                    }
-                }
-                .frame(width: layoutWidth, alignment: state.commandBarOnRight ? .trailing : .leading)
-                .frame(maxWidth: .infinity, alignment: state.commandBarOnRight ? .trailing : .leading)
-
-                // Bottom row: spacebar plus return key.
-                HStack(spacing: spacing) {
-                    if !state.commandBarOnRight {
-                        enterKey(width: commandColWidth, height: bottomRowHeight)
-                    }
-
-                    if !usesFullWidth && state.commandBarOnRight && emptyColumnWidth > 0 {
-                        compactEmptyColumn(width: emptyColumnWidth)
-                    }
-
-                    bottomRow(width: mainGridWidth, height: bottomRowHeight)
-
-                    if !usesFullWidth && !state.commandBarOnRight && emptyColumnWidth > 0 {
-                        compactEmptyColumn(width: emptyColumnWidth)
-                    }
-
-                    if state.commandBarOnRight {
-                        enterKey(width: commandColWidth, height: bottomRowHeight)
-                    }
-                }
-                .frame(width: layoutWidth, alignment: state.commandBarOnRight ? .trailing : .leading)
-                .frame(maxWidth: .infinity, alignment: state.commandBarOnRight ? .trailing : .leading)
-            }
+            latticeKeyboard(
+                layoutWidth: layoutWidth,
+                mainGridWidth: mainGridWidth,
+                mainGridHeight: mainGridHeight,
+                commandColWidth: commandColWidth,
+                keySide: keySide,
+                rowHeight: keySide,
+                bottomRowHeight: bottomRowHeight
+            )
+            .frame(width: layoutWidth, height: totalHeight, alignment: .top)
+            .frame(maxWidth: .infinity, alignment: .center)
             .frame(maxWidth: .infinity, maxHeight: totalHeight)
             .background(state.theme.keyboardBackground)
             .onAppear {
                 if shouldDisableCompact {
                     state.isFullWidth = true
                 }
+                registerHitLayout(hitLayout)
             }
             .onChange(of: shouldDisableCompact) { disableCompact in
                 if disableCompact {
                     state.isFullWidth = true
                 }
+            }
+            .onChange(of: hitLayout) { newLayout in
+                registerHitLayout(newLayout)
             }
             .gesture(
                 DragGesture(minimumDistance: 0, coordinateSpace: .named("keyboard"))
@@ -174,10 +130,178 @@ struct KeyboardView: View {
 
     // MARK: - Main 3x3 Grid
 
+    @ViewBuilder
+    private func latticeKeyboard(
+        layoutWidth: CGFloat,
+        mainGridWidth: CGFloat,
+        mainGridHeight: CGFloat,
+        commandColWidth: CGFloat,
+        keySide: CGFloat,
+        rowHeight: CGFloat,
+        bottomRowHeight: CGFloat
+    ) -> some View {
+        let mainX = state.commandBarOnRight ? 0 : commandColWidth
+        let diamondSide = keySide * 0.54
+        let commandBarCol = state.commandBarOnRight ? 3 : -1
+
+        ZStack(alignment: .topLeading) {
+            mainGrid(width: mainGridWidth, height: mainGridHeight, rowHeight: rowHeight)
+                .frame(width: mainGridWidth, height: mainGridHeight)
+                .position(x: mainX + mainGridWidth / 2, y: mainGridHeight / 2)
+
+            internalCommandDiamond(
+                config: KeyConfig(tap: "", specialAction: .globe, displayLabel: "globe"),
+                position: GridPosition(row: 0, col: commandBarCol),
+                size: diamondSide,
+                center: CGPoint(x: mainX + keySide + spacing / 2, y: rowHeight + spacing / 2),
+                updatesGlobe: true
+            )
+
+            internalCommandDiamond(
+                config: KeyConfig(tap: state.currentLayer == .letters ? "123" : "abc", specialAction: .toggleLayer, displayLabel: state.currentLayer == .letters ? "123" : "abc"),
+                position: GridPosition(row: 1, col: commandBarCol),
+                size: diamondSide,
+                center: CGPoint(x: mainX + keySide * 2 + spacing * 1.5, y: rowHeight + spacing / 2),
+                updatesGlobe: false
+            )
+
+            internalCommandDiamond(
+                config: KeyConfig(tap: "", specialAction: .enter, displayLabel: "return"),
+                position: GridPosition(row: 3, col: commandBarCol),
+                size: diamondSide,
+                center: CGPoint(x: mainX + keySide * 2 + spacing * 1.5, y: rowHeight * 2 + spacing * 1.5),
+                updatesGlobe: false,
+                updatesResize: true
+            )
+
+            internalCommandDiamond(
+                config: KeyConfig(tap: "", specialAction: .shift, displayLabel: "shift"),
+                position: GridPosition(row: 4, col: commandBarCol),
+                size: diamondSide,
+                center: CGPoint(x: mainX + keySide + spacing / 2, y: rowHeight * 2 + spacing * 1.5),
+                updatesGlobe: false
+            )
+        }
+        .frame(width: layoutWidth, height: mainGridHeight, alignment: .topLeading)
+    }
+
+    private func registerHitLayout(_ layout: LatticeHitLayout) {
+        let commandCol = layout.commandBarOnRight ? 3 : -1
+        let mainX = layout.originX
+        let diamondSide = layout.keySide * 0.54
+        let diamondHalf = diamondSide / 2
+
+        var regions: [GridPosition: CGRect] = [:]
+
+        for row in 0..<gridRows {
+            for col in 0..<gridCols {
+                regions[GridPosition(row: row, col: col)] = CGRect(
+                    x: mainX + CGFloat(col) * (layout.keySide + spacing),
+                    y: CGFloat(row) * (layout.rowHeight + spacing),
+                    width: layout.keySide,
+                    height: layout.rowHeight
+                )
+            }
+        }
+
+        let globeCenter = CGPoint(
+            x: mainX + layout.keySide + spacing / 2,
+            y: layout.rowHeight + spacing / 2
+        )
+        let layerCenter = CGPoint(
+            x: mainX + layout.keySide * 2 + spacing * 1.5,
+            y: layout.rowHeight + spacing / 2
+        )
+        let shiftCenter = CGPoint(
+            x: mainX + layout.keySide + spacing / 2,
+            y: layout.rowHeight * 2 + spacing * 1.5
+        )
+        let enterCenter = CGPoint(
+            x: mainX + layout.keySide * 2 + spacing * 1.5,
+            y: layout.rowHeight * 2 + spacing * 1.5
+        )
+
+        regions[GridPosition(row: 0, col: commandCol)] = CGRect(
+            x: globeCenter.x - diamondHalf,
+            y: globeCenter.y - diamondHalf,
+            width: diamondSide,
+            height: diamondSide
+        )
+        regions[GridPosition(row: 1, col: commandCol)] = CGRect(
+            x: layerCenter.x - diamondHalf,
+            y: layerCenter.y - diamondHalf,
+            width: diamondSide,
+            height: diamondSide
+        )
+        regions[GridPosition(row: 4, col: commandCol)] = CGRect(
+            x: shiftCenter.x - diamondHalf,
+            y: shiftCenter.y - diamondHalf,
+            width: diamondSide,
+            height: diamondSide
+        )
+        regions[GridPosition(row: 3, col: commandCol)] = CGRect(
+            x: enterCenter.x - diamondHalf,
+            y: enterCenter.y - diamondHalf,
+            width: diamondSide,
+            height: diamondSide
+        )
+        keyRegions = regions
+        spaceBarRegion = .zero
+        globeRegion = regions[GridPosition(row: 0, col: commandCol)] ?? .zero
+        gestureEngine.updateKeyRegions(regions)
+        gestureEngine.updateSpaceBarRegion(.zero)
+        gestureEngine.updateGlobeRegion(globeRegion)
+        gestureEngine.updateResizeRegion(regions[GridPosition(row: 3, col: commandCol)] ?? .zero)
+    }
+
     private func compactEmptyColumn(width: CGFloat) -> some View {
         state.theme.emptyColumnBackground
             .frame(width: width)
             .frame(maxHeight: .infinity)
+    }
+
+    @ViewBuilder
+    private func internalCommandDiamond(
+        config: KeyConfig,
+        position: GridPosition,
+        size: CGFloat,
+        center: CGPoint,
+        updatesGlobe: Bool,
+        updatesResize: Bool = false
+    ) -> some View {
+        DiamondCommandKeyView(
+            config: config,
+            isActive: state.activeKeyPosition == position,
+            isShifted: config.specialAction == .shift ? state.isShifted : false,
+            isCapsLocked: config.specialAction == .shift ? state.isCapsLocked : false,
+            theme: state.theme,
+            cornerRadius: state.keyCornerRadius
+        )
+        .frame(width: size, height: size)
+        .position(center)
+    }
+
+    private func commandHitRegion(row: Int, col: Int) -> some View {
+        GeometryReader { geo in
+            let frame = geo.frame(in: .named("keyboard"))
+            Color.clear.onAppear {
+                keyRegions[GridPosition(row: row, col: col)] = frame
+                gestureEngine.updateKeyRegions(keyRegions)
+            }
+            .onChange(of: frame) { newFrame in
+                keyRegions[GridPosition(row: row, col: col)] = newFrame
+                gestureEngine.updateKeyRegions(keyRegions)
+            }
+        }
+    }
+
+    private func cutCornersForKey(row: Int, col: Int) -> Set<KeyCorner> {
+        var corners: Set<KeyCorner> = []
+        if row > 0 && col > 0 { corners.insert(.topLeft) }
+        if row > 0 && col < gridCols - 1 { corners.insert(.topRight) }
+        if row < gridRows - 1 && col < gridCols - 1 { corners.insert(.bottomRight) }
+        if row < gridRows - 1 && col > 0 { corners.insert(.bottomLeft) }
+        return corners
     }
 
     @ViewBuilder
@@ -194,11 +318,12 @@ struct KeyboardView: View {
                     ForEach(0..<gridCols, id: \.self) { col in
                         let pos = GridPosition(row: row, col: col)
                         let config = grid[row][col]
-                        let letterSwipeLabels = isSymbolOverlay ? KeyboardLayoutData.letterGrid[row][col].swipes : nil
+                        let visualConfig = isSymbolOverlay ? KeyboardLayoutData.activeSymbolOverlayGrid()[row][col] : config
+                        let letterSwipeLabels = isSymbolOverlay ? KeyboardLayoutData.activeLetterGrid()[row][col].swipes : nil
                         let isActive = state.activeKeyPosition == pos
 
                         CharacterKeyView(
-                            config: config,
+                            config: visualConfig,
                             letterSwipeLabels: letterSwipeLabels,
                             isActive: isActive,
                             showCenter: showCenter,
@@ -206,25 +331,12 @@ struct KeyboardView: View {
                             showSymbolOverlay: isSymbolOverlay,
                             isShifted: state.isShifted || state.isCapsLocked,
                             theme: state.theme,
-                            cornerRadius: state.keyCornerRadius
+                            cornerRadius: state.keyCornerRadius,
+                            cutCorners: cutCornersForKey(row: row, col: col)
                         )
                         .frame(width: colWidth, height: rowHeight)
                         .overlay(
-                            // Persistent overlays
                             overlaysForKey(at: pos, size: CGSize(width: colWidth, height: rowHeight))
-                        )
-                        .background(
-                            GeometryReader { geo in
-                                let frame = geo.frame(in: .named("keyboard"))
-                                Color.clear.onAppear {
-                                    keyRegions[pos] = frame
-                                    gestureEngine.updateKeyRegions(keyRegions)
-                                }
-                                .onChange(of: frame) { newFrame in
-                                    keyRegions[pos] = newFrame
-                                    gestureEngine.updateKeyRegions(keyRegions)
-                                }
-                            }
                         )
                     }
                 }
@@ -239,19 +351,54 @@ struct KeyboardView: View {
     private func commandBar(width: CGFloat, totalHeight: CGFloat) -> some View {
         let commands = state.currentCommandBar
         let rowHeight = (totalHeight - spacing * CGFloat(commands.count - 1)) / CGFloat(commands.count)
+        let side: CommandVisualSide = state.commandBarOnRight ? .right : .left
 
-        VStack(spacing: spacing) {
+        ZStack {
+            if let backspaceIndex = commands.firstIndex(where: { $0.specialAction == .backspace }) {
+                let backspacePos = GridPosition(row: backspaceIndex, col: state.commandBarOnRight ? 3 : -1)
+
+                DeleteColumnKeyView(
+                    isActive: state.activeKeyPosition == backspacePos,
+                    side: side,
+                    theme: state.theme,
+                    cornerRadius: state.keyCornerRadius
+                )
+                .frame(width: width * 0.96, height: totalHeight)
+
+                Image(systemName: "delete.backward.fill")
+                    .font(.system(size: rowHeight * 0.26))
+                    .foregroundColor(state.theme.specialTextColor)
+                    .commandLabelDepth(for: state.theme)
+                    .position(
+                        x: state.commandBarOnRight ? width * 0.62 : width * 0.38,
+                        y: rowCenter(for: backspaceIndex, rowHeight: rowHeight)
+                    )
+            }
+
+            ForEach(0..<commands.count, id: \.self) { idx in
+                let config = commands[idx]
+                if config.specialAction != .backspace {
+                    DiamondCommandKeyView(
+                        config: config,
+                        isActive: state.activeKeyPosition == GridPosition(row: idx, col: state.commandBarOnRight ? 3 : -1),
+                        theme: state.theme,
+                        cornerRadius: state.keyCornerRadius
+                    )
+                    .frame(width: rowHeight * 0.72, height: rowHeight * 0.72)
+                    .position(
+                        x: state.commandBarOnRight ? width * 0.08 : width * 0.92,
+                        y: rowCenter(for: idx, rowHeight: rowHeight)
+                    )
+                }
+            }
+
             ForEach(0..<commands.count, id: \.self) { idx in
                 let config = commands[idx]
                 let commandPos = GridPosition(row: idx, col: state.commandBarOnRight ? 3 : -1)
 
-                CommandKeyView(
-                    config: config,
-                    isActive: state.activeKeyPosition == commandPos,
-                    theme: state.theme,
-                    cornerRadius: state.keyCornerRadius
-                )
-                .frame(width: width, height: rowHeight)
+                Color.clear
+                    .frame(width: width, height: rowHeight)
+                    .position(x: width / 2, y: rowCenter(for: idx, rowHeight: rowHeight))
                 .background(
                     GeometryReader { geo in
                         let frame = geo.frame(in: .named("keyboard"))
@@ -275,6 +422,11 @@ struct KeyboardView: View {
                 )
             }
         }
+        .frame(width: width, height: totalHeight)
+    }
+
+    private func rowCenter(for index: Int, rowHeight: CGFloat) -> CGFloat {
+        CGFloat(index) * (rowHeight + spacing) + rowHeight / 2
     }
 
     // MARK: - Bottom Row
@@ -342,26 +494,34 @@ struct KeyboardView: View {
     private func enterKey(width: CGFloat, height: CGFloat) -> some View {
         let pos = GridPosition(row: 3, col: state.commandBarOnRight ? 3 : -1)
 
-        CommandKeyView(
-            config: KeyConfig(tap: "", specialAction: .enter, displayLabel: "return"),
-            isActive: state.activeKeyPosition == pos,
-            theme: state.theme,
-            cornerRadius: state.keyCornerRadius
-        )
+        ZStack {
+            DiamondCommandKeyView(
+                config: KeyConfig(tap: "", specialAction: .enter, displayLabel: "return"),
+                isActive: state.activeKeyPosition == pos,
+                theme: state.theme,
+                cornerRadius: state.keyCornerRadius
+            )
+            .frame(width: height * 0.72, height: height * 0.72)
+            .position(x: state.commandBarOnRight ? width * 0.08 : width * 0.92, y: height / 2)
+
+            Color.clear
+                .background(
+                    GeometryReader { geo in
+                        let frame = geo.frame(in: .named("keyboard"))
+                        Color.clear.onAppear {
+                            keyRegions[pos] = frame
+                            gestureEngine.updateKeyRegions(keyRegions)
+                            gestureEngine.updateResizeRegion(frame)
+                        }
+                        .onChange(of: frame) { newFrame in
+                            keyRegions[pos] = newFrame
+                            gestureEngine.updateKeyRegions(keyRegions)
+                            gestureEngine.updateResizeRegion(newFrame)
+                        }
+                    }
+                )
+        }
         .frame(width: width, height: height)
-        .background(
-            GeometryReader { geo in
-                let frame = geo.frame(in: .named("keyboard"))
-                Color.clear.onAppear {
-                    keyRegions[pos] = frame
-                    gestureEngine.updateKeyRegions(keyRegions)
-                }
-                .onChange(of: frame) { newFrame in
-                    keyRegions[pos] = newFrame
-                    gestureEngine.updateKeyRegions(keyRegions)
-                }
-            }
-        )
     }
 
     // MARK: - Overlays
@@ -384,7 +544,7 @@ struct KeyboardView: View {
                 Image(systemName: "arrow.right.to.line")
                     .font(.system(size: 10))
                     .foregroundColor(state.theme.tapColor)
-                    .position(x: size.width * 0.85, y: size.height * 0.88)
+                    .position(x: size.width * 0.80, y: size.height * 0.82)
             }
 
             // Clipboard indicator on key (0,0)
@@ -397,7 +557,7 @@ struct KeyboardView: View {
                         RoundedRectangle(cornerRadius: 2)
                             .fill(state.theme.tapColor.opacity(0.3))
                     )
-                    .position(x: size.width * 0.1, y: size.height * 0.12)
+                    .position(x: size.width * 0.14, y: size.height * 0.15)
             }
 
             // URL shortcut on h key.
@@ -416,11 +576,9 @@ struct KeyboardView: View {
     // MARK: - Active Key Tracking
 
     private func updateActiveKey(at point: CGPoint) {
-        for (pos, rect) in keyRegions {
-            if rect.contains(point) {
-                state.activeKeyPosition = pos
-                return
-            }
+        if let pos = gestureEngine.keyPosition(at: point) {
+            state.activeKeyPosition = pos
+            return
         }
         if spaceBarRegion.contains(point) {
             state.activeKeyPosition = GridPosition(row: 3, col: 0)
@@ -491,10 +649,6 @@ struct KeyboardView: View {
 
         // Command bar keys
         if pos.col == 3 || pos.col == -1 {
-            if pos.row == 3 {
-                onEnter()
-                return
-            }
             handleCommandTap(row: pos.row)
             return
         }
@@ -559,13 +713,14 @@ struct KeyboardView: View {
     }
 
     private func hiddenSymbolSwipe(from pos: GridPosition, direction: SwipeDirection) -> String? {
-        guard state.currentLayer == .letters, !state.isSymbolOverlayActive else { return nil }
-        guard pos.row >= 0 && pos.row < KeyboardLayoutData.symbolOverlayGrid.count,
-              pos.col >= 0 && pos.col < KeyboardLayoutData.symbolOverlayGrid[pos.row].count else {
+        guard state.currentLayer == .letters else { return nil }
+        let symbolOverlayGrid = KeyboardLayoutData.activeSymbolOverlayGrid()
+        guard pos.row >= 0 && pos.row < symbolOverlayGrid.count,
+              pos.col >= 0 && pos.col < symbolOverlayGrid[pos.row].count else {
             return nil
         }
 
-        return KeyboardLayoutData.symbolOverlayGrid[pos.row][pos.col].swipes[direction]
+        return symbolOverlayGrid[pos.row][pos.col].swipes[direction]
     }
 
     private func handleCommandSwipe(from pos: GridPosition, isBackAndForth: Bool) -> Bool {
@@ -596,11 +751,19 @@ struct KeyboardView: View {
     }
 
     private func handleCommandTap(row: Int) {
-        let commands = state.currentCommandBar
-        guard row >= 0 && row < commands.count else { return }
-
-        if let action = commands[row].specialAction {
-            handleSpecialAction(action)
+        switch row {
+        case 0:
+            handleSpecialAction(.globe)
+        case 1:
+            handleSpecialAction(.toggleLayer)
+        case 2:
+            handleSpecialAction(.backspace)
+        case 3:
+            handleSpecialAction(.enter)
+        case 4:
+            handleSpecialAction(.shift)
+        default:
+            break
         }
     }
 
@@ -634,6 +797,10 @@ struct KeyboardView: View {
             state.toggleSymbolsOnly()
         case .spaceSwipeUpAndBack:
             state.toggleCenterLabels()
+        case .keyboardSpace:
+            onCharacter(" ")
+        case .keyboardBackspace:
+            onBackspace()
         case .globeSwipeLeft, .globeSwipeRight:
             state.toggleFullWidth()
         case .globeSwipeUp:
@@ -664,4 +831,16 @@ private struct GestureTrailView: View {
         )
         .shadow(color: .black.opacity(0.2), radius: 2)
     }
+}
+
+private struct LatticeHitLayout: Equatable {
+    let originX: CGFloat
+    let layoutWidth: CGFloat
+    let mainGridWidth: CGFloat
+    let mainGridHeight: CGFloat
+    let commandColWidth: CGFloat
+    let keySide: CGFloat
+    let rowHeight: CGFloat
+    let bottomRowHeight: CGFloat
+    let commandBarOnRight: Bool
 }

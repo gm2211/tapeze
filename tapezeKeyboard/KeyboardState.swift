@@ -4,12 +4,11 @@ import Combine
 // MARK: - Keyboard State
 
 class KeyboardState: ObservableObject {
-    static let appGroupSuiteName = "group.com.gmecocci.tapeze"
+    static let appGroupSuiteName = "group.com.gm2211.tapeze"
     static let settingsDefaults = UserDefaults(suiteName: appGroupSuiteName) ?? .standard
     static let showGestureTrailDefaultsKey = "showGestureTrail"
-    static let selectedThemeDefaultsKey = KeyboardTheme.defaultsKey
     static let keyCornerRadiusDefaultsKey = "keyCornerRadius"
-    static let defaultKeyCornerRadius: CGFloat = 4
+    static let defaultKeyCornerRadius: CGFloat = 5
 
     @Published var currentLayer: KeyboardLayer = .letters
     @Published var isShifted: Bool = false
@@ -23,11 +22,6 @@ class KeyboardState: ObservableObject {
     @Published var showGestureTrail: Bool {
         didSet {
             Self.settingsDefaults.set(showGestureTrail, forKey: Self.showGestureTrailDefaultsKey)
-        }
-    }
-    @Published var selectedThemeID: String {
-        didSet {
-            Self.settingsDefaults.set(selectedThemeID, forKey: Self.selectedThemeDefaultsKey)
         }
     }
     @Published var keyCornerRadius: CGFloat {
@@ -53,12 +47,6 @@ class KeyboardState: ObservableObject {
             showGestureTrail = Self.settingsDefaults.bool(forKey: Self.showGestureTrailDefaultsKey)
         }
 
-        if let savedThemeID = Self.settingsDefaults.string(forKey: Self.selectedThemeDefaultsKey) {
-            selectedThemeID = savedThemeID
-        } else {
-            selectedThemeID = KeyboardTheme.classic.id
-        }
-
         if Self.settingsDefaults.object(forKey: Self.keyCornerRadiusDefaultsKey) == nil {
             keyCornerRadius = Self.defaultKeyCornerRadius
         } else {
@@ -67,7 +55,7 @@ class KeyboardState: ObservableObject {
     }
 
     var theme: KeyboardTheme {
-        KeyboardTheme.theme(for: selectedThemeID)
+        KeyboardTheme.tapeze
     }
 
     // MARK: - Actions
@@ -141,16 +129,17 @@ class KeyboardState: ObservableObject {
     var currentGrid: [[KeyConfig]] {
         switch currentLayer {
         case .letters:
-            if isSymbolOverlayActive {
-                return KeyboardLayoutData.symbolOverlayGrid
-            }
-            return KeyboardLayoutData.letterGrid
+            return KeyboardLayoutData.activeLetterGrid()
         case .numbers:
-            return KeyboardLayoutData.numberGrid
+            return KeyboardLayoutData.activeNumberGrid()
         case .symbolsOnly:
             // Same as numbers but we'll hide center labels in the view
-            return KeyboardLayoutData.numberGrid
+            return KeyboardLayoutData.activeNumberGrid()
         }
+    }
+
+    func refreshLayout() {
+        objectWillChange.send()
     }
 
     var currentCommandBar: [KeyConfig] {
