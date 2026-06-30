@@ -654,6 +654,7 @@ struct CharacterKeyView: View {
     let theme: KeyboardTheme
     let cornerRadius: CGFloat
     let cutCorners: Set<KeyCorner>
+    var labelHorizontalShift: CGFloat = 0
 
     var body: some View {
         GeometryReader { geo in
@@ -666,6 +667,7 @@ struct CharacterKeyView: View {
                             .font(.system(size: centerFontSize(geo), weight: .bold, design: .rounded))
                             .foregroundColor(theme.tapColor)
                             .labelDepth(for: theme)
+                            .offset(x: labelHorizontalShift)
                     }
 
                     if showSymbolOverlay {

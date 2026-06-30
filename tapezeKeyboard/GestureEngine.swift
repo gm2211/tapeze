@@ -343,6 +343,19 @@ class GestureEngine {
             return diamondContains(point, in: rect)
         }
 
+        // If the point sits well inside a command diamond's center, the
+        // user is aiming at the diamond (globe / abc / shift / enter), not
+        // the surrounding letter cells — diamond wins.
+        let diamondHit = candidates
+            .filter { isCommandDiamond($0.key) }
+            .min { lhs, rhs in
+                distanceToCenter(point, lhs.value) < distanceToCenter(point, rhs.value)
+            }
+        if let diamond = diamondHit,
+           isPointDeepInsideDiamond(point, rect: diamond.value) {
+            return diamond.key
+        }
+
         return candidates.sorted { lhs, rhs in
             let leftPriority = hitPriority(for: lhs.key)
             let rightPriority = hitPriority(for: rhs.key)
@@ -353,9 +366,27 @@ class GestureEngine {
         }.first?.key
     }
 
+    private func distanceToCenter(_ point: CGPoint, _ rect: CGRect) -> CGFloat {
+        let dx = point.x - rect.midX
+        let dy = point.y - rect.midY
+        return sqrt(dx * dx + dy * dy)
+    }
+
+    private func isPointDeepInsideDiamond(_ point: CGPoint, rect: CGRect) -> Bool {
+        guard rect.width > 0, rect.height > 0 else { return false }
+        let normalizedX = abs(point.x - rect.midX) / (rect.width / 2)
+        let normalizedY = abs(point.y - rect.midY) / (rect.height / 2)
+        // Inner 75% of the diamond — clearly aimed at the command.
+        return normalizedX + normalizedY <= 0.75
+    }
+
     private func hitPriority(for pos: GridPosition) -> Int {
-        guard isCommandPosition(pos) else { return 2 }
-        return pos.row == 2 ? 1 : 0
+        // Lower number = higher priority (wins the hit test).
+        // Letter/main-grid cells: 0 (highest) — they win over diamonds when overlapping.
+        // Backspace column (row 2): 1 — above-keyboard column commands.
+        // Diamond command keys (globe, 123, enter, shift): 2 (lowest) — only fire if no letter cell hit.
+        guard isCommandPosition(pos) else { return 0 }
+        return pos.row == 2 ? 1 : 2
     }
 
     private func isCommandPosition(_ pos: GridPosition) -> Bool {
@@ -496,16 +527,17 @@ class GestureEngine {
     private func firstSubcellDirection(from key: GridPosition) -> SwipeDirection? {
         guard let region = keyRegions[key], let start = points.first else { return nil }
         let center = CGPoint(x: region.midX, y: region.midY)
+        let activation = max(subcellActivationDistance, min(region.width, region.height) * 0.18)
+
         var farthestPoint: CGPoint?
         var farthestDistance: CGFloat = 0
 
         for point in points.dropFirst() {
-            guard distance(start, point) >= subcellActivationDistance ||
-                    distance(center, point) >= min(region.width, region.height) * 0.22 else {
+            let outwardDistance = distance(center, point)
+            guard outwardDistance >= activation || distance(start, point) >= activation else {
                 continue
             }
 
-            let outwardDistance = distance(center, point)
             if outwardDistance > farthestDistance {
                 farthestDistance = outwardDistance
                 farthestPoint = point
@@ -514,11 +546,14 @@ class GestureEngine {
 
         guard let point = farthestPoint else { return nil }
 
-        let clampedPoint = CGPoint(
-            x: min(max(point.x, region.minX), region.maxX),
-            y: min(max(point.y, region.minY), region.maxY)
-        )
-        return subcellDirection(for: clampedPoint, in: region)
+        // Use angle from key center to the peak excursion point.
+        // This is more robust than subcell-clamping when the finger curves
+        // back toward the center or overshoots past the key edge.
+        let dx = Double(point.x - center.x)
+        let dy = Double(point.y - center.y)
+        // Convert to math-style angle (y up positive).
+        let angle = atan2(-dy, dx)
+        return SwipeDirection.fromAngle(angle)
     }
 
     private func subcellDirection(for point: CGPoint, in region: CGRect) -> SwipeDirection? {
@@ -558,7 +593,7 @@ class GestureEngine {
     // MARK: - Helper: Circle detection
 
     private func isCircularMotion(in region: CGRect) -> Bool {
-        guard points.count >= 12,
+        guard points.count >= 8,
               region.width > 0,
               region.height > 0,
               let start = points.first,
@@ -568,20 +603,21 @@ class GestureEngine {
         let pathWidth = bounds.width
         let pathHeight = bounds.height
         let minRegionSide = min(region.width, region.height)
-        let minLoopSize = max(minRegionSide * 0.30, minSwipeDistance * 1.2)
-        let returnedNearStart = distance(start, end) <= max(tapDistanceThreshold * 1.6, minRegionSide * 0.22)
+        // Loosen loop size requirement so partial / squished loops still register.
+        let minLoopSize = max(minRegionSide * 0.20, minSwipeDistance * 0.9)
+        // Allow finger to land further from the start — partial circles often
+        // don't close all the way back.
+        let returnedNearStart = distance(start, end) <= max(tapDistanceThreshold * 2.2, minRegionSide * 0.45)
 
         guard returnedNearStart,
               pathWidth >= minLoopSize,
               pathHeight >= minLoopSize,
-              pathLength() >= minRegionSide * 1.75 else {
+              pathLength() >= minRegionSide * 1.2 else {
             return false
         }
 
-        // Compute total turning angle using cross products
         var totalAngle: Double = 0
-
-        let step = max(1, points.count / 20) // Sample ~20 points
+        let step = max(1, points.count / 20)
         var sampledPoints: [CGPoint] = []
         for i in stride(from: 0, to: points.count, by: step) {
             sampledPoints.append(points[i])
@@ -608,8 +644,8 @@ class GestureEngine {
             totalAngle += angle
         }
 
-        // A full circle has total turning angle of ~2π (or ~-2π)
-        return abs(totalAngle) > 1.75 * .pi
+        // Accept open / partial loops (~260° and up).
+        return abs(totalAngle) > 1.45 * .pi
     }
 
     private func isClosedLoopGesture(in region: CGRect) -> Bool {

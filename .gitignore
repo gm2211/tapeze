@@ -34,3 +34,6 @@ Pods/
 .dolt/
 *.db
 .beads-credential-key
+
+# claude
+.claude

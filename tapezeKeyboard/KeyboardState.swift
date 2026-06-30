@@ -13,7 +13,7 @@ class KeyboardState: ObservableObject {
     @Published var currentLayer: KeyboardLayer = .letters
     @Published var isShifted: Bool = false
     @Published var isCapsLocked: Bool = false
-    @Published var keyboardHeight: CGFloat = 280
+    @Published var keyboardHeight: CGFloat = 360
     @Published var commandBarOnRight: Bool = true
     @Published var isFullWidth: Bool = true
     @Published var showCenterLabels: Bool = true
