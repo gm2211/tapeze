@@ -4,6 +4,7 @@ import UniformTypeIdentifiers
 struct ContentView: View {
     @AppStorage(KeyboardState.showGestureTrailDefaultsKey, store: KeyboardState.settingsDefaults) private var showGestureTrail = true
     @AppStorage(KeyboardState.keyCornerRadiusDefaultsKey, store: KeyboardState.settingsDefaults) private var keyCornerRadius = Double(KeyboardState.defaultKeyCornerRadius)
+    @AppStorage(KeyboardState.themeDefaultsKey, store: KeyboardState.settingsDefaults) private var selectedThemeID = KeyboardTheme.tapeze.id
     @State private var testText: String = ""
     @State private var isLayoutEditorPresented = false
     @StateObject private var previewState = KeyboardState()
@@ -24,6 +25,7 @@ struct ContentView: View {
         .onAppear {
             previewState.showGestureTrail = showGestureTrail
             previewState.keyCornerRadius = CGFloat(keyCornerRadius)
+            previewState.selectedThemeID = selectedThemeID
         }
         .onChange(of: showGestureTrail) { newValue in
             previewState.showGestureTrail = newValue
@@ -31,10 +33,13 @@ struct ContentView: View {
         .onChange(of: keyCornerRadius) { newValue in
             previewState.keyCornerRadius = CGFloat(newValue)
         }
+        .onChange(of: selectedThemeID) { newValue in
+            previewState.selectedThemeID = newValue
+        }
         .sheet(isPresented: $isLayoutEditorPresented, onDismiss: {
             previewState.refreshLayout()
         }) {
-            LayoutEditorView {
+            LayoutEditorView(theme: previewState.theme) {
                 previewState.refreshLayout()
             }
         }
@@ -151,6 +156,26 @@ struct ContentView: View {
                 .font(.headline)
 
             VStack(alignment: .leading, spacing: 8) {
+                Text("Color")
+                    .font(.caption.weight(.semibold))
+                    .foregroundColor(.secondary)
+                    .textCase(.uppercase)
+
+                HStack(spacing: 8) {
+                    ForEach(KeyboardTheme.all) { theme in
+                        Button {
+                            selectedThemeID = theme.id
+                        } label: {
+                            ThemeChoice(theme: theme, isSelected: selectedThemeID == theme.id)
+                        }
+                        .buttonStyle(.plain)
+                        .accessibilityLabel("\(theme.name) theme")
+                        .accessibilityAddTraits(selectedThemeID == theme.id ? .isSelected : [])
+                    }
+                }
+            }
+
+            VStack(alignment: .leading, spacing: 8) {
                 HStack {
                     Text("Edge softness")
                         .font(.caption.weight(.semibold))
@@ -204,6 +229,52 @@ struct ContentView: View {
                 .font(.callout)
                 .fixedSize(horizontal: false, vertical: true)
         }
+    }
+}
+
+private struct ThemeChoice: View {
+    let theme: KeyboardTheme
+    let isSelected: Bool
+
+    var body: some View {
+        VStack(spacing: 6) {
+            ZStack {
+                RoundedRectangle(cornerRadius: 7, style: .continuous)
+                    .fill(
+                        LinearGradient(
+                            colors: [
+                                theme.keyGradientTop ?? theme.keyBackground,
+                                theme.keyGradientBottom ?? theme.keyBackground
+                            ],
+                            startPoint: .topLeading,
+                            endPoint: .bottomTrailing
+                        )
+                    )
+
+                Circle()
+                    .fill(theme.tapColor)
+                    .frame(width: 17, height: 17)
+                    .offset(x: -12, y: -7)
+
+                Circle()
+                    .fill(theme.swipeColor)
+                    .frame(width: 10, height: 10)
+                    .offset(x: 15, y: 10)
+            }
+            .frame(height: 48)
+            .overlay(
+                RoundedRectangle(cornerRadius: 7, style: .continuous)
+                    .stroke(isSelected ? theme.tapColor : theme.keyBorder.opacity(0.65), lineWidth: isSelected ? 2.5 : 1)
+            )
+
+            Text(theme.name)
+                .font(.caption2.weight(isSelected ? .bold : .medium))
+                .foregroundStyle(.primary)
+                .lineLimit(1)
+                .minimumScaleFactor(0.8)
+        }
+        .frame(maxWidth: .infinity)
+        .contentShape(Rectangle())
     }
 }
 
@@ -263,6 +334,7 @@ private struct LayoutEditorView: View {
     @State private var layout = EditableKeyboardLayout.savedOrDefault
     @State private var savedMarker = false
 
+    let theme: KeyboardTheme
     let onLayoutChanged: () -> Void
 
     var body: some View {
@@ -284,6 +356,7 @@ private struct LayoutEditorView: View {
                                     row: row,
                                     col: col,
                                     key: key(atRow: row, col: col),
+                                    theme: theme,
                                     onDropCell: moveCell
                                 )
                             }
@@ -378,6 +451,7 @@ private struct EditableKeyTile: View {
     let row: Int
     let col: Int
     let key: EditableKeyConfig
+    let theme: KeyboardTheme
     let onDropCell: (String, Int, Int, KeyCellPosition) -> Void
 
     var body: some View {
@@ -391,13 +465,13 @@ private struct EditableKeyTile: View {
 
                     Text(value)
                         .font(.system(size: position == .center ? cellSide * 0.56 : cellSide * 0.34, weight: position == .center ? .bold : .semibold, design: .rounded))
-                        .foregroundStyle(position == .center ? KeyboardTheme.tapeze.tapColor : KeyboardTheme.tapeze.swipeColor)
+                        .foregroundStyle(position == .center ? theme.tapColor : theme.swipeColor)
                         .lineLimit(1)
                         .minimumScaleFactor(0.45)
                         .frame(width: cellSide, height: cellSide)
                         .background(
                             RoundedRectangle(cornerRadius: 6, style: .continuous)
-                                .fill(position == .center ? KeyboardTheme.tapeze.activeKeyBackground.opacity(0.38) : Color.white.opacity(0.055))
+                                .fill(position == .center ? theme.activeKeyBackground.opacity(0.38) : Color.white.opacity(0.055))
                         )
                         .position(cellCenter(for: position, cellSide: cellSide))
                         .onDrag {
@@ -405,7 +479,7 @@ private struct EditableKeyTile: View {
                         } preview: {
                             Text(value.isEmpty ? " " : value)
                                 .font(.title2.bold())
-                                .foregroundStyle(position == .center ? KeyboardTheme.tapeze.tapColor : KeyboardTheme.tapeze.swipeColor)
+                                .foregroundStyle(position == .center ? theme.tapColor : theme.swipeColor)
                                 .padding(12)
                                 .background(.thinMaterial, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
                         }
@@ -426,14 +500,14 @@ private struct EditableKeyTile: View {
             OctagonalKeyShape(cornerRadius: 8)
                 .fill(
                     LinearGradient(
-                        colors: [KeyboardTheme.tapeze.keyGradientTop ?? KeyboardTheme.tapeze.keyBackground, KeyboardTheme.tapeze.keyGradientBottom ?? KeyboardTheme.tapeze.keyBackground],
+                        colors: [theme.keyGradientTop ?? theme.keyBackground, theme.keyGradientBottom ?? theme.keyBackground],
                         startPoint: .topLeading,
                         endPoint: .bottomTrailing
                     )
                 )
                 .overlay(
                     OctagonalKeyShape(cornerRadius: 8)
-                        .stroke(KeyboardTheme.tapeze.keyBorder, lineWidth: 1)
+                        .stroke(theme.keyBorder, lineWidth: 1)
                 )
         )
         .aspectRatio(1, contentMode: .fit)

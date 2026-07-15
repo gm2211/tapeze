@@ -91,7 +91,7 @@ struct KeyboardTheme: Identifiable {
 
     static let tapeze = KeyboardTheme(
         id: "tapeze",
-        name: "tapeze",
+        name: "Tapeze",
         keyboardBackground: Color(red: 0.54, green: 0.59, blue: 0.60),
         emptyColumnBackground: Color(red: 0.47, green: 0.52, blue: 0.53),
         keyBackground: Color(red: 0.15, green: 0.21, blue: 0.27),
@@ -119,10 +119,70 @@ struct KeyboardTheme: Identifiable {
         textureOpacity: 0.04
     )
 
-    static let all: [KeyboardTheme] = [.tapeze]
+    static let ember = KeyboardTheme(
+        id: "monokai",
+        name: "Ember",
+        keyboardBackground: Color(red: 0.20, green: 0.20, blue: 0.18),
+        emptyColumnBackground: Color(red: 0.24, green: 0.24, blue: 0.21),
+        keyBackground: Color(red: 0.13, green: 0.14, blue: 0.12),
+        commandBackground: Color(red: 0.18, green: 0.19, blue: 0.16),
+        spaceBackground: Color(red: 0.22, green: 0.23, blue: 0.20),
+        tapColor: Color(red: 0.96, green: 0.72, blue: 0.38),
+        swipeColor: Color(red: 0.79, green: 0.78, blue: 0.70),
+        specialTextColor: Color(red: 0.72, green: 0.84, blue: 0.56),
+        keyBorder: Color(red: 0.08, green: 0.08, blue: 0.07),
+        activeKeyBackground: Color(red: 0.31, green: 0.29, blue: 0.18),
+        keyGradientTop: Color(red: 0.19, green: 0.20, blue: 0.17),
+        keyGradientBottom: Color(red: 0.11, green: 0.11, blue: 0.10),
+        commandGradientTop: Color(red: 0.24, green: 0.25, blue: 0.21),
+        commandGradientBottom: Color(red: 0.15, green: 0.16, blue: 0.14),
+        spaceGradientTop: Color(red: 0.27, green: 0.28, blue: 0.24),
+        spaceGradientBottom: Color(red: 0.17, green: 0.18, blue: 0.16),
+        keyBorderWidth: 1,
+        innerHighlight: Color.white.opacity(0.08),
+        keyShadowColor: Color.black.opacity(0.38),
+        keyShadowRadius: 2,
+        keyShadowYOffset: 1.5,
+        labelShadowColor: Color.black.opacity(0.58),
+        labelShadowRadius: 1.3,
+        labelShadowYOffset: 1.8,
+        textureOpacity: 0.025
+    )
+
+    static let graphite = KeyboardTheme(
+        id: "darcula",
+        name: "Graphite",
+        keyboardBackground: Color(red: 0.24, green: 0.25, blue: 0.25),
+        emptyColumnBackground: Color(red: 0.28, green: 0.29, blue: 0.29),
+        keyBackground: Color(red: 0.16, green: 0.16, blue: 0.16),
+        commandBackground: Color(red: 0.20, green: 0.21, blue: 0.21),
+        spaceBackground: Color(red: 0.19, green: 0.20, blue: 0.21),
+        tapColor: Color(red: 1.00, green: 0.78, blue: 0.43),
+        swipeColor: Color(red: 0.67, green: 0.72, blue: 0.77),
+        specialTextColor: Color(red: 0.80, green: 0.47, blue: 0.27),
+        keyBorder: Color(red: 0.09, green: 0.09, blue: 0.09),
+        activeKeyBackground: Color(red: 0.33, green: 0.27, blue: 0.18),
+        keyGradientTop: Color(red: 0.22, green: 0.22, blue: 0.22),
+        keyGradientBottom: Color(red: 0.13, green: 0.13, blue: 0.13),
+        commandGradientTop: Color(red: 0.26, green: 0.27, blue: 0.27),
+        commandGradientBottom: Color(red: 0.17, green: 0.18, blue: 0.18),
+        spaceGradientTop: Color(red: 0.24, green: 0.25, blue: 0.26),
+        spaceGradientBottom: Color(red: 0.15, green: 0.16, blue: 0.17),
+        keyBorderWidth: 1,
+        innerHighlight: Color.white.opacity(0.09),
+        keyShadowColor: Color.black.opacity(0.40),
+        keyShadowRadius: 2.1,
+        keyShadowYOffset: 1.5,
+        labelShadowColor: Color.black.opacity(0.62),
+        labelShadowRadius: 1.4,
+        labelShadowYOffset: 1.9,
+        textureOpacity: 0.02
+    )
+
+    static let all: [KeyboardTheme] = [.tapeze, .ember, .graphite]
 
     static func theme(for id: String) -> KeyboardTheme {
-        .tapeze
+        all.first(where: { $0.id == id }) ?? .tapeze
     }
 }
 

@@ -10,6 +10,7 @@ class KeyboardState: ObservableObject {
     static let keyCornerRadiusDefaultsKey = "keyCornerRadius"
     static let commandBarOnRightDefaultsKey = "commandBarOnRight"
     static let showCenterLabelsDefaultsKey = "showCenterLabels"
+    static let themeDefaultsKey = "keyboardTheme"
     static let defaultKeyCornerRadius: CGFloat = 5
 
     @Published var currentLayer: KeyboardLayer = .letters
@@ -37,6 +38,11 @@ class KeyboardState: ObservableObject {
     @Published var keyCornerRadius: CGFloat {
         didSet {
             Self.settingsDefaults.set(Double(keyCornerRadius), forKey: Self.keyCornerRadiusDefaultsKey)
+        }
+    }
+    @Published var selectedThemeID: String = KeyboardTheme.tapeze.id {
+        didSet {
+            Self.settingsDefaults.set(selectedThemeID, forKey: Self.themeDefaultsKey)
         }
     }
 
@@ -74,10 +80,12 @@ class KeyboardState: ObservableObject {
         } else {
             keyCornerRadius = CGFloat(Self.settingsDefaults.double(forKey: Self.keyCornerRadiusDefaultsKey))
         }
+
+        selectedThemeID = Self.settingsDefaults.string(forKey: Self.themeDefaultsKey) ?? KeyboardTheme.tapeze.id
     }
 
     var theme: KeyboardTheme {
-        KeyboardTheme.tapeze
+        KeyboardTheme.theme(for: selectedThemeID)
     }
 
     // MARK: - Actions
