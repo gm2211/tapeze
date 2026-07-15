@@ -31,11 +31,10 @@ struct KeyboardView: View {
             let totalWidth = max(outerGeo.size.width, 1)
             let totalHeight = max(outerGeo.size.height, 1)
 
-            // Center the 3x3 cluster together with a wider delete rail, while
-            // keeping space as a single explicit bottom target.
-            let horizontalInset = max(totalWidth * 0.025, 8)
-            let targetBackspaceRailWidth = max(totalWidth * 0.17, 64)
-            let usableWidth = max(totalWidth - horizontalInset * 2 - targetBackspaceRailWidth - spacing, 1)
+            // Anchor the grid against the outer edge and let the delete rail
+            // absorb the remaining width. This removes the unused side gutters.
+            let targetBackspaceRailWidth = max(totalWidth * 0.24, 76)
+            let usableWidth = max(totalWidth - targetBackspaceRailWidth - spacing, 1)
 
             // Compute strip height based on a preliminary keySide estimate from the full height.
             let prelimKeySide = max(
@@ -61,17 +60,13 @@ struct KeyboardView: View {
             let commandColWidth: CGFloat = 0
             let mainGridWidth = keySide * CGFloat(gridCols) + spacing * CGFloat(gridCols - 1)
             let mainGridHeight = keySide * CGFloat(gridRows) + spacing * CGFloat(gridRows - 1)
-            let backspaceRailWidth = min(
-                max(totalWidth * 0.18, keySide * 0.62),
-                max(totalWidth - horizontalInset * 2 - mainGridWidth - spacing, 1)
-            )
+            let backspaceRailWidth = max(totalWidth - mainGridWidth - spacing, 1)
 
             // Absorb slack into strips so grid fills exactly innerHeight with no gap.
             let stripHeight = max((totalHeight - mainGridHeight) / 2, prelimKeySide * 0.20)
             let armWidth = keySide * 0.40
             let bottomRowHeight: CGFloat = 0
-            let layoutWidth = mainGridWidth + spacing + backspaceRailWidth
-            let layoutOriginX = max((totalWidth - layoutWidth) / 2, horizontalInset)
+            let layoutOriginX = state.commandBarOnRight ? 0 : backspaceRailWidth + spacing
             let hitLayout = LatticeHitLayout(
                 originX: layoutOriginX,
                 originY: stripHeight,
@@ -98,7 +93,7 @@ struct KeyboardView: View {
                 )
 
                 latticeKeyboard(
-                    layoutWidth: layoutWidth,
+                    layoutWidth: mainGridWidth,
                     mainGridWidth: mainGridWidth,
                     mainGridHeight: mainGridHeight,
                     commandColWidth: commandColWidth,
@@ -107,8 +102,8 @@ struct KeyboardView: View {
                     bottomRowHeight: bottomRowHeight,
                     armWidth: armWidth
                 )
-                .frame(width: layoutWidth, height: mainGridHeight)
-                .position(x: layoutOriginX + layoutWidth / 2, y: stripHeight + mainGridHeight / 2)
+                .frame(width: mainGridWidth, height: mainGridHeight)
+                .position(x: layoutOriginX + mainGridWidth / 2, y: stripHeight + mainGridHeight / 2)
             }
             .frame(maxWidth: .infinity, maxHeight: totalHeight)
             .background(state.theme.keyboardBackground)
@@ -326,7 +321,9 @@ struct KeyboardView: View {
     ) -> some View {
         let gridBottom = stripHeight + mainGridHeight
         let spaceHeight = max(totalHeight - gridBottom, 0)
-        let railX = layoutOriginX + mainGridWidth + spacing
+        let railX = state.commandBarOnRight
+            ? layoutOriginX + mainGridWidth + spacing
+            : 0
         let railWidth = max(backspaceRailWidth, 0)
         let railHeight = max(mainGridHeight, 0)
 
@@ -472,10 +469,12 @@ struct KeyboardView: View {
         let keySide = rowHeight
         let mainGridHeight = keySide * CGFloat(gridRows) + spacing * CGFloat(gridRows - 1)
         let gridBottom = stripHeight + mainGridHeight
-        let railX = layoutOriginX + mainGridWidth
-        let railEndX = layoutOriginX + mainGridWidth + spacing + backspaceRailWidth
+        let railX = state.commandBarOnRight
+            ? layoutOriginX + mainGridWidth + spacing
+            : 0
+        let railEndX = railX + backspaceRailWidth
 
-        // Right-side rail beside the key grid: backspace.
+        // Backspace rail mirrors to the side selected by the globe circle gesture.
         if point.x >= railX,
            point.x <= railEndX,
            point.y >= stripHeight,

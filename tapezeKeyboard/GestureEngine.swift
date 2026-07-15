@@ -216,10 +216,6 @@ class GestureEngine {
         let dy = end.y - start.y
         let totalDist = distance(start, end)
 
-        if isCircularMotion(in: resizeRegion) || isClosedLoopGesture(in: resizeRegion) {
-            return .specialSwipe(.globeCircle)
-        }
-
         if let horizontalToggle = resizeBackAndForthSwipe(from: start, to: end) {
             return .specialSwipe(horizontalToggle)
         }

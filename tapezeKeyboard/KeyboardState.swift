@@ -8,13 +8,18 @@ class KeyboardState: ObservableObject {
     static let settingsDefaults = UserDefaults(suiteName: appGroupSuiteName) ?? .standard
     static let showGestureTrailDefaultsKey = "showGestureTrail"
     static let keyCornerRadiusDefaultsKey = "keyCornerRadius"
+    static let commandBarOnRightDefaultsKey = "commandBarOnRight"
     static let defaultKeyCornerRadius: CGFloat = 5
 
     @Published var currentLayer: KeyboardLayer = .letters
     @Published var isShifted: Bool = false
     @Published var isCapsLocked: Bool = false
     @Published var keyboardHeight: CGFloat = 360
-    @Published var commandBarOnRight: Bool = true
+    @Published var commandBarOnRight: Bool = true {
+        didSet {
+            Self.settingsDefaults.set(commandBarOnRight, forKey: Self.commandBarOnRightDefaultsKey)
+        }
+    }
     @Published var isFullWidth: Bool = true
     @Published var showCenterLabels: Bool = true
     @Published var isSymbolOverlayActive: Bool = false
@@ -41,6 +46,12 @@ class KeyboardState: ObservableObject {
     let heightStep: CGFloat = 30
 
     init() {
+        if Self.settingsDefaults.object(forKey: Self.commandBarOnRightDefaultsKey) == nil {
+            commandBarOnRight = true
+        } else {
+            commandBarOnRight = Self.settingsDefaults.bool(forKey: Self.commandBarOnRightDefaultsKey)
+        }
+
         if Self.settingsDefaults.object(forKey: Self.showGestureTrailDefaultsKey) == nil {
             showGestureTrail = true
         } else {
