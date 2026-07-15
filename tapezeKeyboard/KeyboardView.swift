@@ -496,6 +496,8 @@ struct KeyboardView: View {
         // Diamond hit rects are smaller than the visual to avoid overlapping letter cells.
         let diamondSide = min(layout.keySide, layout.rowHeight) * 0.40
         let diamondHalf = diamondSide / 2
+        let layerTapSide = min(layout.keySide, layout.rowHeight) * 0.74
+        let layerTapHalf = layerTapSide / 2
 
         // Letter cell regions are now set via GeometryReader in mainGrid; only keep
         // the existing GeometryReader-sourced letter regions and write diamond regions.
@@ -558,6 +560,15 @@ struct KeyboardView: View {
         gestureEngine.updateSpaceBarRegion(bottomBridgeStripRect)
         gestureEngine.updateGlobeRegion(globeRegion)
         gestureEngine.updateResizeRegion(regions[GridPosition(row: 3, col: commandCol)] ?? .zero)
+        gestureEngine.updateLayerToggleRegion(
+            CGRect(
+                x: layerCenter.x - layerTapHalf,
+                y: layerCenter.y - layerTapHalf,
+                width: layerTapSide,
+                height: layerTapSide
+            ),
+            position: GridPosition(row: 1, col: commandCol)
+        )
     }
 
     private func isCommandPosition(pos: GridPosition) -> Bool {
