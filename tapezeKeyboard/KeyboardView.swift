@@ -31,9 +31,9 @@ struct KeyboardView: View {
             let totalWidth = max(outerGeo.size.width, 1)
             let totalHeight = max(outerGeo.size.height, 1)
 
-            // Reserve side padding so the top (backspace) and bottom (space)
-            // bridges visibly connect along the left/right margins.
-            let sidePadding = max(totalWidth * 0.07, 10)
+            // Reserve a right-side rail for frequent editing controls. Space stays
+            // at the bottom; backspace lives on the rail instead of as a hidden chord.
+            let sidePadding = max(totalWidth * 0.12, 48)
             let usableWidth = max(totalWidth - sidePadding * 2, 1)
 
             // Compute strip height based on a preliminary keySide estimate from the full height.
@@ -86,7 +86,9 @@ struct KeyboardView: View {
                     totalHeight: totalHeight,
                     stripHeight: stripHeight,
                     mainGridHeight: mainGridHeight,
-                    rowHeight: keySide
+                    rowHeight: keySide,
+                    layoutOriginX: layoutOriginX,
+                    mainGridWidth: mainGridWidth
                 )
 
                 latticeKeyboard(
@@ -308,28 +310,32 @@ struct KeyboardView: View {
         totalHeight: CGFloat,
         stripHeight: CGFloat,
         mainGridHeight: CGFloat,
-        rowHeight: CGFloat
+        rowHeight: CGFloat,
+        layoutOriginX: CGFloat,
+        mainGridWidth: CGFloat
     ) -> some View {
-        let splitY = stripHeight + mainGridHeight / 2
-        let topHeight = max(splitY, 0)
-        let bottomHeight = max(totalHeight - splitY, 0)
+        let gridBottom = stripHeight + mainGridHeight
+        let spaceHeight = max(totalHeight - gridBottom, 0)
+        let railX = layoutOriginX + mainGridWidth
+        let railWidth = max(totalWidth - railX, 0)
+        let railHeight = max(mainGridHeight, 0)
 
         return ZStack(alignment: .topLeading) {
             Rectangle()
-                .fill(backspaceBridgeFill)
-                .frame(width: totalWidth, height: topHeight)
-                .position(x: totalWidth / 2, y: topHeight / 2)
+                .fill(spaceBridgeFill)
+                .frame(width: totalWidth, height: totalHeight)
+                .position(x: totalWidth / 2, y: totalHeight / 2)
 
             Rectangle()
-                .fill(spaceBridgeFill)
-                .frame(width: totalWidth, height: bottomHeight)
-                .position(x: totalWidth / 2, y: splitY + bottomHeight / 2)
+                .fill(backspaceBridgeFill)
+                .frame(width: railWidth, height: railHeight)
+                .position(x: railX + railWidth / 2, y: stripHeight + railHeight / 2)
 
             Image(systemName: "delete.left")
-                .font(.system(size: stripHeight * 0.6, weight: .medium))
+                .font(.system(size: min(railWidth, rowHeight) * 0.42, weight: .medium))
                 .foregroundColor(state.theme.specialTextColor)
-                .frame(width: totalWidth, height: stripHeight)
-                .position(x: totalWidth / 2, y: stripHeight / 2)
+                .frame(width: railWidth, height: railHeight)
+                .position(x: railX + railWidth / 2, y: stripHeight + railHeight / 2)
 
             Group {
                 if state.currentLayer == .letters {
@@ -341,8 +347,8 @@ struct KeyboardView: View {
                 }
             }
             .foregroundColor(state.theme.specialTextColor)
-            .frame(width: totalWidth, height: stripHeight)
-            .position(x: totalWidth / 2, y: totalHeight - stripHeight / 2)
+            .frame(width: totalWidth, height: spaceHeight)
+            .position(x: totalWidth / 2, y: gridBottom + spaceHeight / 2)
         }
         .frame(width: totalWidth, height: totalHeight, alignment: .topLeading)
     }
@@ -448,23 +454,17 @@ struct KeyboardView: View {
         let layoutOriginX = (totalWidth - mainGridWidth) / 2
         let mainGridHeight = keySide * CGFloat(gridRows) + spacing * CGFloat(gridRows - 1)
         let gridBottom = stripHeight + mainGridHeight
-        let midY = stripHeight + mainGridHeight / 2
 
-        // Full-width top strip: y in [0, stripHeight)
-        if point.y < stripHeight {
+        // Right-side rail beside the key grid: backspace.
+        if point.x >= layoutOriginX + mainGridWidth,
+           point.y >= stripHeight,
+           point.y < gridBottom {
             return .backspace
         }
 
         // Full-width bottom strip: y in [gridBottom, totalHeight]
         if point.y >= gridBottom {
             return .space
-        }
-
-        // Side margins (outside the main grid, between stripHeight and gridBottom):
-        // split at midline — upper half → backspace, lower half → space.
-        let inSideMargin = point.x < layoutOriginX || point.x > layoutOriginX + mainGridWidth
-        if inSideMargin {
-            return point.y < midY ? .backspace : .space
         }
 
         return .none
