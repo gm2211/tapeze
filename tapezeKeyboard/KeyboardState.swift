@@ -12,6 +12,7 @@ class KeyboardState: ObservableObject {
     static let showCenterLabelsDefaultsKey = "showCenterLabels"
     static let themeDefaultsKey = "keyboardTheme"
     static let defaultKeyCornerRadius: CGFloat = 5
+    private let persistsSettings: Bool
 
     @Published var currentLayer: KeyboardLayer = .letters
     @Published var isShifted: Bool = false
@@ -19,30 +20,40 @@ class KeyboardState: ObservableObject {
     @Published var keyboardHeight: CGFloat = 360
     @Published var commandBarOnRight: Bool = true {
         didSet {
-            Self.settingsDefaults.set(commandBarOnRight, forKey: Self.commandBarOnRightDefaultsKey)
+            if persistsSettings {
+                Self.settingsDefaults.set(commandBarOnRight, forKey: Self.commandBarOnRightDefaultsKey)
+            }
         }
     }
     @Published var isFullWidth: Bool = true
     @Published var showCenterLabels: Bool = true {
         didSet {
-            Self.settingsDefaults.set(showCenterLabels, forKey: Self.showCenterLabelsDefaultsKey)
+            if persistsSettings {
+                Self.settingsDefaults.set(showCenterLabels, forKey: Self.showCenterLabelsDefaultsKey)
+            }
         }
     }
     @Published var isSymbolOverlayActive: Bool = false
     @Published var isURLField: Bool = false
     @Published var showGestureTrail: Bool {
         didSet {
-            Self.settingsDefaults.set(showGestureTrail, forKey: Self.showGestureTrailDefaultsKey)
+            if persistsSettings {
+                Self.settingsDefaults.set(showGestureTrail, forKey: Self.showGestureTrailDefaultsKey)
+            }
         }
     }
     @Published var keyCornerRadius: CGFloat {
         didSet {
-            Self.settingsDefaults.set(Double(keyCornerRadius), forKey: Self.keyCornerRadiusDefaultsKey)
+            if persistsSettings {
+                Self.settingsDefaults.set(Double(keyCornerRadius), forKey: Self.keyCornerRadiusDefaultsKey)
+            }
         }
     }
     @Published var selectedThemeID: String = KeyboardTheme.tapeze.id {
         didSet {
-            Self.settingsDefaults.set(selectedThemeID, forKey: Self.themeDefaultsKey)
+            if persistsSettings {
+                Self.settingsDefaults.set(selectedThemeID, forKey: Self.themeDefaultsKey)
+            }
         }
     }
 
@@ -56,8 +67,10 @@ class KeyboardState: ObservableObject {
     let maxHeight: CGFloat = 400
     let heightStep: CGFloat = 30
 
-    init() {
-        if Self.settingsDefaults.object(forKey: Self.commandBarOnRightDefaultsKey) == nil {
+    init(isPreview: Bool = false) {
+        persistsSettings = !isPreview
+
+        if isPreview || Self.settingsDefaults.object(forKey: Self.commandBarOnRightDefaultsKey) == nil {
             commandBarOnRight = true
         } else {
             commandBarOnRight = Self.settingsDefaults.bool(forKey: Self.commandBarOnRightDefaultsKey)
@@ -69,7 +82,7 @@ class KeyboardState: ObservableObject {
             showGestureTrail = Self.settingsDefaults.bool(forKey: Self.showGestureTrailDefaultsKey)
         }
 
-        if Self.settingsDefaults.object(forKey: Self.showCenterLabelsDefaultsKey) == nil {
+        if isPreview || Self.settingsDefaults.object(forKey: Self.showCenterLabelsDefaultsKey) == nil {
             showCenterLabels = true
         } else {
             showCenterLabels = Self.settingsDefaults.bool(forKey: Self.showCenterLabelsDefaultsKey)
@@ -86,6 +99,14 @@ class KeyboardState: ObservableObject {
 
     var theme: KeyboardTheme {
         KeyboardTheme.theme(for: selectedThemeID)
+    }
+
+    func resetLearningPreview() {
+        currentLayer = .letters
+        isShifted = false
+        isCapsLocked = false
+        isSymbolOverlayActive = false
+        showCenterLabels = true
     }
 
     // MARK: - Actions

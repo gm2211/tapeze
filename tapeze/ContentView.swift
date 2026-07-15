@@ -2,12 +2,13 @@ import SwiftUI
 import UniformTypeIdentifiers
 
 struct ContentView: View {
+    @Environment(\.scenePhase) private var scenePhase
     @AppStorage(KeyboardState.showGestureTrailDefaultsKey, store: KeyboardState.settingsDefaults) private var showGestureTrail = true
     @AppStorage(KeyboardState.keyCornerRadiusDefaultsKey, store: KeyboardState.settingsDefaults) private var keyCornerRadius = Double(KeyboardState.defaultKeyCornerRadius)
     @AppStorage(KeyboardState.themeDefaultsKey, store: KeyboardState.settingsDefaults) private var selectedThemeID = KeyboardTheme.tapeze.id
     @State private var testText: String = ""
     @State private var isLayoutEditorPresented = false
-    @StateObject private var previewState = KeyboardState()
+    @StateObject private var previewState = KeyboardState(isPreview: true)
 
     var body: some View {
         ScrollView {
@@ -23,6 +24,7 @@ struct ContentView: View {
         }
         .background(Color(.systemGroupedBackground))
         .onAppear {
+            previewState.resetLearningPreview()
             previewState.showGestureTrail = showGestureTrail
             previewState.keyCornerRadius = CGFloat(keyCornerRadius)
             previewState.selectedThemeID = selectedThemeID
@@ -35,6 +37,11 @@ struct ContentView: View {
         }
         .onChange(of: selectedThemeID) { newValue in
             previewState.selectedThemeID = newValue
+        }
+        .onChange(of: scenePhase) { newPhase in
+            if newPhase == .active {
+                previewState.resetLearningPreview()
+            }
         }
         .sheet(isPresented: $isLayoutEditorPresented, onDismiss: {
             previewState.refreshLayout()

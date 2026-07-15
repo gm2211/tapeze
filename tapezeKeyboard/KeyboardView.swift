@@ -342,17 +342,17 @@ struct KeyboardView: View {
                 .position(x: railX + railWidth / 2, y: stripHeight + railHeight / 2)
 
             Group {
-                if state.currentLayer == .letters {
-                    Text("space")
-                        .font(.system(size: min(max(spaceHeight * 0.30, 17), 28), weight: .medium))
-                } else {
+                if state.currentLayer == .letters && state.showCenterLabels {
+                    Text("␣")
+                        .font(.system(size: min(max(spaceHeight * 0.34, 19), 30), weight: .medium, design: .rounded))
+                } else if state.currentLayer != .letters {
                     Text("0")
                         .font(.system(size: min(max(spaceHeight * 0.52, 26), 44), weight: .bold, design: .rounded))
                 }
             }
             .foregroundColor(state.theme.specialTextColor)
-            .frame(width: totalWidth, height: spaceHeight)
-            .position(x: totalWidth / 2, y: gridBottom + spaceHeight / 2)
+            .frame(width: mainGridWidth, height: spaceHeight)
+            .position(x: layoutOriginX + mainGridWidth / 2, y: gridBottom + spaceHeight / 2)
         }
         .frame(width: totalWidth, height: totalHeight, alignment: .topLeading)
     }
