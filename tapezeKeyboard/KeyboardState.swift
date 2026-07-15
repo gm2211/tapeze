@@ -9,6 +9,7 @@ class KeyboardState: ObservableObject {
     static let showGestureTrailDefaultsKey = "showGestureTrail"
     static let keyCornerRadiusDefaultsKey = "keyCornerRadius"
     static let commandBarOnRightDefaultsKey = "commandBarOnRight"
+    static let showCenterLabelsDefaultsKey = "showCenterLabels"
     static let defaultKeyCornerRadius: CGFloat = 5
 
     @Published var currentLayer: KeyboardLayer = .letters
@@ -21,7 +22,11 @@ class KeyboardState: ObservableObject {
         }
     }
     @Published var isFullWidth: Bool = true
-    @Published var showCenterLabels: Bool = true
+    @Published var showCenterLabels: Bool = true {
+        didSet {
+            Self.settingsDefaults.set(showCenterLabels, forKey: Self.showCenterLabelsDefaultsKey)
+        }
+    }
     @Published var isSymbolOverlayActive: Bool = false
     @Published var isURLField: Bool = false
     @Published var showGestureTrail: Bool {
@@ -56,6 +61,12 @@ class KeyboardState: ObservableObject {
             showGestureTrail = true
         } else {
             showGestureTrail = Self.settingsDefaults.bool(forKey: Self.showGestureTrailDefaultsKey)
+        }
+
+        if Self.settingsDefaults.object(forKey: Self.showCenterLabelsDefaultsKey) == nil {
+            showCenterLabels = true
+        } else {
+            showCenterLabels = Self.settingsDefaults.bool(forKey: Self.showCenterLabelsDefaultsKey)
         }
 
         if Self.settingsDefaults.object(forKey: Self.keyCornerRadiusDefaultsKey) == nil {
