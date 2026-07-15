@@ -323,6 +323,8 @@ struct KeyboardView: View {
             : 0
         let railWidth = max(backspaceRailWidth, 0)
         let railHeight = max(mainGridHeight, 0)
+        let cornerMinX = state.commandBarOnRight ? layoutOriginX + mainGridWidth : 0
+        let cornerMaxX = state.commandBarOnRight ? railX + railWidth : layoutOriginX
 
         return ZStack(alignment: .topLeading) {
             Rectangle()
@@ -334,6 +336,26 @@ struct KeyboardView: View {
                 .fill(backspaceBridgeFill)
                 .frame(width: railWidth, height: railHeight)
                 .position(x: railX + railWidth / 2, y: stripHeight + railHeight / 2)
+
+            bridgeCornerPath(
+                bridge: .space,
+                minX: cornerMinX,
+                maxX: cornerMaxX,
+                minY: gridBottom,
+                maxY: totalHeight,
+                railOnRight: state.commandBarOnRight
+            )
+            .fill(spaceBridgeFill)
+
+            bridgeCornerPath(
+                bridge: .backspace,
+                minX: cornerMinX,
+                maxX: cornerMaxX,
+                minY: gridBottom,
+                maxY: totalHeight,
+                railOnRight: state.commandBarOnRight
+            )
+            .fill(backspaceBridgeFill)
 
             Image(systemName: "delete.left")
                 .font(.system(size: min(railWidth, rowHeight) * 0.42, weight: .medium))
@@ -355,6 +377,38 @@ struct KeyboardView: View {
             .position(x: layoutOriginX + mainGridWidth / 2, y: gridBottom + spaceHeight / 2)
         }
         .frame(width: totalWidth, height: totalHeight, alignment: .topLeading)
+    }
+
+    private func bridgeCornerPath(
+        bridge: ActiveBridge,
+        minX: CGFloat,
+        maxX: CGFloat,
+        minY: CGFloat,
+        maxY: CGFloat,
+        railOnRight: Bool
+    ) -> Path {
+        Path { path in
+            if railOnRight {
+                path.move(to: CGPoint(x: minX, y: minY))
+                if bridge == .space {
+                    path.addLine(to: CGPoint(x: maxX, y: maxY))
+                    path.addLine(to: CGPoint(x: minX, y: maxY))
+                } else {
+                    path.addLine(to: CGPoint(x: maxX, y: minY))
+                    path.addLine(to: CGPoint(x: maxX, y: maxY))
+                }
+            } else {
+                path.move(to: CGPoint(x: maxX, y: minY))
+                if bridge == .space {
+                    path.addLine(to: CGPoint(x: minX, y: maxY))
+                    path.addLine(to: CGPoint(x: maxX, y: maxY))
+                } else {
+                    path.addLine(to: CGPoint(x: minX, y: minY))
+                    path.addLine(to: CGPoint(x: minX, y: maxY))
+                }
+            }
+            path.closeSubpath()
+        }
     }
 
     private func backspaceBridge(
@@ -470,6 +524,22 @@ struct KeyboardView: View {
             ? layoutOriginX + mainGridWidth + spacing
             : 0
         let railEndX = railX + backspaceRailWidth
+        let cornerMinX = state.commandBarOnRight ? layoutOriginX + mainGridWidth : 0
+        let cornerMaxX = state.commandBarOnRight ? railEndX : layoutOriginX
+
+        if point.x >= cornerMinX,
+           point.x <= cornerMaxX,
+           point.y >= gridBottom,
+           point.y <= totalHeight {
+            let cornerWidth = max(cornerMaxX - cornerMinX, 1)
+            let cornerHeight = max(totalHeight - gridBottom, 1)
+            let normalizedX = (point.x - cornerMinX) / cornerWidth
+            let normalizedY = (point.y - gridBottom) / cornerHeight
+            let isBackspace = state.commandBarOnRight
+                ? normalizedY <= normalizedX
+                : normalizedY <= 1 - normalizedX
+            return isBackspace ? .backspace : .space
+        }
 
         // Backspace rail mirrors to the side selected by the globe circle gesture.
         if point.x >= railX,
