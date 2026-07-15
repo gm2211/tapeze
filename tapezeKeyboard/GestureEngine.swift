@@ -32,8 +32,7 @@ class GestureEngine {
     private var spaceBarRegion: CGRect = .zero
     private var globeRegion: CGRect = .zero
     private var resizeRegion: CGRect = .zero
-    private var layerToggleRegion: CGRect = .zero
-    private var layerTogglePosition = GridPosition(row: 1, col: 3)
+    private var forgivingCommandRegions: [GridPosition: CGRect] = [:]
 
     var hasActiveGesture: Bool { !points.isEmpty }
 
@@ -60,9 +59,8 @@ class GestureEngine {
         self.resizeRegion = region
     }
 
-    func updateLayerToggleRegion(_ region: CGRect, position: GridPosition) {
-        layerToggleRegion = region
-        layerTogglePosition = position
+    func updateForgivingCommandRegions(_ regions: [GridPosition: CGRect]) {
+        forgivingCommandRegions = regions
     }
 
     func keyPosition(at point: CGPoint) -> GridPosition? {
@@ -108,10 +106,10 @@ class GestureEngine {
             return analyzeResizeGesture()
         }
 
-        // The layer diamond sits between four character keys. Give stationary
+        // These diamonds sit between four character keys. Give stationary
         // thumb taps a larger target, while leaving all swipe ownership alone.
-        if isForgivingLayerToggleTap(from: start, to: end) {
-            return .tap(layerTogglePosition)
+        if let commandPosition = forgivingCommandTap(from: start, to: end) {
+            return .tap(commandPosition)
         }
 
         if let chordGesture = analyzeKeyboardChordGesture() {
@@ -417,16 +415,21 @@ class GestureEngine {
         return normalizedX + normalizedY <= 1.08
     }
 
-    private func isForgivingLayerToggleTap(from start: CGPoint, to end: CGPoint) -> Bool {
-        guard !layerToggleRegion.isEmpty else { return false }
+    private func forgivingCommandTap(from start: CGPoint, to end: CGPoint) -> GridPosition? {
         let movementLimit = tapDistanceThreshold * 1.35
         guard distance(start, end) <= movementLimit,
               maxDistance(from: start) <= movementLimit else {
-            return false
+            return nil
         }
 
-        return diamondContains(start, in: layerToggleRegion)
-            && diamondContains(end, in: layerToggleRegion)
+        return forgivingCommandRegions
+            .filter { _, region in
+                diamondContains(start, in: region) && diamondContains(end, in: region)
+            }
+            .min { lhs, rhs in
+                distanceToCenter(start, lhs.value) < distanceToCenter(start, rhs.value)
+            }?
+            .key
     }
 
     private func area(_ rect: CGRect) -> CGFloat {
