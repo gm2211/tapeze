@@ -10,14 +10,22 @@ class KeyboardState: ObservableObject {
     static let keyCornerRadiusDefaultsKey = "keyCornerRadius"
     static let commandBarOnRightDefaultsKey = "commandBarOnRight"
     static let showCenterLabelsDefaultsKey = "showCenterLabels"
+    static let keyboardHeightDefaultsKey = "keyboardHeight"
     static let themeDefaultsKey = "keyboardTheme"
     static let defaultKeyCornerRadius: CGFloat = 5
+    static let defaultKeyboardHeight: CGFloat = 360
     private let persistsSettings: Bool
 
     @Published var currentLayer: KeyboardLayer = .letters
     @Published var isShifted: Bool = false
     @Published var isCapsLocked: Bool = false
-    @Published var keyboardHeight: CGFloat = 360
+    @Published var keyboardHeight: CGFloat = KeyboardState.defaultKeyboardHeight {
+        didSet {
+            if persistsSettings {
+                Self.settingsDefaults.set(Double(keyboardHeight), forKey: Self.keyboardHeightDefaultsKey)
+            }
+        }
+    }
     @Published var commandBarOnRight: Bool = true {
         didSet {
             if persistsSettings {
@@ -34,6 +42,7 @@ class KeyboardState: ObservableObject {
         }
     }
     @Published var isSymbolOverlayActive: Bool = false
+    @Published var showSymbolLabels: Bool = true
     @Published var isURLField: Bool = false
     @Published var showGestureTrail: Bool {
         didSet {
@@ -95,6 +104,12 @@ class KeyboardState: ObservableObject {
         }
 
         selectedThemeID = Self.settingsDefaults.string(forKey: Self.themeDefaultsKey) ?? KeyboardTheme.tapeze.id
+
+        if isPreview || Self.settingsDefaults.object(forKey: Self.keyboardHeightDefaultsKey) == nil {
+            keyboardHeight = Self.defaultKeyboardHeight
+        } else {
+            keyboardHeight = min(maxHeight, max(minHeight, CGFloat(Self.settingsDefaults.double(forKey: Self.keyboardHeightDefaultsKey))))
+        }
     }
 
     var theme: KeyboardTheme {
@@ -115,6 +130,12 @@ class KeyboardState: ObservableObject {
         }
 
         selectedThemeID = Self.settingsDefaults.string(forKey: Self.themeDefaultsKey) ?? KeyboardTheme.tapeze.id
+
+        if Self.settingsDefaults.object(forKey: Self.keyboardHeightDefaultsKey) == nil {
+            keyboardHeight = Self.defaultKeyboardHeight
+        } else {
+            keyboardHeight = min(maxHeight, max(minHeight, CGFloat(Self.settingsDefaults.double(forKey: Self.keyboardHeightDefaultsKey))))
+        }
     }
 
     func resetLearningPreview() {
@@ -122,6 +143,7 @@ class KeyboardState: ObservableObject {
         isShifted = false
         isCapsLocked = false
         isSymbolOverlayActive = false
+        showSymbolLabels = true
         showCenterLabels = true
     }
 
@@ -160,15 +182,18 @@ class KeyboardState: ObservableObject {
 
     func toggleSymbolsOnly() {
         if currentLayer == .letters {
-            isSymbolOverlayActive.toggle()
+            if isSymbolOverlayActive {
+                isSymbolOverlayActive = false
+                showSymbolLabels = false
+            } else {
+                isSymbolOverlayActive = true
+                showSymbolLabels = true
+            }
             return
         }
 
-        if currentLayer == .symbolsOnly {
-            currentLayer = .numbers
-        } else if currentLayer == .numbers {
-            currentLayer = .symbolsOnly
-        }
+        currentLayer = .numbers
+        showSymbolLabels.toggle()
     }
 
     func toggleCenterLabels() {

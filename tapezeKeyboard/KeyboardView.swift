@@ -618,9 +618,9 @@ struct KeyboardView: View {
     private func mainGrid(width: CGFloat, height: CGFloat, rowHeight: CGFloat, armWidth: CGFloat = 0) -> some View {
         let colWidth = max((width - spacing * CGFloat(gridCols - 1)) / CGFloat(gridCols), 1)
         let grid = state.currentGrid
-        let isSymbolOverlay = state.currentLayer == .letters && state.isSymbolOverlayActive
-        let showCenter = state.currentLayer != .symbolsOnly && state.showCenterLabels
-        let showSwipes = state.currentLayer != .letters || state.showCenterLabels
+        let isSymbolOverlay = state.currentLayer == .letters && state.isSymbolOverlayActive && state.showSymbolLabels
+        let showCenter = state.currentLayer == .letters ? state.showCenterLabels : true
+        let showSwipes = state.currentLayer == .letters ? state.showCenterLabels : state.showSymbolLabels
 
         VStack(spacing: spacing) {
             ForEach(0..<gridRows, id: \.self) { row in
@@ -1174,7 +1174,7 @@ struct KeyboardView: View {
     private func handleSpecialSwipe(_ special: GestureResult.SpecialSwipe) {
         switch special {
         case .spaceSwipeUp:
-            state.toggleLayer()
+            state.toggleSymbolsOnly()
         case .spaceSwipeUpAndBack:
             state.toggleCenterLabels()
         case .keyboardSpace:
