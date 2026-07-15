@@ -139,7 +139,7 @@ struct KeyboardLayoutData {
         [
             KeyConfig(tap: "t", swipes: [.topRight: "y"]),
             KeyConfig(tap: "e", swipes: [
-                .top: "w", .topRight: "'",
+                .top: "w", .topRight: "'", .right: "z",
                 .bottomLeft: ",", .bottom: ".", .bottomRight: ":",
             ]),
             KeyConfig(tap: "s", swipes: [
@@ -298,7 +298,21 @@ struct KeyboardLayoutData {
         guard let data = UserDefaults(suiteName: KeyboardState.appGroupSuiteName)?.data(forKey: customLayoutDefaultsKey) else {
             return nil
         }
-        return try? JSONDecoder().decode(EditableKeyboardLayout.self, from: data)
+        guard var layout = try? JSONDecoder().decode(EditableKeyboardLayout.self, from: data) else {
+            return nil
+        }
+
+        let containsZ = layout.letterGrid
+            .flatMap { $0 }
+            .contains { $0.cells.values.contains("z") }
+        if !containsZ,
+           layout.letterGrid.indices.contains(2),
+           layout.letterGrid[2].indices.contains(1) {
+            layout.letterGrid[2][1].setValue("z", at: .right)
+            saveEditableLayout(layout)
+        }
+
+        return layout
     }
 
     static func saveEditableLayout(_ layout: EditableKeyboardLayout) {
