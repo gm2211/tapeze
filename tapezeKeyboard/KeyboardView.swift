@@ -327,8 +327,8 @@ struct KeyboardView: View {
         return ZStack(alignment: .topLeading) {
             Rectangle()
                 .fill(spaceBridgeFill)
-                .frame(width: totalWidth, height: spaceHeight)
-                .position(x: totalWidth / 2, y: gridBottom + spaceHeight / 2)
+                .frame(width: mainGridWidth, height: spaceHeight)
+                .position(x: layoutOriginX + mainGridWidth / 2, y: gridBottom + spaceHeight / 2)
 
             Rectangle()
                 .fill(backspaceBridgeFill)
@@ -479,8 +479,10 @@ struct KeyboardView: View {
             return .backspace
         }
 
-        // Full-width bottom strip: y in [gridBottom, totalHeight]
-        if point.y >= gridBottom {
+        // Bottom bridge follows the main 3x3 grid and excludes side padding and the rail.
+        if point.x >= layoutOriginX,
+           point.x <= layoutOriginX + mainGridWidth,
+           point.y >= gridBottom {
             return .space
         }
 
@@ -543,11 +545,11 @@ struct KeyboardView: View {
             height: diamondSide
         )
         keyRegions = regions
-        // Space bar region matches the full-width bottom bridge exactly.
+        // Space bar region matches the visible bottom bridge exactly.
         let bottomBridgeStripRect = CGRect(
-            x: 0,
+            x: layout.originX,
             y: originY + layout.mainGridHeight,
-            width: layout.layoutWidth,
+            width: layout.mainGridWidth,
             height: layout.bottomRowHeight
         )
         spaceBarRegion = bottomBridgeStripRect
