@@ -101,6 +101,22 @@ class KeyboardState: ObservableObject {
         KeyboardTheme.theme(for: selectedThemeID)
     }
 
+    func reloadPersistedAppearanceSettings() {
+        if Self.settingsDefaults.object(forKey: Self.showGestureTrailDefaultsKey) == nil {
+            showGestureTrail = true
+        } else {
+            showGestureTrail = Self.settingsDefaults.bool(forKey: Self.showGestureTrailDefaultsKey)
+        }
+
+        if Self.settingsDefaults.object(forKey: Self.keyCornerRadiusDefaultsKey) == nil {
+            keyCornerRadius = Self.defaultKeyCornerRadius
+        } else {
+            keyCornerRadius = CGFloat(Self.settingsDefaults.double(forKey: Self.keyCornerRadiusDefaultsKey))
+        }
+
+        selectedThemeID = Self.settingsDefaults.string(forKey: Self.themeDefaultsKey) ?? KeyboardTheme.tapeze.id
+    }
+
     func resetLearningPreview() {
         currentLayer = .letters
         isShifted = false
