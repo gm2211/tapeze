@@ -31,35 +31,39 @@ struct KeyboardView: View {
             let totalWidth = max(outerGeo.size.width, 1)
             let totalHeight = max(outerGeo.size.height, 1)
 
-            // Anchor the grid against the outer edge and let the delete rail
-            // absorb the remaining width. This removes the unused side gutters.
-            let targetBackspaceRailWidth = max(totalWidth * 0.24, 76)
-            let usableWidth = max(totalWidth - targetBackspaceRailWidth - spacing, 1)
-
-            // Reserve one substantial bottom target and give the rest of the
-            // height to the grid. There is no decorative strip above the keys.
-            let spaceBarHeight = min(
-                max(totalHeight * 0.17, 48),
-                min(totalHeight * 0.24, 82)
-            )
-            let keyWidth = max(
-                (usableWidth - spacing * CGFloat(gridCols - 1)) / CGFloat(gridCols),
+            let minimumControlExtent: CGFloat = 60
+            let absoluteMaximumControlExtent: CGFloat = 88
+            let maxKeySideByWidth = max(
+                (totalWidth - minimumControlExtent - spacing * CGFloat(gridCols)) / CGFloat(gridCols),
                 1
             )
-            let rowHeight = max(
-                (totalHeight - spaceBarHeight - spacing * CGFloat(gridRows - 1)) / CGFloat(gridRows),
+            let maxKeySideByHeight = max(
+                (totalHeight - minimumControlExtent - spacing * CGFloat(gridRows - 1)) / CGFloat(gridRows),
                 1
             )
+            let keySide = min(maxKeySideByWidth, maxKeySideByHeight)
 
             let shouldDisableCompact = false
             let commandColWidth: CGFloat = 0
-            let mainGridWidth = keyWidth * CGFloat(gridCols) + spacing * CGFloat(gridCols - 1)
-            let mainGridHeight = rowHeight * CGFloat(gridRows) + spacing * CGFloat(gridRows - 1)
-            let backspaceRailWidth = max(totalWidth - mainGridWidth - spacing, 1)
+            let mainGridWidth = keySide * CGFloat(gridCols) + spacing * CGFloat(gridCols - 1)
+            let mainGridHeight = keySide * CGFloat(gridRows) + spacing * CGFloat(gridRows - 1)
+            let maximumControlExtent = min(
+                absoluteMaximumControlExtent,
+                max(minimumControlExtent, keySide * 0.62)
+            )
 
-            let topInset: CGFloat = 0
-            let armWidth = min(keyWidth, rowHeight) * 0.40
-            let layoutOriginX = state.commandBarOnRight ? 0 : backspaceRailWidth + spacing
+            let availableSpaceHeight = max(totalHeight - mainGridHeight, minimumControlExtent)
+            let spaceBarHeight = min(availableSpaceHeight, maximumControlExtent)
+            let topInset = max(totalHeight - mainGridHeight - spaceBarHeight, 0)
+
+            let availableRailWidth = max(totalWidth - mainGridWidth - spacing, minimumControlExtent)
+            let backspaceRailWidth = min(availableRailWidth, maximumControlExtent)
+            let sidePadding = max(totalWidth - mainGridWidth - spacing - backspaceRailWidth, 0)
+
+            let armWidth = keySide * 0.40
+            let layoutOriginX = state.commandBarOnRight
+                ? sidePadding
+                : backspaceRailWidth + spacing
             let hitLayout = LatticeHitLayout(
                 originX: layoutOriginX,
                 originY: topInset,
@@ -67,8 +71,8 @@ struct KeyboardView: View {
                 mainGridWidth: mainGridWidth,
                 mainGridHeight: mainGridHeight,
                 commandColWidth: commandColWidth,
-                keySide: keyWidth,
-                rowHeight: rowHeight,
+                keySide: keySide,
+                rowHeight: keySide,
                 bottomRowHeight: spaceBarHeight,
                 commandBarOnRight: state.commandBarOnRight
             )
@@ -79,7 +83,7 @@ struct KeyboardView: View {
                     totalHeight: totalHeight,
                     stripHeight: topInset,
                     mainGridHeight: mainGridHeight,
-                    rowHeight: rowHeight,
+                    rowHeight: keySide,
                     layoutOriginX: layoutOriginX,
                     mainGridWidth: mainGridWidth,
                     backspaceRailWidth: backspaceRailWidth
@@ -90,8 +94,8 @@ struct KeyboardView: View {
                     mainGridWidth: mainGridWidth,
                     mainGridHeight: mainGridHeight,
                     commandColWidth: commandColWidth,
-                    keySide: keyWidth,
-                    rowHeight: rowHeight,
+                    keySide: keySide,
+                    rowHeight: keySide,
                     bottomRowHeight: spaceBarHeight,
                     armWidth: armWidth
                 )
@@ -125,7 +129,7 @@ struct KeyboardView: View {
                                 totalHeight: totalHeight,
                                 stripHeight: topInset,
                                 armWidth: armWidth,
-                                rowHeight: rowHeight,
+                                rowHeight: keySide,
                                 layoutOriginX: layoutOriginX,
                                 mainGridWidth: mainGridWidth,
                                 backspaceRailWidth: backspaceRailWidth
@@ -170,7 +174,7 @@ struct KeyboardView: View {
 
                         if activeBridge == .backspace {
                             backspacePath.append(value.location)
-                            let action = analyzeBackspacePath(backspacePath, keySide: keyWidth)
+                            let action = analyzeBackspacePath(backspacePath, keySide: keySide)
                             switch action {
                             case .single:
                                 onBackspace()
