@@ -1,1 +1,2 @@
 {"id":"int-aa6840f0","kind":"field_change","created_at":"2026-06-30T04:40:04.233548Z","actor":"gmecocci","issue_id":"tapeze-9rj","extra":{"field":"status","new_value":"closed","old_value":"in_progress","reason":"Closed"}}
+{"id":"int-276c36342e9057b28ad36e2d9df56080","kind":"field_change","created_at":"2026-07-15T04:57:51.697729Z","actor":"gmecocci","issue_id":"tapeze-83e","extra":{"field":"status","new_value":"closed","old_value":"in_progress","reason":"Uploaded build 10 to App Store Connect/TestFlight; package is processing."}}
