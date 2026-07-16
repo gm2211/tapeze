@@ -28,6 +28,7 @@ struct KeyboardView: View {
     private let spacing: CGFloat = 1
     private let maxTrailDisplayPoints = 42
     private let minTrailPointDistance: CGFloat = 7
+    private let numberHoldDuration: TimeInterval = 0.6
 
     var body: some View {
         GeometryReader { outerGeo in
@@ -121,6 +122,9 @@ struct KeyboardView: View {
             .onChange(of: hitLayout) { newLayout in
                 registerHitLayout(newLayout)
             }
+            .onChange(of: state.currentLayer) { _ in
+                registerHitLayout(hitLayout)
+            }
             .gesture(
                 DragGesture(minimumDistance: 0, coordinateSpace: .named("keyboard"))
                     .onChanged { value in
@@ -144,12 +148,8 @@ struct KeyboardView: View {
                             if activeBridge == .space {
                                 if !gestureEngine.hasActiveGesture {
                                     gestureEngine.touchBegan(at: value.startLocation)
-                                    scheduleZeroLongPress()
                                 }
                                 gestureEngine.touchMoved(to: value.location)
-                                if hypot(value.translation.width, value.translation.height) > 14 {
-                                    cancelNumberLongPress()
-                                }
                             } else if activeBridge == .backspace {
                                 // Track top-bridge path so we can recognize horizontal swipe → delete-word.
                                 if backspacePath.isEmpty {
@@ -195,6 +195,14 @@ struct KeyboardView: View {
                             return
                         }
 
+                        if activeBridge == .zero {
+                            onCharacter("0")
+                            state.afterCharacterInserted()
+                            state.gestureTrailPoints = []
+                            state.activeKeyPosition = nil
+                            return
+                        }
+
                         if activeBridge == .backspace {
                             backspacePath.append(value.location)
                             let action = analyzeBackspacePath(backspacePath, keySide: keySide)
@@ -214,14 +222,6 @@ struct KeyboardView: View {
                         }
 
                         if activeBridge == .space {
-                            if longPressTriggered {
-                                gestureEngine.touchCancelled()
-                                state.gestureTrailPoints = []
-                                state.activeKeyPosition = nil
-                                state.swipeDirection = nil
-                                return
-                            }
-
                             // Let gestureEngine evaluate first — it may recognize a space-swipe-up gesture.
                             if !gestureEngine.hasActiveGesture {
                                 gestureEngine.touchBegan(at: value.startLocation)
@@ -366,12 +366,35 @@ struct KeyboardView: View {
         let cornerMinX = state.commandBarOnRight ? layoutOriginX + mainGridWidth : 0
         let cornerMaxX = state.commandBarOnRight ? railX + railWidth : layoutOriginX
         let cornerWidth = max(cornerMaxX - cornerMinX, 0)
+        let hasZeroKey = state.currentLayer != .letters
+        let zeroWidth = hasZeroKey ? mainGridWidth / 3 : 0
+        let spaceWidth = mainGridWidth - zeroWidth - (hasZeroKey ? spacing : 0)
+        let spaceX = state.commandBarOnRight
+            ? layoutOriginX
+            : layoutOriginX + zeroWidth + (hasZeroKey ? spacing : 0)
+        let zeroX = state.commandBarOnRight
+            ? layoutOriginX + spaceWidth + spacing
+            : layoutOriginX
 
         return ZStack(alignment: .topLeading) {
             Rectangle()
                 .fill(spaceBridgeFill)
-                .frame(width: mainGridWidth, height: spaceHeight)
-                .position(x: layoutOriginX + mainGridWidth / 2, y: gridBottom + spaceHeight / 2)
+                .frame(width: spaceWidth, height: spaceHeight)
+                .position(x: spaceX + spaceWidth / 2, y: gridBottom + spaceHeight / 2)
+
+            if hasZeroKey {
+                Rectangle()
+                    .fill(backspaceBridgeFill)
+                    .frame(width: zeroWidth, height: spaceHeight)
+                    .position(x: zeroX + zeroWidth / 2, y: gridBottom + spaceHeight / 2)
+
+                Text("0")
+                    .font(.system(size: min(max(spaceHeight * 0.48, 24), 38), weight: .medium, design: .rounded))
+                    .foregroundColor(state.theme.specialTextColor)
+                    .commandLabelDepth(for: state.theme)
+                    .frame(width: zeroWidth, height: spaceHeight)
+                    .position(x: zeroX + zeroWidth / 2, y: gridBottom + spaceHeight / 2)
+            }
 
             Rectangle()
                 .fill(backspaceBridgeFill)
@@ -407,21 +430,13 @@ struct KeyboardView: View {
                     Text("␣")
                         .font(.system(size: min(max(spaceHeight * 0.34, 19), 30), weight: .medium, design: .rounded))
                 } else if state.currentLayer != .letters {
-                    ZStack {
-                        Image(systemName: "space")
-                            .font(.system(size: min(max(spaceHeight * 0.38, 20), 30), weight: .medium))
-                        Text("0")
-                            .font(.system(size: min(max(spaceHeight * 0.20, 12), 17), weight: .semibold, design: .rounded))
-                            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topTrailing)
-                            .padding(.top, 4)
-                            .padding(.trailing, 12)
-                    }
-                    .frame(width: mainGridWidth, height: spaceHeight)
+                    Image(systemName: "space")
+                        .font(.system(size: min(max(spaceHeight * 0.38, 20), 30), weight: .medium))
                 }
             }
             .foregroundColor(state.theme.specialTextColor)
-            .frame(width: mainGridWidth, height: spaceHeight)
-            .position(x: layoutOriginX + mainGridWidth / 2, y: gridBottom + spaceHeight / 2)
+            .frame(width: spaceWidth, height: spaceHeight)
+            .position(x: spaceX + spaceWidth / 2, y: gridBottom + spaceHeight / 2)
         }
         .frame(width: totalWidth, height: totalHeight, alignment: .topLeading)
     }
@@ -561,6 +576,15 @@ struct KeyboardView: View {
         if point.x >= layoutOriginX,
            point.x <= layoutOriginX + mainGridWidth,
            point.y >= gridBottom {
+            if state.currentLayer != .letters {
+                let zeroWidth = mainGridWidth / 3
+                let isZero = state.commandBarOnRight
+                    ? point.x >= layoutOriginX + mainGridWidth - zeroWidth
+                    : point.x <= layoutOriginX + zeroWidth
+                if isZero {
+                    return .zero
+                }
+            }
             return .space
         }
 
@@ -626,10 +650,12 @@ struct KeyboardView: View {
         )
         keyRegions = regions
         // Space bar region matches the visible bottom bridge exactly.
+        let zeroWidth = state.currentLayer == .letters ? 0 : layout.mainGridWidth / 3
+        let zeroGap = zeroWidth > 0 ? spacing : 0
         let bottomBridgeStripRect = CGRect(
-            x: layout.originX,
+            x: layout.commandBarOnRight ? layout.originX : layout.originX + zeroWidth + zeroGap,
             y: originY + layout.mainGridHeight,
-            width: layout.mainGridWidth,
+            width: layout.mainGridWidth - zeroWidth - zeroGap,
             height: layout.bottomRowHeight
         )
         spaceBarRegion = bottomBridgeStripRect
@@ -1023,21 +1049,7 @@ struct KeyboardView: View {
             state.afterCharacterInserted()
         }
         longPressTask = task
-        DispatchQueue.main.asyncAfter(deadline: .now() + 1.5, execute: task)
-    }
-
-    private func scheduleZeroLongPress() {
-        cancelNumberLongPress()
-        guard state.currentLayer != .letters else { return }
-
-        let task = DispatchWorkItem {
-            guard gestureEngine.hasActiveGesture, activeBridge == .space else { return }
-            longPressTriggered = true
-            onCharacter("0")
-            state.afterCharacterInserted()
-        }
-        longPressTask = task
-        DispatchQueue.main.asyncAfter(deadline: .now() + 1.5, execute: task)
+        DispatchQueue.main.asyncAfter(deadline: .now() + numberHoldDuration, execute: task)
     }
 
     private func cancelNumberLongPress() {
@@ -1383,7 +1395,7 @@ private struct LatticeHitLayout: Equatable {
 }
 
 enum ActiveBridge: Equatable {
-    case none, backspace, space, enter
+    case none, backspace, space, zero, enter
 }
 
 /// Extended bridge shape: covers the full keyboard width.
