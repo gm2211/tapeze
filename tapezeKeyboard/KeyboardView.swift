@@ -20,6 +20,8 @@ struct KeyboardView: View {
     @State private var activeBridge: ActiveBridge = .none
     @State private var backspacePath: [CGPoint] = []
     @State private var currentKeySide: CGFloat = 1
+    @State private var longPressTask: DispatchWorkItem?
+    @State private var longPressTriggered = false
 
     private let gridRows = 3
     private let gridCols = 3
@@ -155,11 +157,18 @@ struct KeyboardView: View {
                         }
 
                         // Key touch path
+                        if longPressTriggered {
+                            return
+                        }
                         if !gestureEngine.hasActiveGesture {
                             gestureEngine.touchBegan(at: value.startLocation)
                             resetGestureTrail(at: value.startLocation)
+                            scheduleNumberLongPress(at: value.startLocation)
                         }
                         gestureEngine.touchMoved(to: value.location)
+                        if hypot(value.translation.width, value.translation.height) > 14 {
+                            cancelNumberLongPress()
+                        }
                         if state.showGestureTrail {
                             appendGestureTrailPoint(value.location)
                         } else {
@@ -169,8 +178,17 @@ struct KeyboardView: View {
                     }
                     .onEnded { value in
                         defer {
+                            cancelNumberLongPress()
+                            longPressTriggered = false
                             activeBridge = .none
                             backspacePath = []
+                        }
+
+                        if activeBridge == .enter {
+                            onEnter()
+                            state.gestureTrailPoints = []
+                            state.activeKeyPosition = nil
+                            return
                         }
 
                         if activeBridge == .backspace {
@@ -198,7 +216,11 @@ struct KeyboardView: View {
                             }
                             let result = gestureEngine.touchEnded(at: value.location)
                             switch result {
-                            case .specialSwipe(let special) where special == .spaceSwipeUp || special == .spaceSwipeUpAndBack:
+                            case .specialSwipe(let special) where
+                                special == .spaceSwipeUp
+                                || special == .spaceSwipeUpAndBack
+                                || special == .spaceCursorLeft
+                                || special == .spaceCursorRight:
                                 handleGestureResult(result)
                             default:
                                 // Plain tap on bottom bridge: space in letters layer, "0" in number layers.
@@ -215,6 +237,13 @@ struct KeyboardView: View {
                         }
 
                         // Key touch path — activeBridge == .none
+                        if longPressTriggered {
+                            gestureEngine.touchCancelled()
+                            state.gestureTrailPoints = []
+                            state.activeKeyPosition = nil
+                            state.swipeDirection = nil
+                            return
+                        }
                         if !gestureEngine.hasActiveGesture {
                             gestureEngine.touchBegan(at: value.startLocation)
                             resetGestureTrail(at: value.startLocation)
@@ -244,6 +273,9 @@ struct KeyboardView: View {
             gestureEngine.updateKeyRegions(keyRegions)
             gestureEngine.updateSpaceBarRegion(spaceBarRegion)
             gestureEngine.updateGlobeRegion(globeRegion)
+        }
+        .onDisappear {
+            cancelNumberLongPress()
         }
     }
 
@@ -326,6 +358,7 @@ struct KeyboardView: View {
         let railHeight = max(mainGridHeight, 0)
         let cornerMinX = state.commandBarOnRight ? layoutOriginX + mainGridWidth : 0
         let cornerMaxX = state.commandBarOnRight ? railX + railWidth : layoutOriginX
+        let cornerWidth = max(cornerMaxX - cornerMinX, 0)
 
         return ZStack(alignment: .topLeading) {
             Rectangle()
@@ -338,31 +371,29 @@ struct KeyboardView: View {
                 .frame(width: railWidth, height: railHeight)
                 .position(x: railX + railWidth / 2, y: stripHeight + railHeight / 2)
 
-            bridgeCornerPath(
-                bridge: .space,
-                minX: cornerMinX,
-                maxX: cornerMaxX,
-                minY: gridBottom,
-                maxY: totalHeight,
-                railOnRight: state.commandBarOnRight
-            )
-            .fill(spaceBridgeFill)
-
-            bridgeCornerPath(
-                bridge: .backspace,
-                minX: cornerMinX,
-                maxX: cornerMaxX,
-                minY: gridBottom,
-                maxY: totalHeight,
-                railOnRight: state.commandBarOnRight
-            )
-            .fill(backspaceBridgeFill)
+            Rectangle()
+                .fill(backspaceBridgeFill)
+                .frame(width: cornerWidth, height: spaceHeight)
+                .position(x: cornerMinX + cornerWidth / 2, y: gridBottom + spaceHeight / 2)
+                .overlay {
+                    Rectangle()
+                        .stroke(state.theme.keyBorder, lineWidth: state.theme.keyBorderWidth)
+                        .frame(width: cornerWidth, height: spaceHeight)
+                        .position(x: cornerMinX + cornerWidth / 2, y: gridBottom + spaceHeight / 2)
+                }
 
             Image(systemName: "delete.left")
                 .font(.system(size: min(railWidth, rowHeight) * 0.42, weight: .medium))
                 .foregroundColor(state.theme.specialTextColor)
                 .frame(width: railWidth, height: railHeight)
                 .position(x: railX + railWidth / 2, y: stripHeight + railHeight / 2)
+
+            Image(systemName: "return")
+                .font(.system(size: min(cornerWidth, spaceHeight) * 0.42, weight: .medium))
+                .foregroundColor(state.theme.specialTextColor)
+                .commandLabelDepth(for: state.theme)
+                .frame(width: cornerWidth, height: spaceHeight)
+                .position(x: cornerMinX + cornerWidth / 2, y: gridBottom + spaceHeight / 2)
 
             Group {
                 if state.currentLayer == .letters && state.showCenterLabels {
@@ -378,38 +409,6 @@ struct KeyboardView: View {
             .position(x: layoutOriginX + mainGridWidth / 2, y: gridBottom + spaceHeight / 2)
         }
         .frame(width: totalWidth, height: totalHeight, alignment: .topLeading)
-    }
-
-    private func bridgeCornerPath(
-        bridge: ActiveBridge,
-        minX: CGFloat,
-        maxX: CGFloat,
-        minY: CGFloat,
-        maxY: CGFloat,
-        railOnRight: Bool
-    ) -> Path {
-        Path { path in
-            if railOnRight {
-                path.move(to: CGPoint(x: minX, y: minY))
-                if bridge == .space {
-                    path.addLine(to: CGPoint(x: maxX, y: maxY))
-                    path.addLine(to: CGPoint(x: minX, y: maxY))
-                } else {
-                    path.addLine(to: CGPoint(x: maxX, y: minY))
-                    path.addLine(to: CGPoint(x: maxX, y: maxY))
-                }
-            } else {
-                path.move(to: CGPoint(x: maxX, y: minY))
-                if bridge == .space {
-                    path.addLine(to: CGPoint(x: minX, y: maxY))
-                    path.addLine(to: CGPoint(x: maxX, y: maxY))
-                } else {
-                    path.addLine(to: CGPoint(x: minX, y: minY))
-                    path.addLine(to: CGPoint(x: minX, y: maxY))
-                }
-            }
-            path.closeSubpath()
-        }
     }
 
     private func backspaceBridge(
@@ -532,14 +531,7 @@ struct KeyboardView: View {
            point.x <= cornerMaxX,
            point.y >= gridBottom,
            point.y <= totalHeight {
-            let cornerWidth = max(cornerMaxX - cornerMinX, 1)
-            let cornerHeight = max(totalHeight - gridBottom, 1)
-            let normalizedX = (point.x - cornerMinX) / cornerWidth
-            let normalizedY = (point.y - gridBottom) / cornerHeight
-            let isBackspace = state.commandBarOnRight
-                ? normalizedY <= normalizedX
-                : normalizedY <= 1 - normalizedX
-            return isBackspace ? .backspace : .space
+            return .enter
         }
 
         // Backspace rail mirrors to the side selected by the globe circle gesture.
@@ -998,6 +990,32 @@ struct KeyboardView: View {
         }
     }
 
+    // MARK: - Number Long Press
+
+    private func scheduleNumberLongPress(at point: CGPoint) {
+        cancelNumberLongPress()
+        guard state.currentLayer == .letters,
+              let position = gestureEngine.keyPosition(at: point),
+              (0..<gridRows).contains(position.row),
+              (0..<gridCols).contains(position.col) else {
+            return
+        }
+
+        let task = DispatchWorkItem {
+            guard gestureEngine.hasActiveGesture, activeBridge == .none else { return }
+            longPressTriggered = true
+            onCharacter(String(position.row * gridCols + position.col + 1))
+            state.afterCharacterInserted()
+        }
+        longPressTask = task
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1.5, execute: task)
+    }
+
+    private func cancelNumberLongPress() {
+        longPressTask?.cancel()
+        longPressTask = nil
+    }
+
     // MARK: - Gesture Trail
 
     private func resetGestureTrail(at point: CGPoint) {
@@ -1150,6 +1168,13 @@ struct KeyboardView: View {
 
         let config = grid[pos.row][pos.col]
 
+        // A visible number-layer symbol owns its direction. Persistent commands
+        // and hidden letter fallbacks only apply when that cell is unassigned.
+        if state.currentLayer != .letters, let char = config.swipes[direction] {
+            insertSwipeCharacter(char, uppercase: uppercase)
+            return
+        }
+
         // Check for special overlays first
         if pos.row == 1 && pos.col == 2 && direction == .top {
             // Shift on 'r' key
@@ -1167,16 +1192,16 @@ struct KeyboardView: View {
             return
         }
 
-        if let char = config.swipes[direction] ?? hiddenSymbolSwipe(from: pos, direction: direction) {
-            let output: String
-            if uppercase {
-                output = char.uppercased()
-            } else {
-                output = state.applyCase(char)
-            }
-            onCharacter(output)
-            state.afterCharacterInserted()
+        if let char = config.swipes[direction]
+            ?? hiddenSymbolSwipe(from: pos, direction: direction)
+            ?? numberLayerLetterSwipe(from: pos, direction: direction) {
+            insertSwipeCharacter(char, uppercase: uppercase)
         }
+    }
+
+    private func insertSwipeCharacter(_ char: String, uppercase: Bool) {
+        onCharacter(uppercase ? char.uppercased() : state.applyCase(char))
+        state.afterCharacterInserted()
     }
 
     private func hiddenSymbolSwipe(from pos: GridPosition, direction: SwipeDirection) -> String? {
@@ -1188,6 +1213,17 @@ struct KeyboardView: View {
         }
 
         return symbolOverlayGrid[pos.row][pos.col].swipes[direction]
+    }
+
+    private func numberLayerLetterSwipe(from pos: GridPosition, direction: SwipeDirection) -> String? {
+        guard state.currentLayer != .letters else { return nil }
+        let letterGrid = KeyboardLayoutData.activeLetterGrid()
+        guard pos.row >= 0 && pos.row < letterGrid.count,
+              pos.col >= 0 && pos.col < letterGrid[pos.row].count else {
+            return nil
+        }
+
+        return letterGrid[pos.row][pos.col].swipes[direction]
     }
 
     private func handleCommandSwipe(from pos: GridPosition, isBackAndForth: Bool) -> Bool {
@@ -1318,7 +1354,7 @@ private struct LatticeHitLayout: Equatable {
 }
 
 enum ActiveBridge: Equatable {
-    case none, backspace, space
+    case none, backspace, space, enter
 }
 
 /// Extended bridge shape: covers the full keyboard width.

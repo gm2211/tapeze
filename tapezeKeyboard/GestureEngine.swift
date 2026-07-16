@@ -610,15 +610,33 @@ class GestureEngine {
 
     private func didReturnTowardStart(from start: CGPoint, to end: CGPoint, key: GridPosition) -> Bool {
         guard let region = keyRegions[key] else { return false }
-        let centerBox = CGRect(
-            x: region.minX + region.width / 3,
-            y: region.minY + region.height / 3,
-            width: region.width / 3,
-            height: region.height / 3
-        ).insetBy(dx: -10, dy: -10)
+        let minSide = min(region.width, region.height)
+        guard let peakIndex = points.indices.max(by: {
+            distance(start, points[$0]) < distance(start, points[$1])
+        }) else { return false }
 
-        return distance(start, end) <= max(tapDistanceThreshold * 2, min(region.width, region.height) * 0.28) ||
-            centerBox.contains(end)
+        let peak = points[peakIndex]
+        let outboundDistance = distance(start, peak)
+        let endDistance = distance(start, end)
+        let returnDistance = distance(peak, end)
+
+        // Capital swipe-back must be a deliberate excursion followed by a real
+        // retrace. This keeps quick taps with a small directional wobble from
+        // becoming uppercase secondary letters.
+        guard peakIndex < points.index(before: points.endIndex),
+              outboundDistance >= max(minSwipeDistance * 1.4, minSide * 0.30),
+              returnDistance >= outboundDistance * 0.55,
+              endDistance <= max(tapDistanceThreshold * 1.35, outboundDistance * 0.42) else {
+            return false
+        }
+
+        let outwardX = peak.x - start.x
+        let outwardY = peak.y - start.y
+        let returnX = end.x - peak.x
+        let returnY = end.y - peak.y
+        let denominator = max(outboundDistance * returnDistance, 0.001)
+        let directionAgreement = (outwardX * returnX + outwardY * returnY) / denominator
+        return directionAgreement <= -0.45
     }
 
     // MARK: - Helper: Circle detection
@@ -634,16 +652,13 @@ class GestureEngine {
         let pathWidth = bounds.width
         let pathHeight = bounds.height
         let minRegionSide = min(region.width, region.height)
-        // Loosen loop size requirement so partial / squished loops still register.
-        let minLoopSize = max(minRegionSide * 0.20, minSwipeDistance * 0.9)
-        // Allow finger to land further from the start — partial circles often
-        // don't close all the way back.
-        let returnedNearStart = distance(start, end) <= max(tapDistanceThreshold * 2.2, minRegionSide * 0.45)
+        let minLoopSize = max(minRegionSide * 0.30, minSwipeDistance * 1.15)
+        let returnedNearStart = distance(start, end) <= max(tapDistanceThreshold * 1.5, minRegionSide * 0.30)
 
         guard returnedNearStart,
               pathWidth >= minLoopSize,
               pathHeight >= minLoopSize,
-              pathLength() >= minRegionSide * 1.2 else {
+              pathLength() >= minRegionSide * 1.45 else {
             return false
         }
 
@@ -675,8 +690,8 @@ class GestureEngine {
             totalAngle += angle
         }
 
-        // Accept open / partial loops (~260° and up).
-        return abs(totalAngle) > 1.45 * .pi
+        // Require nearly a full turn; short curved swipes should stay swipes.
+        return abs(totalAngle) > 1.60 * .pi
     }
 
     private func isClosedLoopGesture(in region: CGRect) -> Bool {
