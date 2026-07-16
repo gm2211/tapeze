@@ -10,6 +10,7 @@ struct KeyboardView: View {
     let onDeleteWord: () -> Void
     let onDeleteLine: () -> Void
     let onEnter: () -> Void
+    let onMoveCursor: (Int) -> Void
     let onNextKeyboard: (() -> Void)?
 
     @State private var keyRegions: [GridPosition: CGRect] = [:]
@@ -1263,6 +1264,10 @@ struct KeyboardView: View {
             state.toggleSymbolsOnly()
         case .spaceSwipeUpAndBack:
             state.toggleCenterLabels()
+        case .spaceCursorLeft:
+            onMoveCursor(-1)
+        case .spaceCursorRight:
+            onMoveCursor(1)
         case .keyboardSpace:
             onCharacter(" ")
         case .keyboardBackspace:

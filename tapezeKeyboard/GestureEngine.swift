@@ -14,6 +14,8 @@ enum GestureResult {
     enum SpecialSwipe {
         case spaceSwipeUp          // toggle symbols
         case spaceSwipeUpAndBack   // toggle center labels
+        case spaceCursorLeft       // move insertion point left
+        case spaceCursorRight      // move insertion point right
         case keyboardSpace         // long horizontal stroke across three keys
         case keyboardBackspace     // long vertical stroke across three keys
         case globeSwipeLeft        // toggle full width
@@ -159,6 +161,7 @@ class GestureEngine {
     private func analyzeSpaceBarGesture() -> GestureResult {
         guard let start = points.first, let end = points.last else { return .none }
 
+        let dx = end.x - start.x
         let dy = end.y - start.y
         let totalDist = distance(start, end)
 
@@ -173,6 +176,10 @@ class GestureEngine {
         if totalDist < tapDistanceThreshold {
             // Tap on spacebar
             return .tap(GridPosition(row: 3, col: 0)) // spacebar position
+        }
+
+        if abs(dx) >= minSwipeDistance, abs(dx) > abs(dy) * 1.2 {
+            return .specialSwipe(dx < 0 ? .spaceCursorLeft : .spaceCursorRight)
         }
 
         if dy < -minSwipeDistance {

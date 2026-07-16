@@ -87,6 +87,7 @@ struct ContentView: View {
                     onDeleteWord: deletePreviousPreviewWord,
                     onDeleteLine: deleteCurrentPreviewLine,
                     onEnter: { testText += "\n" },
+                    onMoveCursor: { _ in },
                     onNextKeyboard: nil
                 )
             }
