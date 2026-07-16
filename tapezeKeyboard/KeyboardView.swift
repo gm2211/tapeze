@@ -144,8 +144,12 @@ struct KeyboardView: View {
                             if activeBridge == .space {
                                 if !gestureEngine.hasActiveGesture {
                                     gestureEngine.touchBegan(at: value.startLocation)
+                                    scheduleZeroLongPress()
                                 }
                                 gestureEngine.touchMoved(to: value.location)
+                                if hypot(value.translation.width, value.translation.height) > 14 {
+                                    cancelNumberLongPress()
+                                }
                             } else if activeBridge == .backspace {
                                 // Track top-bridge path so we can recognize horizontal swipe → delete-word.
                                 if backspacePath.isEmpty {
@@ -210,6 +214,14 @@ struct KeyboardView: View {
                         }
 
                         if activeBridge == .space {
+                            if longPressTriggered {
+                                gestureEngine.touchCancelled()
+                                state.gestureTrailPoints = []
+                                state.activeKeyPosition = nil
+                                state.swipeDirection = nil
+                                return
+                            }
+
                             // Let gestureEngine evaluate first — it may recognize a space-swipe-up gesture.
                             if !gestureEngine.hasActiveGesture {
                                 gestureEngine.touchBegan(at: value.startLocation)
@@ -223,12 +235,7 @@ struct KeyboardView: View {
                                 || special == .spaceCursorRight:
                                 handleGestureResult(result)
                             default:
-                                // Plain tap on bottom bridge: space in letters layer, "0" in number layers.
-                                if state.currentLayer == .letters {
-                                    onCharacter(" ")
-                                } else {
-                                    onCharacter("0")
-                                }
+                                onCharacter(" ")
                             }
                             state.gestureTrailPoints = []
                             state.activeKeyPosition = nil
@@ -400,8 +407,16 @@ struct KeyboardView: View {
                     Text("␣")
                         .font(.system(size: min(max(spaceHeight * 0.34, 19), 30), weight: .medium, design: .rounded))
                 } else if state.currentLayer != .letters {
-                    Text("0")
-                        .font(.system(size: min(max(spaceHeight * 0.52, 26), 44), weight: .bold, design: .rounded))
+                    ZStack {
+                        Image(systemName: "space")
+                            .font(.system(size: min(max(spaceHeight * 0.38, 20), 30), weight: .medium))
+                        Text("0")
+                            .font(.system(size: min(max(spaceHeight * 0.20, 12), 17), weight: .semibold, design: .rounded))
+                            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topTrailing)
+                            .padding(.top, 4)
+                            .padding(.trailing, 12)
+                    }
+                    .frame(width: mainGridWidth, height: spaceHeight)
                 }
             }
             .foregroundColor(state.theme.specialTextColor)
@@ -1005,6 +1020,20 @@ struct KeyboardView: View {
             guard gestureEngine.hasActiveGesture, activeBridge == .none else { return }
             longPressTriggered = true
             onCharacter(String(position.row * gridCols + position.col + 1))
+            state.afterCharacterInserted()
+        }
+        longPressTask = task
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1.5, execute: task)
+    }
+
+    private func scheduleZeroLongPress() {
+        cancelNumberLongPress()
+        guard state.currentLayer != .letters else { return }
+
+        let task = DispatchWorkItem {
+            guard gestureEngine.hasActiveGesture, activeBridge == .space else { return }
+            longPressTriggered = true
+            onCharacter("0")
             state.afterCharacterInserted()
         }
         longPressTask = task
