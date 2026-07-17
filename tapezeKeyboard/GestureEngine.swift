@@ -642,7 +642,7 @@ class GestureEngine {
     // MARK: - Helper: Circle detection
 
     private func isCircularMotion(in region: CGRect) -> Bool {
-        guard points.count >= 8,
+        guard points.count >= 6,
               region.width > 0,
               region.height > 0,
               let start = points.first,
@@ -652,17 +652,18 @@ class GestureEngine {
         let pathWidth = bounds.width
         let pathHeight = bounds.height
         let minRegionSide = min(region.width, region.height)
-        let minLoopSize = max(minRegionSide * 0.30, minSwipeDistance * 1.15)
-        let returnedNearStart = distance(start, end) <= max(tapDistanceThreshold * 1.5, minRegionSide * 0.30)
+        let minLoopSize = max(minRegionSide * 0.24, minSwipeDistance)
+        let returnedNearStart = distance(start, end) <= max(tapDistanceThreshold * 1.5, minRegionSide * 0.32)
 
         guard returnedNearStart,
               pathWidth >= minLoopSize,
               pathHeight >= minLoopSize,
-              pathLength() >= minRegionSide * 1.45 else {
+              pathLength() >= minRegionSide * 0.95 else {
             return false
         }
 
         var totalAngle: Double = 0
+        var totalAbsoluteAngle: Double = 0
         let step = max(1, points.count / 20)
         var sampledPoints: [CGPoint] = []
         for i in stride(from: 0, to: points.count, by: step) {
@@ -688,10 +689,14 @@ class GestureEngine {
             let dot = v1x * v2x + v1y * v2y
             let angle = atan2(cross, dot)
             totalAngle += angle
+            totalAbsoluteAngle += abs(angle)
         }
 
-        // Require nearly a full turn; short curved swipes should stay swipes.
-        return abs(totalAngle) > 1.60 * .pi
+        // A compact loop can arrive with only a handful of sampled points.
+        // Require sustained turning in one direction so taps, hooks, and
+        // there-and-back strokes cannot masquerade as center-key capitals.
+        let turnConsistency = abs(totalAngle) / max(totalAbsoluteAngle, 0.001)
+        return abs(totalAngle) > 1.25 * .pi && turnConsistency >= 0.72
     }
 
     private func isClosedLoopGesture(in region: CGRect) -> Bool {
