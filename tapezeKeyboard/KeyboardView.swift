@@ -366,34 +366,38 @@ struct KeyboardView: View {
         let cornerMinX = state.commandBarOnRight ? layoutOriginX + mainGridWidth : 0
         let cornerMaxX = state.commandBarOnRight ? railX + railWidth : layoutOriginX
         let cornerWidth = max(cornerMaxX - cornerMinX, 0)
-        let hasZeroKey = state.currentLayer != .letters
-        let zeroWidth = hasZeroKey ? mainGridWidth / 3 : 0
-        let spaceWidth = mainGridWidth - zeroWidth - (hasZeroKey ? spacing : 0)
-        let spaceX = state.commandBarOnRight
-            ? layoutOriginX
-            : layoutOriginX + zeroWidth + (hasZeroKey ? spacing : 0)
-        let zeroX = state.commandBarOnRight
-            ? layoutOriginX + spaceWidth + spacing
-            : layoutOriginX
+        let bottomControls = bottomControlMetrics(
+            layoutOriginX: layoutOriginX,
+            mainGridWidth: mainGridWidth
+        )
 
         return ZStack(alignment: .topLeading) {
             Rectangle()
                 .fill(spaceBridgeFill)
-                .frame(width: spaceWidth, height: spaceHeight)
-                .position(x: spaceX + spaceWidth / 2, y: gridBottom + spaceHeight / 2)
+                .frame(width: bottomControls.spaceWidth, height: spaceHeight)
+                .position(
+                    x: bottomControls.spaceX + bottomControls.spaceWidth / 2,
+                    y: gridBottom + spaceHeight / 2
+                )
 
-            if hasZeroKey {
+            if bottomControls.hasZeroKey {
                 Rectangle()
                     .fill(backspaceBridgeFill)
-                    .frame(width: zeroWidth, height: spaceHeight)
-                    .position(x: zeroX + zeroWidth / 2, y: gridBottom + spaceHeight / 2)
+                    .frame(width: bottomControls.zeroWidth, height: spaceHeight)
+                    .position(
+                        x: bottomControls.zeroX + bottomControls.zeroWidth / 2,
+                        y: gridBottom + spaceHeight / 2
+                    )
 
                 Text("0")
                     .font(.system(size: min(max(spaceHeight * 0.48, 24), 38), weight: .medium, design: .rounded))
                     .foregroundColor(state.theme.specialTextColor)
                     .commandLabelDepth(for: state.theme)
-                    .frame(width: zeroWidth, height: spaceHeight)
-                    .position(x: zeroX + zeroWidth / 2, y: gridBottom + spaceHeight / 2)
+                    .frame(width: bottomControls.zeroWidth, height: spaceHeight)
+                    .position(
+                        x: bottomControls.zeroX + bottomControls.zeroWidth / 2,
+                        y: gridBottom + spaceHeight / 2
+                    )
             }
 
             Rectangle()
@@ -435,8 +439,11 @@ struct KeyboardView: View {
                 }
             }
             .foregroundColor(state.theme.specialTextColor)
-            .frame(width: spaceWidth, height: spaceHeight)
-            .position(x: spaceX + spaceWidth / 2, y: gridBottom + spaceHeight / 2)
+            .frame(width: bottomControls.spaceWidth, height: spaceHeight)
+            .position(
+                x: bottomControls.spaceX + bottomControls.spaceWidth / 2,
+                y: gridBottom + spaceHeight / 2
+            )
         }
         .frame(width: totalWidth, height: totalHeight, alignment: .topLeading)
     }
@@ -576,14 +583,14 @@ struct KeyboardView: View {
         if point.x >= layoutOriginX,
            point.x <= layoutOriginX + mainGridWidth,
            point.y >= gridBottom {
-            if state.currentLayer != .letters {
-                let zeroWidth = mainGridWidth / 3
-                let isZero = state.commandBarOnRight
-                    ? point.x >= layoutOriginX + mainGridWidth - zeroWidth
-                    : point.x <= layoutOriginX + zeroWidth
-                if isZero {
-                    return .zero
-                }
+            let bottomControls = bottomControlMetrics(
+                layoutOriginX: layoutOriginX,
+                mainGridWidth: mainGridWidth
+            )
+            if bottomControls.hasZeroKey,
+               point.x >= bottomControls.zeroX,
+               point.x <= bottomControls.zeroX + bottomControls.zeroWidth {
+                return .zero
             }
             return .space
         }
@@ -650,12 +657,14 @@ struct KeyboardView: View {
         )
         keyRegions = regions
         // Space bar region matches the visible bottom bridge exactly.
-        let zeroWidth = state.currentLayer == .letters ? 0 : layout.mainGridWidth / 3
-        let zeroGap = zeroWidth > 0 ? spacing : 0
+        let bottomControls = bottomControlMetrics(
+            layoutOriginX: layout.originX,
+            mainGridWidth: layout.mainGridWidth
+        )
         let bottomBridgeStripRect = CGRect(
-            x: layout.commandBarOnRight ? layout.originX : layout.originX + zeroWidth + zeroGap,
+            x: bottomControls.spaceX,
             y: originY + layout.mainGridHeight,
-            width: layout.mainGridWidth - zeroWidth - zeroGap,
+            width: bottomControls.spaceWidth,
             height: layout.bottomRowHeight
         )
         spaceBarRegion = bottomBridgeStripRect
@@ -678,6 +687,37 @@ struct KeyboardView: View {
                 height: commandTapSide
             )
         ])
+    }
+
+    private func bottomControlMetrics(
+        layoutOriginX: CGFloat,
+        mainGridWidth: CGFloat
+    ) -> BottomControlMetrics {
+        guard state.currentLayer != .letters else {
+            return BottomControlMetrics(
+                spaceX: layoutOriginX,
+                spaceWidth: mainGridWidth,
+                zeroX: layoutOriginX,
+                zeroWidth: 0
+            )
+        }
+
+        let spaceWidth = mainGridWidth / 3
+        let zeroWidth = max(mainGridWidth - spaceWidth - spacing, 0)
+        if state.commandBarOnRight {
+            return BottomControlMetrics(
+                spaceX: layoutOriginX + zeroWidth + spacing,
+                spaceWidth: spaceWidth,
+                zeroX: layoutOriginX,
+                zeroWidth: zeroWidth
+            )
+        }
+        return BottomControlMetrics(
+            spaceX: layoutOriginX,
+            spaceWidth: spaceWidth,
+            zeroX: layoutOriginX + spaceWidth + spacing,
+            zeroWidth: zeroWidth
+        )
     }
 
     private func isCommandPosition(pos: GridPosition) -> Bool {
@@ -1392,6 +1432,15 @@ private struct LatticeHitLayout: Equatable {
     let rowHeight: CGFloat
     let bottomRowHeight: CGFloat
     let commandBarOnRight: Bool
+}
+
+private struct BottomControlMetrics {
+    let spaceX: CGFloat
+    let spaceWidth: CGFloat
+    let zeroX: CGFloat
+    let zeroWidth: CGFloat
+
+    var hasZeroKey: Bool { zeroWidth > 0 }
 }
 
 enum ActiveBridge: Equatable {
