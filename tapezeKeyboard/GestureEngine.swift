@@ -564,22 +564,19 @@ class GestureEngine {
         var farthestDistance: CGFloat = 0
 
         for point in points.dropFirst() {
-            let outwardDistance = distance(center, point)
-            guard outwardDistance >= activation || distance(start, point) >= activation else {
-                continue
-            }
+            let travelDistance = distance(start, point)
+            guard travelDistance >= activation else { continue }
 
-            if outwardDistance > farthestDistance {
-                farthestDistance = outwardDistance
+            if travelDistance > farthestDistance {
+                farthestDistance = travelDistance
                 farthestPoint = point
             }
         }
 
         guard let point = farthestPoint else { return nil }
 
-        // Use angle from key center to the peak excursion point.
-        // This is more robust than subcell-clamping when the finger curves
-        // back toward the center or overshoots past the key edge.
+        // Require deliberate travel from touchdown, then resolve the target
+        // from the key center so off-center starts do not skew corner swipes.
         let dx = Double(point.x - center.x)
         let dy = Double(point.y - center.y)
         // Convert to math-style angle (y up positive).
