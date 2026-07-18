@@ -19,6 +19,7 @@ struct KeyboardView: View {
     @State private var gestureEngine = GestureEngine()
     @State private var activeBridge: ActiveBridge = .none
     @State private var backspacePath: [CGPoint] = []
+    @State private var backspaceScrub = BackspaceScrubTracker()
     @State private var currentKeySide: CGFloat = 1
     @State private var longPressTask: DispatchWorkItem?
     @State private var longPressTriggered = false
@@ -151,11 +152,14 @@ struct KeyboardView: View {
                                 }
                                 gestureEngine.touchMoved(to: value.location)
                             } else if activeBridge == .backspace {
-                                // Track top-bridge path so we can recognize horizontal swipe → delete-word.
                                 if backspacePath.isEmpty {
                                     backspacePath = [value.startLocation]
+                                    backspaceScrub.reset(start: value.startLocation)
                                 }
                                 backspacePath.append(value.location)
+                                if backspaceScrub.observe(value.location, keySide: keySide) {
+                                    onDeleteWord()
+                                }
                             }
                             return
                         }
@@ -186,6 +190,7 @@ struct KeyboardView: View {
                             longPressTriggered = false
                             activeBridge = .none
                             backspacePath = []
+                            backspaceScrub.reset()
                         }
 
                         if activeBridge == .enter {
@@ -205,14 +210,20 @@ struct KeyboardView: View {
 
                         if activeBridge == .backspace {
                             backspacePath.append(value.location)
+                            if backspaceScrub.observe(value.location, keySide: keySide) {
+                                onDeleteWord()
+                            }
+                            if backspaceScrub.deletedWord {
+                                state.gestureTrailPoints = []
+                                state.activeKeyPosition = nil
+                                return
+                            }
                             let action = analyzeBackspacePath(backspacePath, keySide: keySide)
                             switch action {
                             case .single:
                                 onBackspace()
                             case .word:
                                 onDeleteWord()
-                            case .line:
-                                onDeleteLine()
                             case .cancel:
                                 break
                             }
@@ -1133,7 +1144,6 @@ struct KeyboardView: View {
     private enum BackspaceAction {
         case single
         case word
-        case line
         case cancel
     }
 
@@ -1157,16 +1167,6 @@ struct KeyboardView: View {
         }
 
         let horizontalExcursion = max(maxLeft, maxRight)
-        let returnedNearStart = total <= max(keySide * 0.35, 24)
-        let backAndForthThreshold = keySide * 0.45
-
-        // Both directions traversed and finger ended near start → delete entire line.
-        if returnedNearStart,
-           maxLeft >= backAndForthThreshold,
-           maxRight >= backAndForthThreshold {
-            return .line
-        }
-
         // Cancel-by-large-vertical-slide.
         if maxVertical > horizontalExcursion * 1.3, maxVertical > keySide * 0.7 {
             return .cancel
@@ -1307,17 +1307,13 @@ struct KeyboardView: View {
         return letterGrid[pos.row][pos.col].swipes[direction]
     }
 
-    private func handleCommandSwipe(from pos: GridPosition, isBackAndForth: Bool) -> Bool {
+    private func handleCommandSwipe(from pos: GridPosition, isBackAndForth _: Bool) -> Bool {
         guard pos.col == 3 || pos.col == -1 else { return false }
         let commands = state.currentCommandBar
         guard pos.row >= 0 && pos.row < commands.count else { return false }
         guard commands[pos.row].specialAction == .backspace else { return false }
 
-        if isBackAndForth {
-            onDeleteLine()
-        } else {
-            onDeleteWord()
-        }
+        onDeleteWord()
         return true
     }
 
@@ -1441,6 +1437,38 @@ private struct BottomControlMetrics {
     let zeroWidth: CGFloat
 
     var hasZeroKey: Bool { zeroWidth > 0 }
+}
+
+private struct BackspaceScrubTracker {
+    private(set) var deletedWord = false
+    private var start: CGPoint?
+    private var isArmed = false
+
+    mutating func reset(start: CGPoint? = nil) {
+        self.start = start
+        isArmed = false
+        deletedWord = false
+    }
+
+    mutating func observe(_ point: CGPoint, keySide: CGFloat) -> Bool {
+        guard let start else { return false }
+        let horizontal = abs(point.x - start.x)
+        let vertical = abs(point.y - start.y)
+        let outwardThreshold = max(keySide * 0.42, 28)
+        let returnThreshold = max(keySide * 0.18, 14)
+
+        if !isArmed {
+            if horizontal >= outwardThreshold, horizontal > vertical * 1.15 {
+                isArmed = true
+            }
+            return false
+        }
+
+        guard hypot(horizontal, vertical) <= returnThreshold else { return false }
+        isArmed = false
+        deletedWord = true
+        return true
+    }
 }
 
 enum ActiveBridge: Equatable {
