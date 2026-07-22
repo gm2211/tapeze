@@ -817,9 +817,11 @@ struct CharacterKeyView: View {
     }
 
     private func positionForDirection(_ dir: SwipeDirection, in size: CGSize) -> CGPoint {
+        // Equal insets on every side keep the satellite labels in a ring that
+        // is concentric with the center character (most visible on "o").
         let xInset: CGFloat = 0.28
-        let topInset: CGFloat = 0.25
-        let bottomInset: CGFloat = 0.18
+        let topInset: CGFloat = 0.28
+        let bottomInset: CGFloat = 0.28
         let xPositions: [CGFloat] = [xInset, 0.5, 1.0 - xInset]
         let yPositions: [CGFloat] = [topInset, 0.5, 1.0 - bottomInset]
 
@@ -845,8 +847,8 @@ struct CharacterKeyView: View {
 
     private func symbolOverlayPositionForDirection(_ dir: SwipeDirection, in size: CGSize) -> CGPoint {
         let xInset: CGFloat = 0.28
-        let topInset: CGFloat = 0.25
-        let bottomInset: CGFloat = 0.18
+        let topInset: CGFloat = 0.28
+        let bottomInset: CGFloat = 0.28
         let xPositions: [CGFloat] = [xInset, 0.5, 1.0 - xInset]
         let yPositions: [CGFloat] = [topInset, 0.5, 1.0 - bottomInset]
 
