@@ -23,6 +23,9 @@ struct KeyboardView: View {
     @State private var currentKeySide: CGFloat = 1
     @State private var longPressTask: DispatchWorkItem?
     @State private var longPressTriggered = false
+    @State private var logicalGestureActive = false
+    @State private var lastTrackedPoint: CGPoint?
+    @State private var currentDragStart: CGPoint?
 
     private let gridRows = 3
     private let gridCols = 3
@@ -129,153 +132,72 @@ struct KeyboardView: View {
             .gesture(
                 DragGesture(minimumDistance: 0, coordinateSpace: .named("keyboard"))
                     .onChanged { value in
-                        // Determine bridge membership once, on gesture START.
-                        if !gestureEngine.hasActiveGesture {
-                            activeBridge = bridgeAt(
-                                value.startLocation,
-                                totalWidth: totalWidth,
-                                totalHeight: totalHeight,
-                                stripHeight: topInset,
-                                armWidth: armWidth,
-                                rowHeight: keySide,
-                                layoutOriginX: layoutOriginX,
-                                mainGridWidth: mainGridWidth,
-                                backspaceRailWidth: backspaceRailWidth
-                            )
-                        }
+                        let ctx = GestureLayoutContext(
+                            totalWidth: totalWidth,
+                            totalHeight: totalHeight,
+                            stripHeight: topInset,
+                            armWidth: armWidth,
+                            keySide: keySide,
+                            layoutOriginX: layoutOriginX,
+                            mainGridWidth: mainGridWidth,
+                            backspaceRailWidth: backspaceRailWidth
+                        )
 
-                        if activeBridge != .none {
-                            // Bridge touches: feed bottom-bridge into gestureEngine so space-swipe-up works.
-                            if activeBridge == .space {
-                                if !gestureEngine.hasActiveGesture {
-                                    gestureEngine.touchBegan(at: value.startLocation)
-                                }
-                                gestureEngine.touchMoved(to: value.location)
-                            } else if activeBridge == .backspace {
-                                if backspacePath.isEmpty {
-                                    backspacePath = [value.startLocation]
-                                    backspaceScrub.reset(start: value.startLocation)
-                                }
-                                backspacePath.append(value.location)
-                                if backspaceScrub.observe(value.location, keySide: keySide) {
-                                    onDeleteWord()
-                                }
+                        // A fresh drag while state still says a gesture is active
+                        // means the previous drag was cancelled by the system and
+                        // onEnded never fired. Clear the stale state instead of
+                        // ignoring input until the keyboard is dismissed.
+                        if currentDragStart != value.startLocation {
+                            if logicalGestureActive {
+                                abandonStaleGesture()
                             }
-                            return
+                            currentDragStart = value.startLocation
                         }
 
-                        // Key touch path
-                        if longPressTriggered {
-                            return
+                        if logicalGestureActive,
+                           let last = lastTrackedPoint,
+                           distance(last, value.location) > teleportThreshold(ctx.keySide) {
+                            // During fast two-thumb typing SwiftUI hands the single
+                            // drag over to the second finger, teleporting the
+                            // location. Commit the interrupted gesture where it was
+                            // and start a fresh one at the new finger.
+                            finishLogicalGesture(at: last, ctx: ctx)
+                            beginLogicalGesture(at: value.location, ctx: ctx)
+                        } else if !logicalGestureActive {
+                            beginLogicalGesture(at: value.startLocation, ctx: ctx)
                         }
-                        if !gestureEngine.hasActiveGesture {
-                            gestureEngine.touchBegan(at: value.startLocation)
-                            resetGestureTrail(at: value.startLocation)
-                            scheduleNumberLongPress(at: value.startLocation)
-                        }
-                        gestureEngine.touchMoved(to: value.location)
-                        if hypot(value.translation.width, value.translation.height) > 14 {
-                            cancelNumberLongPress()
-                        }
-                        if state.showGestureTrail {
-                            appendGestureTrailPoint(value.location)
-                        } else {
-                            state.gestureTrailPoints = []
-                        }
-                        updateActiveKey(at: value.location)
+
+                        continueLogicalGesture(at: value.location, ctx: ctx)
+                        lastTrackedPoint = value.location
                     }
                     .onEnded { value in
-                        defer {
-                            cancelNumberLongPress()
-                            longPressTriggered = false
-                            activeBridge = .none
-                            backspacePath = []
-                            backspaceScrub.reset()
+                        let ctx = GestureLayoutContext(
+                            totalWidth: totalWidth,
+                            totalHeight: totalHeight,
+                            stripHeight: topInset,
+                            armWidth: armWidth,
+                            keySide: keySide,
+                            layoutOriginX: layoutOriginX,
+                            mainGridWidth: mainGridWidth,
+                            backspaceRailWidth: backspaceRailWidth
+                        )
+
+                        if currentDragStart != value.startLocation, logicalGestureActive {
+                            abandonStaleGesture()
                         }
 
-                        if activeBridge == .enter {
-                            onEnter()
-                            state.gestureTrailPoints = []
-                            state.activeKeyPosition = nil
-                            return
+                        if logicalGestureActive,
+                           let last = lastTrackedPoint,
+                           distance(last, value.location) > teleportThreshold(ctx.keySide) {
+                            finishLogicalGesture(at: last, ctx: ctx)
+                            beginLogicalGesture(at: value.location, ctx: ctx)
+                        } else if !logicalGestureActive {
+                            beginLogicalGesture(at: value.startLocation, ctx: ctx)
                         }
 
-                        if activeBridge == .zero {
-                            onCharacter("0")
-                            state.afterCharacterInserted()
-                            state.gestureTrailPoints = []
-                            state.activeKeyPosition = nil
-                            return
-                        }
-
-                        if activeBridge == .backspace {
-                            backspacePath.append(value.location)
-                            if backspaceScrub.observe(value.location, keySide: keySide) {
-                                onDeleteWord()
-                            }
-                            if backspaceScrub.deletedWord {
-                                state.gestureTrailPoints = []
-                                state.activeKeyPosition = nil
-                                return
-                            }
-                            let action = analyzeBackspacePath(backspacePath, keySide: keySide)
-                            switch action {
-                            case .single:
-                                onBackspace()
-                            case .word:
-                                onDeleteWord()
-                            case .cancel:
-                                break
-                            }
-                            state.gestureTrailPoints = []
-                            state.activeKeyPosition = nil
-                            return
-                        }
-
-                        if activeBridge == .space {
-                            // Let gestureEngine evaluate first — it may recognize a space-swipe-up gesture.
-                            if !gestureEngine.hasActiveGesture {
-                                gestureEngine.touchBegan(at: value.startLocation)
-                            }
-                            let result = gestureEngine.touchEnded(at: value.location)
-                            switch result {
-                            case .specialSwipe(let special) where
-                                special == .spaceSwipeUp
-                                || special == .spaceSwipeUpAndBack
-                                || special == .spaceCursorLeft
-                                || special == .spaceCursorRight:
-                                handleGestureResult(result)
-                            default:
-                                onCharacter(" ")
-                            }
-                            state.gestureTrailPoints = []
-                            state.activeKeyPosition = nil
-                            state.swipeDirection = nil
-                            return
-                        }
-
-                        // Key touch path — activeBridge == .none
-                        if longPressTriggered {
-                            gestureEngine.touchCancelled()
-                            state.gestureTrailPoints = []
-                            state.activeKeyPosition = nil
-                            state.swipeDirection = nil
-                            return
-                        }
-                        if !gestureEngine.hasActiveGesture {
-                            gestureEngine.touchBegan(at: value.startLocation)
-                            resetGestureTrail(at: value.startLocation)
-                        }
-                        if state.showGestureTrail {
-                            appendGestureTrailPoint(value.location, force: true)
-                        }
-                        let result = gestureEngine.touchEnded(at: value.location)
-                        handleGestureResult(result)
-                        state.activeKeyPosition = nil
-                        state.swipeDirection = nil
-                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.12) {
-                            state.gestureTrailPoints = []
-                        }
+                        finishLogicalGesture(at: value.location, ctx: ctx)
+                        currentDragStart = nil
+                        lastTrackedPoint = nil
                     }
             )
             .overlay {
@@ -609,6 +531,155 @@ struct KeyboardView: View {
         return .none
     }
 
+    // MARK: - Logical Gesture Lifecycle
+
+    /// A drag can teleport when SwiftUI hands it from one finger to another, so a
+    /// jump larger than a key can't be real finger travel between two samples.
+    private func teleportThreshold(_ keySide: CGFloat) -> CGFloat {
+        max(keySide * 1.05, 96)
+    }
+
+    private func beginLogicalGesture(at point: CGPoint, ctx: GestureLayoutContext) {
+        logicalGestureActive = true
+        longPressTriggered = false
+        activeBridge = bridgeAt(
+            point,
+            totalWidth: ctx.totalWidth,
+            totalHeight: ctx.totalHeight,
+            stripHeight: ctx.stripHeight,
+            armWidth: ctx.armWidth,
+            rowHeight: ctx.keySide,
+            layoutOriginX: ctx.layoutOriginX,
+            mainGridWidth: ctx.mainGridWidth,
+            backspaceRailWidth: ctx.backspaceRailWidth
+        )
+
+        switch activeBridge {
+        case .space:
+            gestureEngine.touchBegan(at: point)
+        case .backspace:
+            backspacePath = [point]
+            backspaceScrub.reset(start: point)
+        case .none:
+            gestureEngine.touchBegan(at: point)
+            resetGestureTrail(at: point)
+            scheduleNumberLongPress(at: point)
+        case .enter, .zero:
+            break
+        }
+    }
+
+    private func continueLogicalGesture(at point: CGPoint, ctx: GestureLayoutContext) {
+        switch activeBridge {
+        case .space:
+            gestureEngine.touchMoved(to: point)
+        case .backspace:
+            backspacePath.append(point)
+            if backspaceScrub.observe(point, keySide: ctx.keySide) {
+                onDeleteWord()
+            }
+        case .none:
+            guard !longPressTriggered else { return }
+            gestureEngine.touchMoved(to: point)
+            if let start = gestureEngine.points.first, distance(start, point) > 14 {
+                cancelNumberLongPress()
+            }
+            if state.showGestureTrail {
+                appendGestureTrailPoint(point)
+            } else {
+                state.gestureTrailPoints = []
+            }
+            updateActiveKey(at: point)
+        case .enter, .zero:
+            break
+        }
+    }
+
+    private func finishLogicalGesture(at point: CGPoint, ctx: GestureLayoutContext) {
+        let bridge = activeBridge
+        logicalGestureActive = false
+        cancelNumberLongPress()
+        activeBridge = .none
+        state.activeKeyPosition = nil
+        state.swipeDirection = nil
+
+        switch bridge {
+        case .enter:
+            onEnter()
+            state.gestureTrailPoints = []
+
+        case .zero:
+            onCharacter("0")
+            state.afterCharacterInserted()
+            state.gestureTrailPoints = []
+
+        case .backspace:
+            backspacePath.append(point)
+            if backspaceScrub.observe(point, keySide: ctx.keySide) {
+                onDeleteWord()
+            }
+            if !backspaceScrub.deletedWord {
+                switch analyzeBackspacePath(backspacePath, keySide: ctx.keySide) {
+                case .single:
+                    onBackspace()
+                case .word:
+                    onDeleteWord()
+                case .cancel:
+                    break
+                }
+            }
+            backspacePath = []
+            backspaceScrub.reset()
+            state.gestureTrailPoints = []
+
+        case .space:
+            // Let gestureEngine evaluate first — it may recognize a space-swipe gesture.
+            let result = gestureEngine.touchEnded(at: point)
+            switch result {
+            case .specialSwipe(let special) where
+                special == .spaceSwipeUp
+                || special == .spaceSwipeUpAndBack
+                || special == .spaceCursorLeft
+                || special == .spaceCursorRight:
+                handleGestureResult(result)
+            default:
+                onCharacter(" ")
+            }
+            state.gestureTrailPoints = []
+
+        case .none:
+            if longPressTriggered {
+                longPressTriggered = false
+                gestureEngine.touchCancelled()
+                state.gestureTrailPoints = []
+                return
+            }
+            if state.showGestureTrail {
+                appendGestureTrailPoint(point, force: true)
+            }
+            let result = gestureEngine.touchEnded(at: point)
+            handleGestureResult(result)
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.12) {
+                state.gestureTrailPoints = []
+            }
+        }
+        longPressTriggered = false
+    }
+
+    private func abandonStaleGesture() {
+        gestureEngine.touchCancelled()
+        cancelNumberLongPress()
+        longPressTriggered = false
+        activeBridge = .none
+        backspacePath = []
+        backspaceScrub.reset()
+        logicalGestureActive = false
+        lastTrackedPoint = nil
+        state.gestureTrailPoints = []
+        state.activeKeyPosition = nil
+        state.swipeDirection = nil
+    }
+
     private func registerHitLayout(_ layout: LatticeHitLayout) {
         let commandCol = layout.commandBarOnRight ? 3 : -1
         let mainX = layout.originX
@@ -616,7 +687,10 @@ struct KeyboardView: View {
         // Diamond hit rects are smaller than the visual to avoid overlapping letter cells.
         let diamondSide = min(layout.keySide, layout.rowHeight) * 0.40
         let diamondHalf = diamondSide / 2
-        let commandTapSide = min(layout.keySide, layout.rowHeight) * 0.74
+        // Keep the forgiving tap target close to the visible diamond (0.54 of a
+        // key). A larger region swallows taps aimed at adjacent letter corners
+        // and switches to the number layer instead of typing the letter.
+        let commandTapSide = min(layout.keySide, layout.rowHeight) * 0.58
         let commandTapHalf = commandTapSide / 2
 
         // Letter cell regions are now set via GeometryReader in mainGrid; only keep
@@ -1273,10 +1347,28 @@ struct KeyboardView: View {
             return
         }
 
-        if let char = config.swipes[direction]
-            ?? hiddenSymbolSwipe(from: pos, direction: direction)
-            ?? numberLayerLetterSwipe(from: pos, direction: direction) {
+        if let char = config.swipes[direction] {
             insertSwipeCharacter(char, uppercase: uppercase)
+            return
+        }
+
+        // Hidden symbol swipes only fire while the symbol overlay is visible,
+        // and never on an uppercase swipe-back — that gesture means a letter.
+        if !uppercase, state.isSymbolOverlayActive,
+           let char = hiddenSymbolSwipe(from: pos, direction: direction) {
+            insertSwipeCharacter(char, uppercase: false)
+            return
+        }
+
+        if let char = numberLayerLetterSwipe(from: pos, direction: direction) {
+            insertSwipeCharacter(char, uppercase: uppercase)
+            return
+        }
+
+        // Unassigned direction: the finger wobbled off a plain tap or a circle
+        // fell short. Type the key's base character instead of dropping input.
+        if config.specialAction == nil, !config.tap.isEmpty {
+            insertSwipeCharacter(config.tap, uppercase: uppercase)
         }
     }
 
@@ -1428,6 +1520,17 @@ private struct LatticeHitLayout: Equatable {
     let rowHeight: CGFloat
     let bottomRowHeight: CGFloat
     let commandBarOnRight: Bool
+}
+
+private struct GestureLayoutContext {
+    let totalWidth: CGFloat
+    let totalHeight: CGFloat
+    let stripHeight: CGFloat
+    let armWidth: CGFloat
+    let keySide: CGFloat
+    let layoutOriginX: CGFloat
+    let mainGridWidth: CGFloat
+    let backspaceRailWidth: CGFloat
 }
 
 private struct BottomControlMetrics {
