@@ -1263,11 +1263,11 @@ struct KeyboardView: View {
         case .tap(let pos):
             handleTap(at: pos)
 
-        case .swipe(let pos, let dir):
-            handleSwipe(from: pos, direction: dir, uppercase: false)
+        case .swipe(let pos, let dir, let reach):
+            handleSwipe(from: pos, direction: dir, uppercase: false, reach: reach)
 
-        case .swipeBack(let pos, let dir):
-            handleSwipe(from: pos, direction: dir, uppercase: true)
+        case .swipeBack(let pos, let dir, let reach):
+            handleSwipe(from: pos, direction: dir, uppercase: true, reach: reach)
 
         case .circle(let pos):
             handleCircle(at: pos)
@@ -1312,7 +1312,7 @@ struct KeyboardView: View {
         }
     }
 
-    private func handleSwipe(from pos: GridPosition, direction: SwipeDirection, uppercase: Bool) {
+    private func handleSwipe(from pos: GridPosition, direction: SwipeDirection, uppercase: Bool, reach: CGFloat) {
         if handleCommandSwipe(from: pos, isBackAndForth: uppercase) {
             return
         }
@@ -1352,9 +1352,11 @@ struct KeyboardView: View {
             return
         }
 
-        // Hidden symbol swipes only fire while the symbol overlay is visible,
-        // and never on an uppercase swipe-back — that gesture means a letter.
-        if !uppercase, state.isSymbolOverlayActive,
+        // Symbol-overlay swipes stay reachable whether or not their labels are
+        // showing. While hidden they are unlabeled targets, so they demand a
+        // committed swipe — a fast-typing wobble off a tap must not reach them.
+        // Never on an uppercase swipe-back: that gesture means a letter.
+        if !uppercase, reach >= symbolSwipeMinimumReach,
            let char = hiddenSymbolSwipe(from: pos, direction: direction) {
             insertSwipeCharacter(char, uppercase: false)
             return
@@ -1370,6 +1372,13 @@ struct KeyboardView: View {
         if config.specialAction == nil, !config.tap.isEmpty {
             insertSwipeCharacter(config.tap, uppercase: uppercase)
         }
+    }
+
+    /// How far a swipe must travel, in key half-sides, to select a symbol whose
+    /// label is not currently drawn. Visible labels fire at normal sensitivity;
+    /// this only guards the unlabeled ones.
+    private var symbolSwipeMinimumReach: CGFloat {
+        state.isSymbolOverlayActive ? 0 : 0.80
     }
 
     private func insertSwipeCharacter(_ char: String, uppercase: Bool) {

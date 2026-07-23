@@ -5,8 +5,11 @@ import Foundation
 
 enum GestureResult {
     case tap(GridPosition)
-    case swipe(fromKey: GridPosition, direction: SwipeDirection)
-    case swipeBack(fromKey: GridPosition, direction: SwipeDirection) // uppercase variant
+    /// `reach` is how far the finger travelled from touchdown, normalized by the
+    /// key's half-side: ~0.3 is a wobble off a tap, ~1.0 reaches the key edge.
+    /// Callers use it to require extra commitment for unlabeled targets.
+    case swipe(fromKey: GridPosition, direction: SwipeDirection, reach: CGFloat)
+    case swipeBack(fromKey: GridPosition, direction: SwipeDirection, reach: CGFloat) // uppercase variant
     case circle(GridPosition) // uppercase of tap char
     case specialSwipe(SpecialSwipe)
     case none
@@ -129,31 +132,33 @@ class GestureEngine {
         }
 
         let endKey = keyAt(end)
-        let subcellDirection = firstSubcellDirection(from: startKey)
+        let subcell = firstSubcellDirection(from: startKey)
 
         // Finger returned to the same key: resolve against the 3x3 subcells.
         if endKey == startKey {
             if let region = keyRegions[startKey], isCircularMotion(in: region) {
                 return .circle(startKey)
             }
-            if let direction = subcellDirection {
+            if let subcell {
                 if didReturnTowardStart(from: start, to: end, key: startKey) {
-                    return .swipeBack(fromKey: startKey, direction: direction)
+                    return .swipeBack(fromKey: startKey, direction: subcell.direction, reach: subcell.reach)
                 }
-                return .swipe(fromKey: startKey, direction: direction)
+                return .swipe(fromKey: startKey, direction: subcell.direction, reach: subcell.reach)
             }
             return .tap(startKey)
         }
 
-        if let direction = subcellDirection {
-            return .swipe(fromKey: startKey, direction: direction)
+        if let subcell {
+            return .swipe(fromKey: startKey, direction: subcell.direction, reach: subcell.reach)
         }
 
         // Finger ended on a different key: prefer the destination key's grid
         // direction so slightly off-center starts still resolve cleanly.
         let direction = endKey.flatMap { gridDirection(from: startKey, to: $0) }
             ?? peakSwipeDirection(from: startKey)
-        return .swipe(fromKey: startKey, direction: direction)
+        // Crossing into a neighbouring key is itself a committed gesture.
+        let crossKeyReach = keyRegions[startKey].map { normalizedReach(maxDistance, in: $0) } ?? 1
+        return .swipe(fromKey: startKey, direction: direction, reach: crossKeyReach)
     }
 
     // MARK: - Special Gesture Analysis
@@ -555,7 +560,7 @@ class GestureEngine {
         }
     }
 
-    private func firstSubcellDirection(from key: GridPosition) -> SwipeDirection? {
+    private func firstSubcellDirection(from key: GridPosition) -> (direction: SwipeDirection, reach: CGFloat)? {
         guard let region = keyRegions[key], let start = points.first else { return nil }
         let center = CGPoint(x: region.midX, y: region.midY)
         let activation = max(subcellActivationDistance, min(region.width, region.height) * 0.18)
@@ -581,7 +586,14 @@ class GestureEngine {
         let dy = Double(point.y - center.y)
         // Convert to math-style angle (y up positive).
         let angle = atan2(-dy, dx)
-        return SwipeDirection.fromAngle(angle)
+        return (SwipeDirection.fromAngle(angle), normalizedReach(farthestDistance, in: region))
+    }
+
+    /// Peak travel from touchdown expressed in key half-sides.
+    private func normalizedReach(_ travel: CGFloat, in region: CGRect) -> CGFloat {
+        let halfSide = min(region.width, region.height) / 2
+        guard halfSide > 0 else { return 0 }
+        return travel / halfSide
     }
 
     private func subcellDirection(for point: CGPoint, in region: CGRect) -> SwipeDirection? {
