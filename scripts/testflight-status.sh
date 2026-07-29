@@ -30,6 +30,13 @@ if [[ -z "$APPLE_ID" || -z "$BUNDLE_VERSION" ]]; then
 	exit 2
 fi
 
+ASC_API_KEY_ID="${ASC_API_KEY_ID:-$(security find-generic-password -s ASC_API_KEY_ID -w 2>/dev/null || true)}"
+ASC_API_ISSUER_ID="${ASC_API_ISSUER_ID:-$(security find-generic-password -s ASC_API_ISSUER_ID -w 2>/dev/null || true)}"
+if [[ -z "${ASC_API_KEY_PATH:-}" ]]; then
+	default_key_path="$HOME/.appstoreconnect/private_keys/AuthKey_${ASC_API_KEY_ID}.p8"
+	[[ -n "${ASC_API_KEY_ID:-}" && -f "$default_key_path" ]] && ASC_API_KEY_PATH="$default_key_path"
+fi
+
 auth_args=()
 if [[ -n "${ASC_API_KEY_ID:-}" && -n "${ASC_API_ISSUER_ID:-}" ]]; then
 	auth_args+=(--api-key "$ASC_API_KEY_ID" --api-issuer "$ASC_API_ISSUER_ID")

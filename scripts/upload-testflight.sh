@@ -92,6 +92,17 @@ increment_build_number() {
 	echo "Incremented build number: $current -> $next"
 }
 
+# Fall back to the login keychain for API credentials so uploads don't need
+# the issuer ID re-typed each session. Populate once with:
+#   security add-generic-password -s ASC_API_KEY_ID -a "$USER" -w <key id> -U
+#   security add-generic-password -s ASC_API_ISSUER_ID -a "$USER" -w <issuer uuid> -U
+ASC_API_KEY_ID="${ASC_API_KEY_ID:-$(security find-generic-password -s ASC_API_KEY_ID -w 2>/dev/null || true)}"
+ASC_API_ISSUER_ID="${ASC_API_ISSUER_ID:-$(security find-generic-password -s ASC_API_ISSUER_ID -w 2>/dev/null || true)}"
+if [[ -z "${ASC_API_KEY_PATH:-}" ]]; then
+	default_key_path="$HOME/.appstoreconnect/private_keys/AuthKey_${ASC_API_KEY_ID}.p8"
+	[[ -n "${ASC_API_KEY_ID:-}" && -f "$default_key_path" ]] && ASC_API_KEY_PATH="$default_key_path"
+fi
+
 auth_args=()
 build_auth_args=()
 if [[ -n "${ASC_API_KEY_ID:-}" && -n "${ASC_API_ISSUER_ID:-}" ]]; then
