@@ -1,7 +1,7 @@
 {
   "database": "dolt",
   "backend": "dolt",
-  "dolt_mode": "embedded",
+  "dolt_mode": "server",
   "dolt_database": "tapeze",
   "project_id": "2a51f8a7-7c44-4a3d-899c-c7ef09e0944f"
 }
