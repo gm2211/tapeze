@@ -37,3 +37,7 @@ Pods/
 
 # claude
 .claude
+
+.beads/issues.jsonl
+.beads/interactions.jsonl
+.beads/export-state.json
