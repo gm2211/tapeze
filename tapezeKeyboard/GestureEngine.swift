@@ -131,14 +131,31 @@ class GestureEngine {
             return .tap(startKey)
         }
 
+        let startRegion = keyRegions[startKey]
+
+        // Loops resolve before key ownership. A circle drawn on an edge or
+        // corner key — the top-right "i" most of all — routinely bulges into a
+        // neighbour or off the grid entirely, so the gesture belongs to the key
+        // the finger touched down on, not wherever it happened to lift.
+        if let region = startRegion, isCircularMotion(in: region) {
+            return .circle(startKey)
+        }
+
         let endKey = keyAt(end)
         let subcell = firstSubcellDirection(from: startKey)
 
+        // A loop that fell short of a full turn is still a capital attempt, not
+        // a reach for an unlabeled symbol. Reporting it as a swipe-back keeps it
+        // on the uppercase path, which falls back to the key's own capital when
+        // the direction carries no secondary letter.
+        if let region = startRegion, isLoopLikeMotion(in: region) {
+            let direction = subcell?.direction ?? peakSwipeDirection(from: startKey)
+            let reach = subcell?.reach ?? normalizedReach(maxDistance, in: region)
+            return .swipeBack(fromKey: startKey, direction: direction, reach: reach)
+        }
+
         // Finger returned to the same key: resolve against the 3x3 subcells.
         if endKey == startKey {
-            if let region = keyRegions[startKey], isCircularMotion(in: region) {
-                return .circle(startKey)
-            }
             if let subcell {
                 if didReturnTowardStart(from: start, to: end, key: startKey) {
                     return .swipeBack(fromKey: startKey, direction: subcell.direction, reach: subcell.reach)
@@ -650,39 +667,55 @@ class GestureEngine {
 
     // MARK: - Helper: Circle detection
 
-    private func isCircularMotion(in region: CGRect) -> Bool {
+    /// Shape summary of the current path, measured against the key it started on.
+    private struct LoopMetrics {
+        /// Gap between touchdown and lift. A closed loop ends on top of its
+        /// start; an arc the finger let go of early ends up to a diameter away.
+        let endDistance: CGFloat
+        let minRegionSide: CGFloat
+        let hasLoopExtent: Bool
+        let hasLoopLength: Bool
+        /// Signed turning, in radians, accumulated along the sampled path.
+        let totalTurn: Double
+        /// How much of the turning went the same way; ~1 for a clean loop.
+        let turnConsistency: Double
+        /// Enclosed area over bounding-box area: ~0.79 for a circle, ~0 for a
+        /// there-and-back retrace, which is what separates the two gestures
+        /// when both cover the same ground and return to the same spot.
+        let fillRatio: Double
+    }
+
+    private func loopMetrics(in region: CGRect) -> LoopMetrics? {
         guard points.count >= 6,
               region.width > 0,
               region.height > 0,
               let start = points.first,
-              let end = points.last else { return false }
+              let end = points.last else { return nil }
 
         let bounds = pathBounds()
-        let pathWidth = bounds.width
-        let pathHeight = bounds.height
         let minRegionSide = min(region.width, region.height)
         let minLoopSize = max(minRegionSide * 0.24, minSwipeDistance)
-        let returnedNearStart = distance(start, end) <= max(tapDistanceThreshold * 1.5, minRegionSide * 0.32)
-
-        guard returnedNearStart,
-              pathWidth >= minLoopSize,
-              pathHeight >= minLoopSize,
-              pathLength() >= minRegionSide * 0.95 else {
-            return false
-        }
 
         var totalAngle: Double = 0
         var totalAbsoluteAngle: Double = 0
-        let step = max(1, points.count / 20)
-        var sampledPoints: [CGPoint] = []
-        for i in stride(from: 0, to: points.count, by: step) {
-            sampledPoints.append(points[i])
+
+        // Resample by distance travelled rather than by index. Touch samples
+        // arrive faster than the finger moves, so evenly-indexed points on a
+        // small loop sit a pixel or two apart and their headings are mostly
+        // sensor noise — which is what used to make a perfectly good circle
+        // read as inconsistent turning.
+        let spacing = max(6, minRegionSide * 0.12)
+        var sampledPoints: [CGPoint] = [start]
+        for point in points.dropFirst() where distance(sampledPoints[sampledPoints.count - 1], point) >= spacing {
+            sampledPoints.append(point)
         }
-        if let last = points.last, sampledPoints.last != last {
-            sampledPoints.append(last)
+        if let last = sampledPoints.last,
+           last != end,
+           distance(last, end) >= spacing * 0.5 {
+            sampledPoints.append(end)
         }
 
-        guard sampledPoints.count >= 4 else { return false }
+        guard sampledPoints.count >= 4 else { return nil }
 
         for i in 1..<(sampledPoints.count - 1) {
             let prev = sampledPoints[i - 1]
@@ -701,11 +734,82 @@ class GestureEngine {
             totalAbsoluteAngle += abs(angle)
         }
 
+        let boundsArea = Double(bounds.width * bounds.height)
+        let fillRatio = boundsArea > 0 ? enclosedArea() / boundsArea : 0
+
+        return LoopMetrics(
+            endDistance: distance(start, end),
+            minRegionSide: minRegionSide,
+            hasLoopExtent: bounds.width >= minLoopSize && bounds.height >= minLoopSize,
+            hasLoopLength: pathLength() >= minRegionSide * 0.95,
+            totalTurn: totalAngle,
+            turnConsistency: abs(totalAngle) / max(totalAbsoluteAngle, 0.001),
+            fillRatio: fillRatio
+        )
+    }
+
+    private func isCircularMotion(in region: CGRect) -> Bool {
+        guard let metrics = loopMetrics(in: region),
+              metrics.hasLoopExtent,
+              metrics.hasLoopLength else {
+            return false
+        }
+
+        let turn = abs(metrics.totalTurn)
+        let closedLoopGap = max(tapDistanceThreshold * 1.5, metrics.minRegionSide * 0.32)
+
         // A compact loop can arrive with only a handful of sampled points.
         // Require sustained turning in one direction so taps, hooks, and
         // there-and-back strokes cannot masquerade as center-key capitals.
-        let turnConsistency = abs(totalAngle) / max(totalAbsoluteAngle, 0.001)
-        return abs(totalAngle) > 1.25 * .pi && turnConsistency >= 0.72
+        if metrics.endDistance <= closedLoopGap,
+           turn > 1.25 * .pi,
+           metrics.turnConsistency >= 0.72 {
+            return true
+        }
+
+        // Circles on edge and corner keys get cut short — there is less room to
+        // swing the finger, so the finger lifts before closing the ring and the
+        // gap alone can be most of a diameter. Accept those on the strength of
+        // the area they sweep: a retrace or a straight stroke encloses nothing,
+        // so neither reaches this bar however far it travels.
+        return metrics.endDistance <= max(tapDistanceThreshold * 2, metrics.minRegionSide * 0.75)
+            && turn > 1.05 * .pi
+            && metrics.turnConsistency >= 0.70
+            && metrics.fillRatio >= 0.30
+    }
+
+    /// A rounded stroke that swept real area but stayed under the circle bar.
+    /// Not enough to type a capital on its own, but enough to keep the gesture
+    /// off the unlabeled-symbol path.
+    private func isLoopLikeMotion(in region: CGRect) -> Bool {
+        guard let metrics = loopMetrics(in: region),
+              metrics.hasLoopExtent,
+              metrics.endDistance <= max(tapDistanceThreshold * 2, metrics.minRegionSide * 0.75) else {
+            return false
+        }
+
+        return abs(metrics.totalTurn) > 0.75 * .pi
+            && metrics.turnConsistency >= 0.62
+            && metrics.fillRatio >= 0.18
+    }
+
+    /// Shoelace area of the path, closed back to its first point. Coordinates
+    /// are taken relative to touchdown: the terms then stay the size of the
+    /// gesture rather than the size of the screen.
+    private func enclosedArea() -> Double {
+        guard points.count >= 3, let origin = points.first else { return 0 }
+
+        var doubledArea: Double = 0
+        for index in points.indices {
+            let current = points[index]
+            let next = points[(index + 1) % points.count]
+            let x1 = Double(current.x - origin.x)
+            let y1 = Double(current.y - origin.y)
+            let x2 = Double(next.x - origin.x)
+            let y2 = Double(next.y - origin.y)
+            doubledArea += x1 * y2 - x2 * y1
+        }
+        return abs(doubledArea) / 2
     }
 
     private func isClosedLoopGesture(in region: CGRect) -> Bool {
