@@ -68,6 +68,7 @@ class KeyboardViewController: UIInputViewController {
         super.viewWillAppear(animated)
         configureTransparentBackgrounds()
         keyboardState.reloadPersistedAppearanceSettings()
+        applyKeyboardHeight(keyboardState.keyboardHeight, animated: false)
         updateInputContext()
     }
 
@@ -93,7 +94,11 @@ class KeyboardViewController: UIInputViewController {
     }
 
     private func applyKeyboardHeight(_ height: CGFloat, animated: Bool) {
-        guard heightConstraint?.constant != height else { return }
+        // The constraint constant already matches on a fresh launch because it is
+        // created from the persisted height, so it cannot be the only thing we
+        // check: preferredContentSize is what actually sizes the input view, and
+        // skipping it here left every reopened keyboard at the system height.
+        guard heightConstraint?.constant != height || preferredContentSize.height != height else { return }
 
         heightConstraint?.constant = height
         preferredContentSize = CGSize(width: 0, height: height)
