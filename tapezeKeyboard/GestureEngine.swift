@@ -144,20 +144,24 @@ class GestureEngine {
         let endKey = keyAt(end)
         let subcell = firstSubcellDirection(from: startKey)
 
-        // A loop that fell short of a full turn is still a capital attempt, not
-        // a reach for an unlabeled symbol. Reporting it as a swipe-back keeps it
-        // on the uppercase path, which falls back to the key's own capital when
-        // the direction carries no secondary letter.
+        // A loop that fell short of a full turn is still a loop, and a loop has
+        // no direction to speak of: which way it bulged depends on where on the
+        // key the finger came down, not on what the user was reaching for.
+        // Resolve it as the key's own capital rather than letting the bulge pick
+        // a secondary letter or an unlabeled symbol.
         if let region = startRegion, isLoopLikeMotion(in: region) {
-            let direction = subcell?.direction ?? peakSwipeDirection(from: startKey)
-            let reach = subcell?.reach ?? normalizedReach(maxDistance, in: region)
-            return .swipeBack(fromKey: startKey, direction: direction, reach: reach)
+            return .circle(startKey)
         }
 
         // Finger returned to the same key: resolve against the 3x3 subcells.
         if endKey == startKey {
             if let subcell {
-                if didReturnTowardStart(from: start, to: end, key: startKey) {
+                // `didReturnTowardStart` looks for a hairpin, so it misses a
+                // stroke that curved its way home. Landing back on touchdown is
+                // itself the signal: a swipe that means a symbol travels to it
+                // and stays there.
+                if didReturnTowardStart(from: start, to: end, key: startKey)
+                    || liftedNearTouchdown(from: start, to: end, key: startKey) {
                     return .swipeBack(fromKey: startKey, direction: subcell.direction, reach: subcell.reach)
                 }
                 return .swipe(fromKey: startKey, direction: subcell.direction, reach: subcell.reach)
@@ -634,6 +638,13 @@ class GestureEngine {
         }
     }
 
+    /// Whether the finger lifted back on the spot it came down on.
+    private func liftedNearTouchdown(from start: CGPoint, to end: CGPoint, key: GridPosition) -> Bool {
+        guard let region = keyRegions[key] else { return false }
+        let minSide = min(region.width, region.height)
+        return distance(start, end) <= max(tapDistanceThreshold, minSide * 0.28)
+    }
+
     private func didReturnTowardStart(from start: CGPoint, to end: CGPoint, key: GridPosition) -> Bool {
         guard let region = keyRegions[key] else { return false }
         let minSide = min(region.width, region.height)
@@ -683,6 +694,11 @@ class GestureEngine {
         /// there-and-back retrace, which is what separates the two gestures
         /// when both cover the same ground and return to the same spot.
         let fillRatio: Double
+        /// The largest single-sample turn as a share of all the turning. A ring
+        /// spreads its turning evenly and lands near 0.2; a there-and-back
+        /// spends most of it on one hairpin and lands past 0.5, even when the
+        /// return leg bows out far enough to enclose area.
+        let peakTurnShare: Double
     }
 
     private func loopMetrics(in region: CGRect) -> LoopMetrics? {
@@ -701,6 +717,7 @@ class GestureEngine {
 
         var totalAngle: Double = 0
         var totalAbsoluteAngle: Double = 0
+        var largestAngle: Double = 0
 
         // Resample by distance travelled rather than by index. Touch samples
         // arrive faster than the finger moves, so evenly-indexed points on a
@@ -735,6 +752,7 @@ class GestureEngine {
             let angle = atan2(cross, dot)
             totalAngle += angle
             totalAbsoluteAngle += abs(angle)
+            largestAngle = max(largestAngle, abs(angle))
         }
 
         let boundsArea = Double(bounds.width * bounds.height)
@@ -750,7 +768,8 @@ class GestureEngine {
             hasLoopLength: pathLength() >= (bounds.width + bounds.height) * 1.1,
             totalTurn: totalAngle,
             turnConsistency: abs(totalAngle) / max(totalAbsoluteAngle, 0.001),
-            fillRatio: fillRatio
+            fillRatio: fillRatio,
+            peakTurnShare: largestAngle / max(totalAbsoluteAngle, 0.001)
         )
     }
 
@@ -785,8 +804,9 @@ class GestureEngine {
     }
 
     /// A rounded stroke that swept real area but stayed under the circle bar.
-    /// Not enough to type a capital on its own, but enough to keep the gesture
-    /// off the unlabeled-symbol path.
+    /// Treated as a capital rather than a direction: the turning is spread
+    /// along the path like a ring's, so there is no one direction the user was
+    /// reaching for.
     private func isLoopLikeMotion(in region: CGRect) -> Bool {
         guard let metrics = loopMetrics(in: region),
               metrics.hasLoopExtent,
@@ -798,6 +818,7 @@ class GestureEngine {
         return abs(metrics.totalTurn) > 0.75 * .pi
             && metrics.turnConsistency >= 0.62
             && metrics.fillRatio >= 0.18
+            && metrics.peakTurnShare <= 0.40
     }
 
     /// Shoelace area of the path, closed back to its first point. Coordinates

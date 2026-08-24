@@ -25,7 +25,7 @@ Small diamond controls live between the keys for layer switching and return. Spa
 1. **Tap** a key to type the yellow (center) letter
 2. **Swipe** between two keys to type the gray letter shown between them
 3. **Swipe and back** (out and return to same key) to get the **uppercase** version of the swipe character
-4. **Circular motion** starting and ending on a key to type the **uppercase** of the tap character
+4. **Circular motion** starting and ending on a key to type the **uppercase** of the tap character. Where on the key the loop starts does not matter, and a loop never produces a symbol — symbols have no uppercase, so a rounded gesture always resolves to a capital letter
 5. **Long horizontal swipe** crossing 3 keys inserts a space
 6. **Long vertical swipe** crossing 3 keys deletes backward
 7. **Layer diamond** switches between letters and numbers/symbols
@@ -34,6 +34,8 @@ Small diamond controls live between the keys for layer switching and return. Spa
 Gesture trails are shown by default while swiping and can be turned off from the Tapeze app settings.
 
 ## Capitalization
+
+Any gesture the keyboard reads as a capital — a loop, or a swipe that comes back — resolves to a letter. When the direction it lands on carries punctuation rather than a letter, the key's own capital is typed instead.
 
 Shift arms itself at the start of a document, after a newline, and after a sentence-ending `.`, `!`, or `?` followed by a space, honouring whatever the field being edited asks for (`words` and `all characters` fields are respected too). The shift key clears an automatic capital with a single tap; tapping it when no capital is pending shifts the next character, and tapping again caps-locks.
 
