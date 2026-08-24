@@ -22,21 +22,27 @@ class KeyboardViewController: UIInputViewController {
             state: keyboardState,
             onCharacter: { [weak self] char in
                 self?.textDocumentProxy.insertText(char)
+                self?.scheduleInputContextUpdate()
             },
             onBackspace: { [weak self] in
                 self?.textDocumentProxy.deleteBackward()
+                self?.scheduleInputContextUpdate()
             },
             onDeleteWord: { [weak self] in
                 self?.deletePreviousWord()
+                self?.scheduleInputContextUpdate()
             },
             onDeleteLine: { [weak self] in
                 self?.deleteCurrentLineBeforeCursor()
+                self?.scheduleInputContextUpdate()
             },
             onEnter: { [weak self] in
                 self?.textDocumentProxy.insertText("\n")
+                self?.scheduleInputContextUpdate()
             },
             onMoveCursor: { [weak self] offset in
                 self?.textDocumentProxy.adjustTextPosition(byCharacterOffset: offset)
+                self?.scheduleInputContextUpdate()
             },
             onNextKeyboard: { [weak self] in
                 self?.advanceToNextInputMode()
@@ -170,6 +176,41 @@ class KeyboardViewController: UIInputViewController {
             keyboardState.isURLField = true
         default:
             keyboardState.isURLField = false
+        }
+
+        keyboardState.autocapitalizationMode = Self.autocapitalizationMode(
+            for: textDocumentProxy.autocapitalizationType
+        )
+        keyboardState.updateAutocapitalization(before: textDocumentProxy.documentContextBeforeInput)
+    }
+
+    /// Re-reads the document after our own edit. The keyboard clears shift
+    /// synchronously once a character is inserted, which would otherwise wipe
+    /// the capital `textDidChange` had just raised for the next sentence.
+    private func scheduleInputContextUpdate() {
+        DispatchQueue.main.async { [weak self] in
+            self?.updateInputContext()
+        }
+    }
+
+    private static func autocapitalizationMode(
+        for type: UITextAutocapitalizationType?
+    ) -> AutocapitalizationMode {
+        // A nil trait means the host never expressed a preference, which for a
+        // plain text field behaves as sentence capitalization.
+        guard let type else { return .sentences }
+
+        switch type {
+        case .none:
+            return .none
+        case .words:
+            return .words
+        case .allCharacters:
+            return .allCharacters
+        case .sentences:
+            return .sentences
+        @unknown default:
+            return .sentences
         }
     }
 }

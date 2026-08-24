@@ -33,6 +33,10 @@ Small diamond controls live between the keys for layer switching and return. Spa
 
 Gesture trails are shown by default while swiping and can be turned off from the Tapeze app settings.
 
+## Capitalization
+
+Shift arms itself at the start of a document, after a newline, and after a sentence-ending `.`, `!`, or `?` followed by a space, honouring whatever the field being edited asks for (`words` and `all characters` fields are respected too). The shift key clears an automatic capital with a single tap; tapping it when no capital is pending shifts the next character, and tapping again caps-locks.
+
 ## TestFlight
 
 The repo includes a repeatable App Store Connect/TestFlight upload script. It pins the Xcode path to `/Applications/Xcode.app`, archives the app with automatic signing, exports an App Store Connect IPA, validates it, and uploads it.

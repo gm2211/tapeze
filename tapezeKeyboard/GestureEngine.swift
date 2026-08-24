@@ -694,7 +694,10 @@ class GestureEngine {
 
         let bounds = pathBounds()
         let minRegionSide = min(region.width, region.height)
-        let minLoopSize = max(minRegionSide * 0.24, minSwipeDistance)
+        // Loops are sized by the finger, not by the key. Scaling this bar to the
+        // key made big keys — and the cramped corner ones people flatten their
+        // circles on — reject perfectly good rings for being "too small".
+        let minLoopSize = max(minRegionSide * 0.18, 14)
 
         var totalAngle: Double = 0
         var totalAbsoluteAngle: Double = 0
@@ -741,7 +744,10 @@ class GestureEngine {
             endDistance: distance(start, end),
             minRegionSide: minRegionSide,
             hasLoopExtent: bounds.width >= minLoopSize && bounds.height >= minLoopSize,
-            hasLoopLength: pathLength() >= minRegionSide * 0.95,
+            // Measured against the stroke's own bounding box rather than the
+            // key: going round a box costs far more travel than crossing it, so
+            // this separates rings from straight strokes at any loop size.
+            hasLoopLength: pathLength() >= (bounds.width + bounds.height) * 1.1,
             totalTurn: totalAngle,
             turnConsistency: abs(totalAngle) / max(totalAbsoluteAngle, 0.001),
             fillRatio: fillRatio
@@ -773,9 +779,9 @@ class GestureEngine {
         // the area they sweep: a retrace or a straight stroke encloses nothing,
         // so neither reaches this bar however far it travels.
         return metrics.endDistance <= max(tapDistanceThreshold * 2, metrics.minRegionSide * 0.75)
-            && turn > 1.05 * .pi
+            && turn > 0.90 * .pi
             && metrics.turnConsistency >= 0.70
-            && metrics.fillRatio >= 0.30
+            && metrics.fillRatio >= 0.35
     }
 
     /// A rounded stroke that swept real area but stayed under the circle bar.
@@ -784,6 +790,7 @@ class GestureEngine {
     private func isLoopLikeMotion(in region: CGRect) -> Bool {
         guard let metrics = loopMetrics(in: region),
               metrics.hasLoopExtent,
+              metrics.hasLoopLength,
               metrics.endDistance <= max(tapDistanceThreshold * 2, metrics.minRegionSide * 0.75) else {
             return false
         }
