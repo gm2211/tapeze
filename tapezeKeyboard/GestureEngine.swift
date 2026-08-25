@@ -44,7 +44,15 @@ class GestureEngine {
     // Thresholds
     private let tapDistanceThreshold: CGFloat = 15.0
     private let minSwipeDistance: CGFloat = 20.0
-    private let subcellActivationDistance: CGFloat = 12.0
+    /// Floor for how far a stroke must leave touchdown before it can mean a
+    /// secondary character rather than the key's own letter. Fast thumb typing
+    /// rolls the contact point well past a hairline, so this sits above the
+    /// drift a tap produces.
+    private let subcellActivationDistance: CGFloat = 18.0
+    /// The same commitment expressed in key half-sides, so large keys demand
+    /// proportionally more travel. A tap wobble stays under ~0.4; a swipe aimed
+    /// at a subcell label crosses it comfortably.
+    private let subcellActivationReach: CGFloat = 0.52
 
     // MARK: - Setup
 
@@ -584,7 +592,8 @@ class GestureEngine {
     private func firstSubcellDirection(from key: GridPosition) -> (direction: SwipeDirection, reach: CGFloat)? {
         guard let region = keyRegions[key], let start = points.first else { return nil }
         let center = CGPoint(x: region.midX, y: region.midY)
-        let activation = max(subcellActivationDistance, min(region.width, region.height) * 0.18)
+        let halfSide = min(region.width, region.height) / 2
+        let activation = max(subcellActivationDistance, halfSide * subcellActivationReach)
 
         var farthestPoint: CGPoint?
         var farthestDistance: CGFloat = 0
