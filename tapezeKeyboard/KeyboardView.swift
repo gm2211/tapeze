@@ -1326,7 +1326,7 @@ struct KeyboardView: View {
         // A visible number-layer symbol owns its direction. Persistent commands
         // and hidden letter fallbacks only apply when that cell is unassigned.
         if state.currentLayer != .letters, let char = config.swipes[direction] {
-            insertSwipeCharacter(char, uppercase: uppercase)
+            insertSwipeCharacter(char, uppercase: uppercase, capitalFallback: config.tap)
             return
         }
 
@@ -1348,7 +1348,7 @@ struct KeyboardView: View {
         }
 
         if let char = config.swipes[direction] {
-            insertSwipeCharacter(char, uppercase: uppercase)
+            insertSwipeCharacter(char, uppercase: uppercase, capitalFallback: config.tap)
             return
         }
 
@@ -1363,14 +1363,14 @@ struct KeyboardView: View {
         }
 
         if let char = numberLayerLetterSwipe(from: pos, direction: direction) {
-            insertSwipeCharacter(char, uppercase: uppercase)
+            insertSwipeCharacter(char, uppercase: uppercase, capitalFallback: config.tap)
             return
         }
 
         // Unassigned direction: the finger wobbled off a plain tap or a circle
         // fell short. Type the key's base character instead of dropping input.
         if config.specialAction == nil, !config.tap.isEmpty {
-            insertSwipeCharacter(config.tap, uppercase: uppercase)
+            insertSwipeCharacter(config.tap, uppercase: uppercase, capitalFallback: config.tap)
         }
     }
 
@@ -1381,9 +1381,32 @@ struct KeyboardView: View {
         state.isSymbolOverlayActive ? 0 : 0.80
     }
 
-    private func insertSwipeCharacter(_ char: String, uppercase: Bool) {
-        onCharacter(uppercase ? char.uppercased() : state.applyCase(char))
+    private func insertSwipeCharacter(_ char: String, uppercase: Bool, capitalFallback: String = "") {
+        guard uppercase else {
+            onCharacter(state.applyCase(char))
+            state.afterCharacterInserted()
+            return
+        }
+
+        // An uppercase gesture — a loop, or a swipe that came back — is a
+        // request for a capital. Punctuation has none, so rather than typing a
+        // symbol the gesture never meant to reach, fall back to the key's own
+        // letter. On the number layer the fallback is a digit, which has no
+        // capital either, so the symbol stands.
+        onCharacter(Self.capital(of: char, orElse: capitalFallback))
         state.afterCharacterInserted()
+    }
+
+    /// The capital of `char`, or of `fallback` when `char` has no distinct
+    /// uppercase form. Returns `char` unchanged when neither does.
+    private static func capital(of char: String, orElse fallback: String) -> String {
+        let uppercased = char.uppercased()
+        if uppercased != char { return uppercased }
+
+        let uppercasedFallback = fallback.uppercased()
+        if uppercasedFallback != fallback { return uppercasedFallback }
+
+        return char
     }
 
     private func hiddenSymbolSwipe(from pos: GridPosition, direction: SwipeDirection) -> String? {
