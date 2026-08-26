@@ -1,0 +1,119 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Tapeze — Privacy Policy</title>
+<style>
+  :root {
+    --bg: #ffffff;
+    --fg: #1c2126;
+    --muted: #5b6670;
+    --rule: #e3e7ea;
+    --accent: #0f6f68;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #14181b;
+      --fg: #e6ebee;
+      --muted: #9aa5ad;
+      --rule: #2a3136;
+      --accent: #5ce8dd;
+    }
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    padding: 3rem 1.25rem 5rem;
+    background: var(--bg);
+    color: var(--fg);
+    font: 16px/1.65 -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
+  }
+  main { max-width: 42rem; margin: 0 auto; }
+  h1 { font-size: 1.9rem; line-height: 1.2; margin: 0 0 .35rem; }
+  h2 {
+    font-size: 1.12rem;
+    margin: 2.4rem 0 .6rem;
+    padding-top: 1.2rem;
+    border-top: 1px solid var(--rule);
+  }
+  .updated { color: var(--muted); font-size: .9rem; margin: 0 0 2rem; }
+  .lede { font-size: 1.06rem; }
+  ul { padding-left: 1.15rem; }
+  li { margin: .3rem 0; }
+  code {
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+    font-size: .88em;
+    background: color-mix(in srgb, var(--fg) 8%, transparent);
+    padding: .12em .38em;
+    border-radius: 4px;
+  }
+  a { color: var(--accent); }
+  footer {
+    margin-top: 3rem;
+    padding-top: 1.2rem;
+    border-top: 1px solid var(--rule);
+    color: var(--muted);
+    font-size: .9rem;
+  }
+</style>
+</head>
+<body>
+<main>
+
+<h1>Privacy Policy</h1>
+<p class="updated">Tapeze keyboard for iOS · Last updated August 2026</p>
+
+<p class="lede"><strong>Tapeze does not collect any data.</strong> Nothing you type is recorded,
+stored, or transmitted. The app contains no analytics, no tracking, no advertising, and no
+networking code of any kind.</p>
+
+<h2>What Tapeze does not do</h2>
+<ul>
+  <li>It does not log, save, or transmit your keystrokes.</li>
+  <li>It does not send any data off your device — it has no network capability at all.</li>
+  <li>It does not use analytics, crash reporting, or advertising SDKs.</li>
+  <li>It does not track you across apps or websites.</li>
+  <li>It does not create a profile of you or share information with third parties.</li>
+</ul>
+
+<h2>Why the keyboard asks for Full Access</h2>
+<p>iOS requires custom keyboards to request <em>Full Access</em> before they can use a shared
+app container. Tapeze uses that permission for exactly two things, both entirely on your
+device:</p>
+<ul>
+  <li><strong>Your settings.</strong> Layout, keyboard height, corner radius, theme, and label
+    preferences are saved in a shared app group (<code>group.com.gm2211.tapeze</code>) so the
+    settings you choose in the Tapeze app apply to the keyboard.</li>
+  <li><strong>The paste key.</strong> When you use the paste gesture, the keyboard reads the
+    system clipboard so it can insert its contents into the field you are editing. The clipboard
+    is read only at that moment, and its contents are not stored or sent anywhere.</li>
+</ul>
+<p>Granting Full Access does not enable any transmission of your data, because Tapeze has no
+mechanism to transmit anything.</p>
+
+<h2>Where your data lives</h2>
+<p>Your preferences are stored locally on your device in the app group container. They are
+removed when you delete the app. Nobody, including the developer, can see them.</p>
+
+<h2>Children</h2>
+<p>Tapeze does not knowingly collect information from anyone, of any age, because it does not
+collect information at all.</p>
+
+<h2>Changes to this policy</h2>
+<p>If this policy changes, the revised version will be published at this address with an updated
+date above.</p>
+
+<h2>Contact</h2>
+<p>Questions about this policy can be raised at
+<a href="https://github.com/gm2211/tapeze/issues">github.com/gm2211/tapeze/issues</a>.</p>
+
+<footer>
+  Tapeze is an open-source project. The source code is available at
+  <a href="https://github.com/gm2211/tapeze">github.com/gm2211/tapeze</a>, where these claims can
+  be verified directly.
+</footer>
+
+</main>
+</body>
+</html>
