@@ -651,6 +651,16 @@ class GestureEngine {
     private func liftedNearTouchdown(from start: CGPoint, to end: CGPoint, key: GridPosition) -> Bool {
         guard let region = keyRegions[key] else { return false }
         let minSide = min(region.width, region.height)
+
+        // Landing back on touchdown only means "there and back" if the finger
+        // actually went somewhere first. This is the one capital path with no
+        // excursion test of its own — `didReturnTowardStart` has always had
+        // one — so hold it to the same outbound distance, or a tap that
+        // wobbled just past the swipe bar and settled home types a capital.
+        guard maxDistance(from: start) >= max(minSwipeDistance * 1.4, minSide * 0.30) else {
+            return false
+        }
+
         return distance(start, end) <= max(tapDistanceThreshold, minSide * 0.28)
     }
 
@@ -708,6 +718,10 @@ class GestureEngine {
         /// spends most of it on one hairpin and lands past 0.5, even when the
         /// return leg bows out far enough to enclose area.
         let peakTurnShare: Double
+        /// Narrowest side of the stroke's bounding box. A full ring proves
+        /// itself by turning and may stay small; a partial loop has only weak
+        /// turn evidence, so it has to be big enough to rule out a tap wobble.
+        let boundsMinSide: CGFloat
     }
 
     private func loopMetrics(in region: CGRect) -> LoopMetrics? {
@@ -778,7 +792,8 @@ class GestureEngine {
             totalTurn: totalAngle,
             turnConsistency: abs(totalAngle) / max(totalAbsoluteAngle, 0.001),
             fillRatio: fillRatio,
-            peakTurnShare: largestAngle / max(totalAbsoluteAngle, 0.001)
+            peakTurnShare: largestAngle / max(totalAbsoluteAngle, 0.001),
+            boundsMinSide: min(bounds.width, bounds.height)
         )
     }
 
@@ -823,6 +838,16 @@ class GestureEngine {
               metrics.endDistance <= max(tapDistanceThreshold * 2, metrics.minRegionSide * 0.75) else {
             return false
         }
+
+        // `hasLoopExtent` lets a ring be finger-sized, which is right for a
+        // closed loop: the turning alone proves the intent. Most of a turn does
+        // not, so a partial loop has to travel at least as far as a swipe does
+        // before it may mean anything other than the key's own tap character.
+        // Without this the roll off a fast tap — a shallow arc barely 20pt
+        // across — arrives here and comes back capitalised.
+        let halfSide = metrics.minRegionSide / 2
+        let committedExtent = max(subcellActivationDistance, halfSide * subcellActivationReach)
+        guard metrics.boundsMinSide >= committedExtent else { return false }
 
         return abs(metrics.totalTurn) > 0.75 * .pi
             && metrics.turnConsistency >= 0.62
