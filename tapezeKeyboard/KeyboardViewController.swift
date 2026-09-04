@@ -14,9 +14,18 @@ class KeyboardViewController: UIInputViewController {
         configureTransparentBackgrounds()
 
         let heightConstraint = view.heightAnchor.constraint(equalToConstant: keyboardState.keyboardHeight)
-        heightConstraint.priority = .defaultHigh
+        // The system installs its own default-height constraint on the input
+        // view. At `.defaultHigh` ours lost the first layout pass, so the
+        // keyboard came up at the system height and only grew afterwards - by
+        // which point the host had already scrolled the focused field to sit
+        // just above a much shorter keyboard, leaving it covered.
+        heightConstraint.priority = UILayoutPriority(999)
         heightConstraint.isActive = true
         self.heightConstraint = heightConstraint
+
+        // Publish the height before the first appearance so the very first
+        // keyboard frame the host is notified about already carries our size.
+        preferredContentSize = CGSize(width: 0, height: keyboardState.keyboardHeight)
 
         let keyboardView = KeyboardView(
             state: keyboardState,
@@ -74,8 +83,13 @@ class KeyboardViewController: UIInputViewController {
         super.viewWillAppear(animated)
         configureTransparentBackgrounds()
         keyboardState.reloadPersistedAppearanceSettings()
-        applyKeyboardHeight(keyboardState.keyboardHeight, animated: false)
+        applyKeyboardHeight(keyboardState.keyboardHeight, animated: false, force: true)
         updateInputContext()
+    }
+
+    override func viewDidAppear(_ animated: Bool) {
+        super.viewDidAppear(animated)
+        reassertKeyboardHeightIfNeeded()
     }
 
     private func configureTransparentBackgrounds() {
@@ -83,6 +97,25 @@ class KeyboardViewController: UIInputViewController {
         view.isOpaque = false
         inputView?.backgroundColor = .clear
         inputView?.isOpaque = false
+        // Without self-sizing the input view keeps the system height and our
+        // constraint never reaches the host as a keyboard frame change.
+        inputView?.allowsSelfSizing = true
+    }
+
+    /// The system can still lay us out at its own height on the first
+    /// presentation, and the host sizes its insets from that frame. Re-assert
+    /// once we are on screen so a corrective frame change reaches the host
+    /// while the field is still focused, instead of only on the next focus.
+    private func reassertKeyboardHeightIfNeeded() {
+        let desired = keyboardState.keyboardHeight
+        guard abs(view.bounds.height - desired) > 0.5 else { return }
+
+        heightConstraint?.constant = desired
+        preferredContentSize = CGSize(width: 0, height: desired)
+        view.superview?.setNeedsLayout()
+        view.setNeedsLayout()
+        view.superview?.layoutIfNeeded()
+        view.layoutIfNeeded()
     }
 
     override func viewWillLayoutSubviews() {
@@ -99,12 +132,15 @@ class KeyboardViewController: UIInputViewController {
             }
     }
 
-    private func applyKeyboardHeight(_ height: CGFloat, animated: Bool) {
+    private func applyKeyboardHeight(_ height: CGFloat, animated: Bool, force: Bool = false) {
         // The constraint constant already matches on a fresh launch because it is
         // created from the persisted height, so it cannot be the only thing we
         // check: preferredContentSize is what actually sizes the input view, and
         // skipping it here left every reopened keyboard at the system height.
-        guard heightConstraint?.constant != height || preferredContentSize.height != height else { return }
+        // `force` covers a controller that is reused across appearances: the
+        // stored values already match, but the input view still needs the
+        // layout pass that makes the height stick for this presentation.
+        guard force || heightConstraint?.constant != height || preferredContentSize.height != height else { return }
 
         heightConstraint?.constant = height
         preferredContentSize = CGSize(width: 0, height: height)
