@@ -8,7 +8,7 @@ export DEVELOPER_DIR="${DEVELOPER_DIR:-/Applications/Xcode.app/Contents/Develope
 XCODEBUILD="$DEVELOPER_DIR/usr/bin/xcodebuild"
 XCRUN="/usr/bin/xcrun"
 
-PROJECT="${PROJECT:-tapeze.xcodeproj}"
+PROJECT="${PROJECT:-Tapeze.xcodeproj}"
 SCHEME="${SCHEME:-tapeze}"
 CONFIGURATION="${CONFIGURATION:-Release}"
 TEAM_ID="${TEAM_ID:-6KQV68SJ5P}"
@@ -72,24 +72,64 @@ require_tool() {
 	fi
 }
 
-current_build_number() {
+PBXPROJ_PATH="$ROOT_DIR/Tapeze.xcodeproj/project.pbxproj"
+PROJECT_SPEC_PATH="$ROOT_DIR/project.yml"
+
+pbxproj_build_number() {
 	/usr/bin/awk -F'= ' '/CURRENT_PROJECT_VERSION = / {
-		gsub(/;/, "", $2)
+		gsub(/[;[:space:]]/, "", $2)
 		print $2
 		exit
-	}' tapeze.xcodeproj/project.pbxproj
+	}' "$PBXPROJ_PATH"
+}
+
+spec_build_number() {
+	/usr/bin/awk -F': ' '/CURRENT_PROJECT_VERSION:/ {
+		gsub(/["[:space:]]/, "", $2)
+		print $2
+		exit
+	}' "$PROJECT_SPEC_PATH"
+}
+
+# The build number lives in two places: project.yml (the XcodeGen spec) and the
+# generated project.pbxproj. They must agree, otherwise `xcodegen generate`
+# silently reverts a bump and App Store Connect rejects the duplicate build.
+current_build_number() {
+	local pbx spec
+	pbx="$(pbxproj_build_number)"
+	spec="$(spec_build_number)"
+	if [[ -z "$pbx" || -z "$spec" ]]; then
+		echo "Could not read CURRENT_PROJECT_VERSION from both $PROJECT_SPEC_PATH and $PBXPROJ_PATH" >&2
+		return 1
+	fi
+	if [[ "$pbx" != "$spec" ]]; then
+		echo "Build number mismatch: project.yml has $spec but project.pbxproj has $pbx." >&2
+		echo "Reconcile them by hand before incrementing." >&2
+		return 1
+	fi
+	echo "$pbx"
 }
 
 increment_build_number() {
 	local current next
-	current="$(current_build_number)"
+	if ! current="$(current_build_number)"; then
+		exit 1
+	fi
 	if [[ ! "$current" =~ ^[0-9]+$ ]]; then
 		echo "Cannot auto-increment non-numeric build number: $current" >&2
 		exit 1
 	fi
 	next=$((current + 1))
-	/usr/bin/perl -0pi -e "s/CURRENT_PROJECT_VERSION = \\Q$current\\E;/CURRENT_PROJECT_VERSION = $next;/g" tapeze.xcodeproj/project.pbxproj
-	echo "Incremented build number: $current -> $next"
+	/usr/bin/perl -0pi -e "s/CURRENT_PROJECT_VERSION = \\Q$current\\E;/CURRENT_PROJECT_VERSION = $next;/g" "$PBXPROJ_PATH"
+	/usr/bin/perl -0pi -e "s/CURRENT_PROJECT_VERSION: \"\\Q$current\\E\"/CURRENT_PROJECT_VERSION: \"$next\"/g" "$PROJECT_SPEC_PATH"
+	local new_pbx new_spec
+	new_pbx="$(pbxproj_build_number)"
+	new_spec="$(spec_build_number)"
+	if [[ "$new_pbx" != "$next" || "$new_spec" != "$next" ]]; then
+		echo "Failed to write build number $next (project.yml: $new_spec, project.pbxproj: $new_pbx)" >&2
+		exit 1
+	fi
+	echo "Incremented build number: $current -> $next (project.yml + project.pbxproj)"
 }
 
 # Fall back to the login keychain for API credentials so uploads don't need
