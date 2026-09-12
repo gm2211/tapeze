@@ -57,3 +57,5 @@
 # sync.remote: "git+ssh://git@github.com/gm2211/tapeze.git"
 dolt:
     shared-server: true
+sync:
+    remote: "git+https://github.com/gm2211/tapeze.git"
