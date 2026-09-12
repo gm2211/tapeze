@@ -35,6 +35,7 @@ class GestureEngine {
     private(set) var points: [CGPoint] = []
     private var keyRegions: [GridPosition: CGRect] = [:]
     private var spaceBarRegion: CGRect = .zero
+    private var spaceBarGutterRegion: CGRect = .zero
     private var globeRegion: CGRect = .zero
     private var resizeRegion: CGRect = .zero
     private var forgivingCommandRegions: [GridPosition: CGRect] = [:]
@@ -60,8 +61,9 @@ class GestureEngine {
         self.keyRegions = regions
     }
 
-    func updateSpaceBarRegion(_ region: CGRect) {
+    func updateSpaceBarRegion(_ region: CGRect, gutterRegion: CGRect = .zero) {
         self.spaceBarRegion = region
+        self.spaceBarGutterRegion = gutterRegion
     }
 
     func updateGlobeRegion(_ region: CGRect) {
@@ -109,7 +111,7 @@ class GestureEngine {
         }
 
         // Check special regions first
-        if !spaceBarRegion.isEmpty && spaceBarRegion.contains(start) {
+        if spaceBarRegion.contains(start) || spaceBarGutterRegion.contains(start) {
             return analyzeSpaceBarGesture()
         }
         if !globeRegion.isEmpty && globeRegion.contains(start) {
@@ -202,7 +204,9 @@ class GestureEngine {
         // Check for swipe up and back. Use the spacebar bounds instead of
         // exact start/end distance so a straight there-and-back path still
         // counts even when it lands close enough to look like a tap.
-        let cameBack = spaceBarRegion.insetBy(dx: -12, dy: -12).contains(end) && hasUpwardExcursion()
+        let returnedToSpace = (!spaceBarRegion.isEmpty && spaceBarRegion.insetBy(dx: -12, dy: -12).contains(end))
+            || (!spaceBarGutterRegion.isEmpty && spaceBarGutterRegion.insetBy(dx: -12, dy: -12).contains(end))
+        let cameBack = returnedToSpace && hasUpwardExcursion()
         if cameBack {
             return .specialSwipe(.spaceSwipeUpAndBack)
         }
