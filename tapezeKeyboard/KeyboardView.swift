@@ -41,12 +41,16 @@ struct KeyboardView: View {
 
             let minimumControlExtent: CGFloat = 60
             let absoluteMaximumControlExtent: CGFloat = 88
+            // The space bar is 40% taller than the other bridge controls
+            // (backspace rail), so its vertical reserve is scaled separately.
+            let spaceBarHeightScale: CGFloat = 1.4
+            let minimumSpaceBarHeight = minimumControlExtent * spaceBarHeightScale
             let maxKeySideByWidth = max(
                 (totalWidth - minimumControlExtent - spacing * CGFloat(gridCols)) / CGFloat(gridCols),
                 1
             )
             let maxKeySideByHeight = max(
-                (totalHeight - minimumControlExtent - spacing * CGFloat(gridRows - 1)) / CGFloat(gridRows),
+                (totalHeight - minimumSpaceBarHeight - spacing * CGFloat(gridRows - 1)) / CGFloat(gridRows),
                 1
             )
             let keySide = min(maxKeySideByWidth, maxKeySideByHeight)
@@ -60,8 +64,10 @@ struct KeyboardView: View {
                 max(minimumControlExtent, keySide * 0.62)
             )
 
-            let availableSpaceHeight = max(totalHeight - mainGridHeight, minimumControlExtent)
-            let spaceBarHeight = min(availableSpaceHeight, maximumControlExtent)
+            let maximumSpaceBarHeight = maximumControlExtent * spaceBarHeightScale
+
+            let availableSpaceHeight = max(totalHeight - mainGridHeight, minimumSpaceBarHeight)
+            let spaceBarHeight = min(availableSpaceHeight, maximumSpaceBarHeight)
             let topInset = max(totalHeight - mainGridHeight - spaceBarHeight, 0)
 
             let availableRailWidth = max(totalWidth - mainGridWidth - spacing, minimumControlExtent)
