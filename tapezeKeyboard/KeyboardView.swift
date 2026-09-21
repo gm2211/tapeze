@@ -15,6 +15,7 @@ struct KeyboardView: View {
 
     @State private var keyRegions: [GridPosition: CGRect] = [:]
     @State private var spaceBarRegion: CGRect = .zero
+    @State private var spaceBarGutterRegion: CGRect = .zero
     @State private var globeRegion: CGRect = .zero
     @State private var gestureEngine = GestureEngine()
     @State private var activeBridge: ActiveBridge = .none
@@ -217,7 +218,7 @@ struct KeyboardView: View {
         .frame(height: state.keyboardHeight)
         .onAppear {
             gestureEngine.updateKeyRegions(keyRegions)
-            gestureEngine.updateSpaceBarRegion(spaceBarRegion)
+            gestureEngine.updateSpaceBarRegion(spaceBarRegion, gutterRegion: spaceBarGutterRegion)
             gestureEngine.updateGlobeRegion(globeRegion)
         }
         .onDisappear {
@@ -518,7 +519,12 @@ struct KeyboardView: View {
             return .backspace
         }
 
-        // Bottom bridge follows the main 3x3 grid and excludes side padding and the rail.
+        // The unused gutter beside the bottom row is an invisible space target.
+        if spaceBarGutterRegion.contains(point) {
+            return .space
+        }
+
+        // Visible bottom controls retain their existing space/zero split.
         if point.x >= layoutOriginX,
            point.x <= layoutOriginX + mainGridWidth,
            point.y >= gridBottom {
@@ -747,7 +753,8 @@ struct KeyboardView: View {
             height: diamondSide
         )
         keyRegions = regions
-        // Space bar region matches the visible bottom bridge exactly.
+        // Keep the gutter separate: on number layers the zero key lies between
+        // it and the visible spacebar, so a single expanded rect would swallow 0.
         let bottomControls = bottomControlMetrics(
             layoutOriginX: layout.originX,
             mainGridWidth: layout.mainGridWidth
@@ -759,9 +766,10 @@ struct KeyboardView: View {
             height: layout.bottomRowHeight
         )
         spaceBarRegion = bottomBridgeStripRect
+        spaceBarGutterRegion = layout.spaceBarGutterRegion
         globeRegion = regions[GridPosition(row: 0, col: commandCol)] ?? .zero
         gestureEngine.updateKeyRegions(regions)
-        gestureEngine.updateSpaceBarRegion(bottomBridgeStripRect)
+        gestureEngine.updateSpaceBarRegion(bottomBridgeStripRect, gutterRegion: spaceBarGutterRegion)
         gestureEngine.updateGlobeRegion(globeRegion)
         gestureEngine.updateResizeRegion(regions[GridPosition(row: 3, col: commandCol)] ?? .zero)
         gestureEngine.updateForgivingCommandRegions([
@@ -1558,6 +1566,16 @@ private struct LatticeHitLayout: Equatable {
     let rowHeight: CGFloat
     let bottomRowHeight: CGFloat
     let commandBarOnRight: Bool
+
+    var spaceBarGutterRegion: CGRect {
+        let gridEndX = originX + mainGridWidth
+        return CGRect(
+            x: commandBarOnRight ? 0 : gridEndX,
+            y: originY + mainGridHeight,
+            width: max(commandBarOnRight ? originX : layoutWidth - gridEndX, 0),
+            height: bottomRowHeight
+        )
+    }
 }
 
 private struct GestureLayoutContext {
