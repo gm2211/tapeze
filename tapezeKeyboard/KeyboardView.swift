@@ -46,15 +46,23 @@ struct KeyboardView: View {
             // (backspace rail), so its vertical reserve is scaled separately.
             let spaceBarHeightScale: CGFloat = 1.4
             let minimumSpaceBarHeight = minimumControlExtent * spaceBarHeightScale
+            /// Space bar height as a multiple of one key row. Matches the 1.02 ratio
+            /// measured from the reference layout (252px over 3 rows with an 86px bar).
+            let spaceBarRowRatio: CGFloat = 1.02
             let maxKeySideByWidth = max(
                 (totalWidth - minimumControlExtent - spacing * CGFloat(gridCols)) / CGFloat(gridCols),
                 1
             )
-            let maxKeySideByHeight = max(
-                (totalHeight - minimumSpaceBarHeight - spacing * CGFloat(gridRows - 1)) / CGFloat(gridRows),
+            // Solve for the key side so that `gridRows` key rows plus a space bar
+            // sized at `spaceBarRowRatio` key rows, plus the inter-row spacing,
+            // exactly fill the available height. This ties the space bar's height
+            // directly to the key rows instead of pinning it between an independent
+            // min/max derived from the (unrelated) horizontal rail width.
+            let keySideByRowRatio = max(
+                (totalHeight - spacing * CGFloat(gridRows - 1)) / (CGFloat(gridRows) + spaceBarRowRatio),
                 1
             )
-            let keySide = min(maxKeySideByWidth, maxKeySideByHeight)
+            let keySide = min(maxKeySideByWidth, keySideByRowRatio)
 
             let shouldDisableCompact = false
             let commandColWidth: CGFloat = 0
@@ -65,10 +73,10 @@ struct KeyboardView: View {
                 max(minimumControlExtent, keySide * 0.62)
             )
 
-            let maximumSpaceBarHeight = maximumControlExtent * spaceBarHeightScale
-
-            let availableSpaceHeight = max(totalHeight - mainGridHeight, minimumSpaceBarHeight)
-            let spaceBarHeight = min(availableSpaceHeight, maximumSpaceBarHeight)
+            // Floor only: a very short keyboard still gets a usable bar, but there is
+            // no longer an upper clamp — the bar simply matches `spaceBarRowRatio`
+            // key rows whenever the derived keySide isn't width-constrained.
+            let spaceBarHeight = max(keySide * spaceBarRowRatio, minimumSpaceBarHeight)
             let topInset = max(totalHeight - mainGridHeight - spaceBarHeight, 0)
 
             let availableRailWidth = max(totalWidth - mainGridWidth - spacing, minimumControlExtent)
@@ -240,7 +248,7 @@ struct KeyboardView: View {
         armWidth: CGFloat = 0
     ) -> some View {
         let mainX = state.commandBarOnRight ? 0 : commandColWidth
-        let diamondSide = min(keySide, rowHeight) * 0.54
+        let diamondSide = min(keySide, rowHeight) * 0.70
         let commandBarCol = state.commandBarOnRight ? 3 : -1
 
         ZStack(alignment: .topLeading) {
