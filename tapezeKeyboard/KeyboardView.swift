@@ -42,8 +42,10 @@ struct KeyboardView: View {
 
             let minimumControlExtent: CGFloat = 60
             let absoluteMaximumControlExtent: CGFloat = 88
-            // The space bar is 40% taller than the other bridge controls
-            // (backspace rail), so its vertical reserve is scaled separately.
+            // spaceBarHeightScale no longer drives the primary space bar height
+            // (that's spaceBarRowRatio below, tied to the key-row height). It only
+            // scales minimumControlExtent to produce a floor the space bar won't
+            // shrink below.
             let spaceBarHeightScale: CGFloat = 1.4
             let minimumSpaceBarHeight = minimumControlExtent * spaceBarHeightScale
             /// Space bar height as a multiple of one key row. Matches the 1.02 ratio
@@ -248,7 +250,7 @@ struct KeyboardView: View {
         armWidth: CGFloat = 0
     ) -> some View {
         let mainX = state.commandBarOnRight ? 0 : commandColWidth
-        let diamondSide = min(keySide, rowHeight) * 0.70
+        let diamondSide = min(keySide, rowHeight) * 0.54
         let commandBarCol = state.commandBarOnRight ? 3 : -1
 
         ZStack(alignment: .topLeading) {
@@ -371,7 +373,10 @@ struct KeyboardView: View {
                 .position(x: railX + railWidth / 2, y: stripHeight + railHeight / 2)
 
             Image(systemName: "return")
-                .font(.system(size: min(cornerWidth, spaceHeight) * 0.42, weight: .medium))
+                // At cornerWidth ~61pt / spaceHeight ~90.8pt, 0.42 drew the arrow at
+                // ~25.6pt, visibly smaller than the ~30pt space-bar symbol next to it.
+                // 0.60 gives ~36.6pt, which still fits comfortably inside the corner block.
+                .font(.system(size: min(cornerWidth, spaceHeight) * 0.60, weight: .medium))
                 .foregroundColor(state.theme.specialTextColor)
                 .commandLabelDepth(for: state.theme)
                 .frame(width: cornerWidth, height: spaceHeight)
