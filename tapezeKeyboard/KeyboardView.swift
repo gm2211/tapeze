@@ -42,19 +42,29 @@ struct KeyboardView: View {
 
             let minimumControlExtent: CGFloat = 60
             let absoluteMaximumControlExtent: CGFloat = 88
-            // The space bar is 40% taller than the other bridge controls
-            // (backspace rail), so its vertical reserve is scaled separately.
+            // spaceBarHeightScale no longer drives the primary space bar height
+            // (that's spaceBarRowRatio below, tied to the key-row height). It only
+            // scales minimumControlExtent to produce a floor the space bar won't
+            // shrink below.
             let spaceBarHeightScale: CGFloat = 1.4
             let minimumSpaceBarHeight = minimumControlExtent * spaceBarHeightScale
+            /// Space bar height as a multiple of one key row. Matches the 1.02 ratio
+            /// measured from the reference layout (252px over 3 rows with an 86px bar).
+            let spaceBarRowRatio: CGFloat = 1.02
             let maxKeySideByWidth = max(
                 (totalWidth - minimumControlExtent - spacing * CGFloat(gridCols)) / CGFloat(gridCols),
                 1
             )
-            let maxKeySideByHeight = max(
-                (totalHeight - minimumSpaceBarHeight - spacing * CGFloat(gridRows - 1)) / CGFloat(gridRows),
+            // Solve for the key side so that `gridRows` key rows plus a space bar
+            // sized at `spaceBarRowRatio` key rows, plus the inter-row spacing,
+            // exactly fill the available height. This ties the space bar's height
+            // directly to the key rows instead of pinning it between an independent
+            // min/max derived from the (unrelated) horizontal rail width.
+            let keySideByRowRatio = max(
+                (totalHeight - spacing * CGFloat(gridRows - 1)) / (CGFloat(gridRows) + spaceBarRowRatio),
                 1
             )
-            let keySide = min(maxKeySideByWidth, maxKeySideByHeight)
+            let keySide = min(maxKeySideByWidth, keySideByRowRatio)
 
             let shouldDisableCompact = false
             let commandColWidth: CGFloat = 0
@@ -65,10 +75,10 @@ struct KeyboardView: View {
                 max(minimumControlExtent, keySide * 0.62)
             )
 
-            let maximumSpaceBarHeight = maximumControlExtent * spaceBarHeightScale
-
-            let availableSpaceHeight = max(totalHeight - mainGridHeight, minimumSpaceBarHeight)
-            let spaceBarHeight = min(availableSpaceHeight, maximumSpaceBarHeight)
+            // Floor only: a very short keyboard still gets a usable bar, but there is
+            // no longer an upper clamp — the bar simply matches `spaceBarRowRatio`
+            // key rows whenever the derived keySide isn't width-constrained.
+            let spaceBarHeight = max(keySide * spaceBarRowRatio, minimumSpaceBarHeight)
             let topInset = max(totalHeight - mainGridHeight - spaceBarHeight, 0)
 
             let availableRailWidth = max(totalWidth - mainGridWidth - spacing, minimumControlExtent)
@@ -363,7 +373,10 @@ struct KeyboardView: View {
                 .position(x: railX + railWidth / 2, y: stripHeight + railHeight / 2)
 
             Image(systemName: "return")
-                .font(.system(size: min(cornerWidth, spaceHeight) * 0.42, weight: .medium))
+                // At cornerWidth ~61pt / spaceHeight ~90.8pt, 0.42 drew the arrow at
+                // ~25.6pt, visibly smaller than the ~30pt space-bar symbol next to it.
+                // 0.60 gives ~36.6pt, which still fits comfortably inside the corner block.
+                .font(.system(size: min(cornerWidth, spaceHeight) * 0.60, weight: .medium))
                 .foregroundColor(state.theme.specialTextColor)
                 .commandLabelDepth(for: state.theme)
                 .frame(width: cornerWidth, height: spaceHeight)
