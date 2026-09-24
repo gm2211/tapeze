@@ -1,7 +1,5 @@
 # Project Instructions for AI Agents
 
-This file provides instructions and context for AI coding agents working on this project.
-
 <!-- BEGIN BEADS INTEGRATION v:1 profile:minimal hash:7510c1e2 -->
 ## Beads Issue Tracker
 
