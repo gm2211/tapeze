@@ -1,7 +1,5 @@
 # Agent Instructions
 
-This project uses **bd** (beads) for issue tracking. Run `bd prime` for full workflow context.
-
 > **Architecture in one line:** Issues live in a local Dolt database
 > (`.beads/dolt/`); cross-machine sync uses `bd dolt push/pull` (a
 > git-compatible protocol), stored under `refs/dolt/data` on your git
@@ -12,16 +10,8 @@ This project uses **bd** (beads) for issue tracking. Run `bd prime` for full wor
 > for the one-screen overview and anti-patterns (don't treat JSONL as the
 > source of truth; don't `bd import` during normal operation; don't
 > reach for third-party Dolt hosting before trying the default).
-
-## Quick Reference
-
-```bash
-bd ready              # Find available work
-bd show <id>          # View issue details
-bd update <id> --claim  # Claim work atomically
-bd close <id>         # Complete work
-bd dolt push          # Push beads data to remote
-```
+> (Quick reference and session commands are in the Beads Integration
+> block below.)
 
 ## Non-Interactive Shell Commands
 
