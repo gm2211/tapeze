@@ -46,11 +46,11 @@ struct KeyboardView: View {
             // (that's spaceBarRowRatio below, tied to the key-row height). It only
             // scales minimumControlExtent to produce a floor the space bar won't
             // shrink below.
-            let spaceBarHeightScale: CGFloat = 1.4
+            let spaceBarHeightScale: CGFloat = 1.26
             let minimumSpaceBarHeight = minimumControlExtent * spaceBarHeightScale
-            /// Space bar height as a multiple of one key row. Matches the 1.02 ratio
+            /// Space bar height as a multiple of one key row. 10% shorter than the 1.02 ratio
             /// measured from the reference layout (252px over 3 rows with an 86px bar).
-            let spaceBarRowRatio: CGFloat = 1.02
+            let spaceBarRowRatio: CGFloat = 0.92
             let maxKeySideByWidth = max(
                 (totalWidth - minimumControlExtent - spacing * CGFloat(gridCols)) / CGFloat(gridCols),
                 1
@@ -250,7 +250,7 @@ struct KeyboardView: View {
         armWidth: CGFloat = 0
     ) -> some View {
         let mainX = state.commandBarOnRight ? 0 : commandColWidth
-        let diamondSide = min(keySide, rowHeight) * 0.54
+        let diamondSide = min(keySide, rowHeight) * 0.60
         let commandBarCol = state.commandBarOnRight ? 3 : -1
 
         ZStack(alignment: .topLeading) {
@@ -710,12 +710,12 @@ struct KeyboardView: View {
         let mainX = layout.originX
         let originY = layout.originY
         // Diamond hit rects are smaller than the visual to avoid overlapping letter cells.
-        let diamondSide = min(layout.keySide, layout.rowHeight) * 0.40
+        let diamondSide = min(layout.keySide, layout.rowHeight) * 0.44
         let diamondHalf = diamondSide / 2
-        // Keep the forgiving tap target close to the visible diamond (0.54 of a
+        // Keep the forgiving tap target close to the visible diamond (0.60 of a
         // key). A larger region swallows taps aimed at adjacent letter corners
         // and switches to the number layer instead of typing the letter.
-        let commandTapSide = min(layout.keySide, layout.rowHeight) * 0.58
+        let commandTapSide = min(layout.keySide, layout.rowHeight) * 0.64
         let commandTapHalf = commandTapSide / 2
 
         // Letter cell regions are now set via GeometryReader in mainGrid; only keep
