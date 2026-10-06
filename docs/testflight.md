@@ -4,7 +4,7 @@
 
 Run these commands from the repository root.
 
-The repo includes a repeatable App Store Connect/TestFlight upload script. It pins the Xcode path to `/Applications/Xcode.app`, archives the app with automatic signing, exports an App Store Connect IPA, validates it, and uploads it.
+The repo includes a repeatable App Store Connect/TestFlight upload script. It defaults to Xcode at `/Applications/Xcode.app`, archives the app with automatic signing, exports an App Store Connect IPA, validates it, and uploads it.
 
 Prerequisites:
 
@@ -27,13 +27,13 @@ For first-time distribution on a machine, either keep those API key variables se
 Archive/export only:
 
 ```bash
-PROJECT=tapeze.xcodeproj scripts/upload-testflight.sh --skip-upload
+scripts/upload-testflight.sh --skip-upload
 ```
 
 Increment the build number, validate, and upload:
 
 ```bash
-PROJECT=tapeze.xcodeproj scripts/upload-testflight.sh --increment-build
+scripts/upload-testflight.sh --increment-build
 ```
 
 Check processing status after upload:

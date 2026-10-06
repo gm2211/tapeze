@@ -23,7 +23,7 @@ Requires macOS with Xcode 15+ and an iPhone or simulator running iOS 16+.
 ```bash
 git clone https://github.com/gm2211/tapeze.git
 cd tapeze
-open tapeze.xcodeproj
+open Tapeze.xcodeproj
 ```
 
 1. Select the **tapeze** scheme and an iPhone simulator, then run with **⌘R**. For a physical iPhone, select your signing team for both targets.
