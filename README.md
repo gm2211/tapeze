@@ -2,9 +2,9 @@
 
 A compact iOS keyboard. Nine letter keys, swipe typing, customizable layouts and themes.
 
-[![Tapeze gesture demo: taps, swipe letters, capitals, space, and delete](docs/demo/gesture-demo.webp)](docs/demo/gesture-demo.mp4)
+[![Tapeze gesture demo: taps, swipe letters, capitals, space, and delete](docs/demo/gesture-demo.webp)](docs/demo/gesture-demo.mp4?raw=true)
 
-[Watch the MP4](docs/demo/gesture-demo.mp4) · [Light screenshot](docs/screenshots/keyboard-settings.png) · [Dark screenshot](docs/screenshots/keyboard-settings-dark.png)
+[Download MP4](docs/demo/gesture-demo.mp4?raw=true) · [Light screenshot](docs/screenshots/keyboard-settings.png) · [Dark screenshot](docs/screenshots/keyboard-settings-dark.png)
 
 **Tap** a center letter · **Swipe** toward a surrounding letter · **Swipe back or loop** for capitals.
 
