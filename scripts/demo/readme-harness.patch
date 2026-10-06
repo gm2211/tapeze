@@ -1,0 +1,219 @@
+--- a/tapeze/tapezeApp.swift
++++ b/tapeze/tapezeApp.swift
+@@ -4,7 +4,88 @@
+ struct TapezeApp: App {
+     var body: some Scene {
+         WindowGroup {
+-            ContentView()
++            if ProcessInfo.processInfo.arguments.contains("--readme-demo") {
++                ReadmeDemoView()
++            } else {
++                ContentView()
++            }
+         }
+     }
+ }
++
++#if DEBUG
++struct ReadmeDemoView: View {
++    @StateObject private var state: KeyboardState = {
++        let value = KeyboardState(isPreview: true)
++        value.keyboardHeight = 334
++        value.resetLearningPreview()
++        value.showGestureTrail = true
++        value.keyCornerRadius = 8
++        value.selectedThemeID = KeyboardTheme.tapeze.id
++        return value
++    }()
++    @State private var output = ""
++    @State private var caption = "Nine keys. Every letter."
++    @State private var detail = "Watch the gestures."
++
++    var body: some View {
++        GeometryReader { geo in
++            HStack(spacing: 26) {
++                VStack(alignment: .leading, spacing: 0) {
++                    Text("tapeze").font(.system(size: 36, weight: .bold, design: .rounded))
++                        .foregroundStyle(Color(red: 0.50, green: 0.91, blue: 0.87))
++                    Text("A compact gesture keyboard")
++                        .font(.system(size: 13)).foregroundStyle(.white.opacity(0.52)).padding(.top, 5)
++                    Spacer()
++                    Text(output.isEmpty ? " " : output.replacingOccurrences(of: " ", with: " "))
++                        .font(.system(size: 36, weight: .medium, design: .rounded))
++                        .foregroundStyle(.white).lineLimit(1).minimumScaleFactor(0.75)
++                        .frame(maxWidth: .infinity, alignment: .leading)
++                        .overlay(alignment: .bottomLeading) {
++                            Rectangle().fill(.white.opacity(0.14)).frame(height: 1).offset(y: 17)
++                        }
++                    Spacer()
++                    Text(caption).font(.system(size: 21, weight: .semibold, design: .rounded))
++                        .foregroundStyle(.white).fixedSize(horizontal: false, vertical: true)
++                    Text(detail).font(.system(size: 14)).foregroundStyle(.white.opacity(0.55))
++                        .padding(.top, 7).frame(height: 42, alignment: .topLeading)
++                }.frame(width: 268, height: 320, alignment: .leading)
++                KeyboardView(state: state, onCharacter: { char in
++                    output += char
++                    print("README_DEMO insert=\(char.debugDescription) output=\(output.debugDescription)")
++                }, onBackspace: {
++                    if !output.isEmpty { output.removeLast() }
++                    print("README_DEMO delete output=\(output.debugDescription)")
++                }, onDeleteWord: {}, onDeleteLine: {}, onEnter: {}, onMoveCursor: { _ in }, onNextKeyboard: nil)
++                .frame(width: 340, height: 334)
++                .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
++            }
++            .padding(28)
++            .frame(width: 700, height: 390)
++            .background(Color(red: 0.045, green: 0.065, blue: 0.085))
++            .clipShape(RoundedRectangle(cornerRadius: 24, style: .continuous))
++            .shadow(color: .black.opacity(0.25), radius: 3)
++            .rotationEffect(.degrees(90))
++            .position(x: geo.size.width / 2, y: geo.size.height / 2)
++        }
++        .background(Color(red: 13.0/255, green: 17.0/255, blue: 23.0/255))
++        .ignoresSafeArea()
++        .statusBarHidden()
++        .preferredColorScheme(.dark)
++        .onAppear {
++            state.resetLearningPreview()
++            state.keyboardHeight = 334
++            state.showGestureTrail = true
++            state.keyCornerRadius = 8
++            state.selectedThemeID = KeyboardTheme.tapeze.id
++        }
++        .onReceive(NotificationCenter.default.publisher(for: Notification.Name("ReadmeDemoCaption"))) { notice in
++            caption = notice.userInfo?["caption"] as? String ?? caption
++            detail = notice.userInfo?["detail"] as? String ?? detail
++            if caption == "Nine keys. Every letter." && !output.isEmpty {
++                print("README_DEMO_FINAL output=\(output.debugDescription) expected=\(String("Tapeze hi").debugDescription) pass=\(output == "Tapeze hi")")
++            }
++        }
++    }
++}
++#endif
+--- a/tapezeKeyboard/KeyboardView.swift
++++ b/tapezeKeyboard/KeyboardView.swift
+@@ -27,6 +27,9 @@
+     @State private var logicalGestureActive = false
+     @State private var lastTrackedPoint: CGPoint?
+     @State private var currentDragStart: CGPoint?
++
++    @State private var demoTouch: CGPoint?
++    @State private var demoStarted = false
+ 
+     private let gridRows = 3
+     private let gridCols = 3
+@@ -223,6 +226,23 @@
+                         .allowsHitTesting(false)
+                 }
+             }
++            .overlay {
++                if let point = demoTouch {
++                    Circle().fill(Color.white.opacity(0.20))
++                        .overlay(Circle().stroke(Color.white.opacity(0.95), lineWidth: 2))
++                        .frame(width: 27, height: 27).position(point)
++                        .allowsHitTesting(false)
++                }
++            }
++            .task {
++                guard ProcessInfo.processInfo.arguments.contains("--readme-demo"), !demoStarted else { return }
++                demoStarted = true
++                let ctx = GestureLayoutContext(totalWidth: totalWidth, totalHeight: totalHeight,
++                    stripHeight: topInset, armWidth: armWidth, keySide: keySide,
++                    layoutOriginX: layoutOriginX, mainGridWidth: mainGridWidth,
++                    backspaceRailWidth: backspaceRailWidth)
++                await replayReadmeDemo(ctx: ctx)
++            }
+             .coordinateSpace(name: "keyboard")
+         }
+         .frame(height: state.keyboardHeight)
+@@ -234,6 +254,90 @@
+         .onDisappear {
+             cancelNumberLongPress()
+         }
++    }
++
++    @MainActor
++    private func replayReadmeDemo(ctx: GestureLayoutContext) async {
++        func wait(_ seconds: Double) async { try? await Task.sleep(nanoseconds: UInt64(seconds * 1_000_000_000)) }
++        func caption(_ title: String, _ detail: String) {
++            NotificationCenter.default.post(name: Notification.Name("ReadmeDemoCaption"), object: nil,
++                userInfo: ["caption": title, "detail": detail])
++        }
++        func center(_ row: Int, _ col: Int) -> CGPoint {
++            CGPoint(x: ctx.layoutOriginX + (CGFloat(col) + 0.5) * ctx.keySide + CGFloat(col),
++                    y: ctx.stripHeight + (CGFloat(row) + 0.5) * ctx.keySide + CGFloat(row))
++        }
++        func line(_ start: CGPoint, _ end: CGPoint, count: Int = 24) -> [CGPoint] {
++            (0...count).map { i in
++                let t = CGFloat(i) / CGFloat(count)
++                return CGPoint(x: start.x + (end.x-start.x)*t, y: start.y + (end.y-start.y)*t)
++            }
++        }
++        func replay(_ points: [CGPoint], duration: Double) async {
++            guard let first = points.first, let last = points.last else { return }
++            demoTouch = first
++            beginLogicalGesture(at: first, ctx: ctx)
++            for point in points.dropFirst() {
++                await wait(duration / Double(max(points.count-1, 1)))
++                demoTouch = point
++                continueLogicalGesture(at: point, ctx: ctx)
++            }
++            finishLogicalGesture(at: last, ctx: ctx)
++            await wait(0.12)
++            demoTouch = nil
++        }
++        func tap(_ row: Int, _ col: Int) async {
++            let p = center(row, col)
++            await replay([p, p], duration: 0.15)
++        }
++        await wait(3)
++        caption("Loop for capitals", "Circle a key to type its capital.")
++        await wait(0.55)
++        let t = center(2, 0)
++        let radius = ctx.keySide * 0.22
++        let circle = (0...36).map { i in
++            let angle = Double(i) / 36 * .pi * 2
++            return CGPoint(x: t.x + radius * cos(angle), y: t.y + radius * sin(angle))
++        }
++        await replay(circle, duration: 0.90)
++        await wait(0.55)
++        caption("Tap large letters", "One tap. One letter.")
++        await wait(0.4)
++        await tap(0, 0)
++        await wait(0.65)
++        caption("Swipe to small letters", "Slide toward p, then lift.")
++        await wait(0.45)
++        let o = center(1, 1)
++        await replay(line(o, CGPoint(x: o.x + ctx.keySide*0.32, y: o.y - ctx.keySide*0.32)), duration: 0.48)
++        await wait(0.65)
++        caption("Keep the rhythm", "Tap e. Swipe z. Tap e.")
++        await wait(0.3)
++        await tap(2, 1)
++        await wait(0.3)
++        let e = center(2, 1)
++        await replay(line(e, CGPoint(x: e.x + ctx.keySide*0.34, y: e.y)), duration: 0.45)
++        await wait(0.3)
++        await tap(2, 1)
++        await wait(0.4)
++        caption("Swipe across for space", "Cross all three keys in a row.")
++        await wait(0.5)
++        await replay(line(CGPoint(x: ctx.layoutOriginX+ctx.keySide*0.2, y: center(1, 0).y),
++            CGPoint(x: ctx.layoutOriginX+ctx.keySide*2.8+2, y: center(1, 0).y)), duration: 0.75)
++        await wait(0.55)
++        caption("Tap to keep typing", "h · i · s")
++        await wait(0.35)
++        await tap(1, 0)
++        await wait(0.25)
++        await tap(0, 2)
++        await wait(0.25)
++        await tap(2, 2)
++        await wait(0.4)
++        caption("Swipe down to delete", "Cross three keys to erase one letter.")
++        await wait(0.5)
++        await replay(line(CGPoint(x: center(0, 1).x, y: ctx.stripHeight+ctx.keySide*0.2),
++            CGPoint(x: center(0, 1).x, y: ctx.stripHeight+ctx.keySide*2.8+2)), duration: 0.75)
++        await wait(0.8)
++        caption("Nine keys. Every letter.", "Less reaching. More writing.")
+     }
+ 
+     // MARK: - Main 3x3 Grid
