@@ -87,6 +87,21 @@ class KeyboardState: ObservableObject {
     @Published var activeKeyPosition: GridPosition? = nil
     @Published var swipeDirection: SwipeDirection? = nil
     @Published var gestureTrailPoints: [CGPoint] = []
+    /// Which split half (identified by its rail side) last took a touch, so
+    /// only that half draws the shared highlight and gesture trail.
+    @Published var activeSplitHalf: Bool? = nil
+    /// Set by the keyboard controller while the device is in landscape: the
+    /// tallest the keyboard may be there. `nil` in portrait.
+    @Published var landscapeMaxHeight: CGFloat? = nil
+
+    var isSplitLayout: Bool { landscapeMaxHeight != nil }
+
+    /// The height actually used on screen. The saved height is tuned for
+    /// portrait and would cover most of a landscape screen, so it is capped.
+    var effectiveKeyboardHeight: CGFloat {
+        guard let cap = landscapeMaxHeight else { return keyboardHeight }
+        return min(keyboardHeight, cap)
+    }
 
     // Height constraints
     let minHeight: CGFloat = 200

@@ -5,7 +5,7 @@ import Combine
 class KeyboardViewController: UIInputViewController {
 
     private var keyboardState = KeyboardState()
-    private var hostingController: UIHostingController<KeyboardView>?
+    private var hostingController: UIHostingController<KeyboardContainerView>?
     private var heightConstraint: NSLayoutConstraint?
     private var heightCancellable: AnyCancellable?
 
@@ -13,7 +13,8 @@ class KeyboardViewController: UIInputViewController {
         super.viewDidLoad()
         configureTransparentBackgrounds()
 
-        let heightConstraint = view.heightAnchor.constraint(equalToConstant: keyboardState.keyboardHeight)
+        updateLandscapeState()
+        let heightConstraint = view.heightAnchor.constraint(equalToConstant: keyboardState.effectiveKeyboardHeight)
         // The system installs its own default-height constraint on the input
         // view. At `.defaultHigh` ours lost the first layout pass, so the
         // keyboard came up at the system height and only grew afterwards - by
@@ -25,9 +26,9 @@ class KeyboardViewController: UIInputViewController {
 
         // Publish the height before the first appearance so the very first
         // keyboard frame the host is notified about already carries our size.
-        preferredContentSize = CGSize(width: 0, height: keyboardState.keyboardHeight)
+        preferredContentSize = CGSize(width: 0, height: keyboardState.effectiveKeyboardHeight)
 
-        let keyboardView = KeyboardView(
+        let keyboardView = KeyboardContainerView(
             state: keyboardState,
             onCharacter: { [weak self] char in
                 self?.textDocumentProxy.insertText(char)
@@ -83,7 +84,8 @@ class KeyboardViewController: UIInputViewController {
         super.viewWillAppear(animated)
         configureTransparentBackgrounds()
         keyboardState.reloadPersistedAppearanceSettings()
-        applyKeyboardHeight(keyboardState.keyboardHeight, animated: false, force: true)
+        updateLandscapeState()
+        applyKeyboardHeight(keyboardState.effectiveKeyboardHeight, animated: false, force: true)
         updateInputContext()
     }
 
@@ -107,7 +109,7 @@ class KeyboardViewController: UIInputViewController {
     /// once we are on screen so a corrective frame change reaches the host
     /// while the field is still focused, instead of only on the next focus.
     private func reassertKeyboardHeightIfNeeded() {
-        let desired = keyboardState.keyboardHeight
+        let desired = keyboardState.effectiveKeyboardHeight
         guard abs(view.bounds.height - desired) > 0.5 else { return }
 
         heightConstraint?.constant = desired
@@ -120,11 +122,40 @@ class KeyboardViewController: UIInputViewController {
 
     override func viewWillLayoutSubviews() {
         super.viewWillLayoutSubviews()
-        applyKeyboardHeight(keyboardState.keyboardHeight, animated: false)
+        updateLandscapeState()
+        applyKeyboardHeight(keyboardState.effectiveKeyboardHeight, animated: false)
+    }
+
+    override func viewWillTransition(to size: CGSize, with coordinator: UIViewControllerTransitionCoordinator) {
+        super.viewWillTransition(to: size, with: coordinator)
+        coordinator.animate(alongsideTransition: { _ in
+            self.updateLandscapeState()
+            self.applyKeyboardHeight(self.keyboardState.effectiveKeyboardHeight, animated: false)
+        })
+    }
+
+    /// Share of the screen's short side the keyboard may use in landscape.
+    /// The saved height (default 360pt) is tuned for portrait; on a ~390pt
+    /// landscape screen it would leave almost nothing of the text visible.
+    private static let landscapeHeightShare: CGFloat = 0.58
+
+    /// Switches the split layout on in landscape and caps its height.
+    private func updateLandscapeState() {
+        let screenBounds = view.window?.windowScene?.screen.bounds ?? UIScreen.main.bounds
+        let isLandscape = screenBounds.width > screenBounds.height
+            || traitCollection.verticalSizeClass == .compact
+        let cap: CGFloat? = isLandscape
+            ? (min(screenBounds.width, screenBounds.height) * Self.landscapeHeightShare).rounded()
+            : nil
+        if keyboardState.landscapeMaxHeight != cap {
+            keyboardState.landscapeMaxHeight = cap
+        }
     }
 
     private func bindKeyboardHeight() {
         heightCancellable = keyboardState.$keyboardHeight
+            .combineLatest(keyboardState.$landscapeMaxHeight)
+            .map { height, cap in cap.map { min(height, $0) } ?? height }
             .removeDuplicates()
             .receive(on: RunLoop.main)
             .sink { [weak self] height in

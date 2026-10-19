@@ -12,6 +12,10 @@ struct KeyboardView: View {
     let onEnter: () -> Void
     let onMoveCursor: (Int) -> Void
     let onNextKeyboard: (() -> Void)?
+    /// Set when this view is one half of the landscape split keyboard. It pins
+    /// the backspace/return rail to a side regardless of the saved preference,
+    /// so both halves can face their rails toward the middle of the screen.
+    var commandBarSideOverride: Bool? = nil
 
     @State private var keyRegions: [GridPosition: CGRect] = [:]
     @State private var spaceBarRegion: CGRect = .zero
@@ -34,6 +38,32 @@ struct KeyboardView: View {
     private let maxTrailDisplayPoints = 42
     private let minTrailPointDistance: CGFloat = 7
     private let numberHoldDuration: TimeInterval = 0.6
+
+    private var commandBarOnRight: Bool {
+        commandBarSideOverride ?? state.commandBarOnRight
+    }
+
+    private var isSplitHalf: Bool { commandBarSideOverride != nil }
+
+    /// In split mode both halves observe the same shared highlight and trail
+    /// state; only the half that last received a touch draws them.
+    private var showsSharedVisuals: Bool {
+        !isSplitHalf || state.activeSplitHalf == commandBarSideOverride
+    }
+
+    private func isHighlighted(_ position: GridPosition) -> Bool {
+        showsSharedVisuals && state.activeKeyPosition == position
+    }
+
+    /// Width one half of the split keyboard needs at `height` so the 3x3 grid
+    /// and its rail fill it exactly, using the same sizing rules as `body`.
+    static func splitHalfWidth(forHeight height: CGFloat) -> CGFloat {
+        let rows: CGFloat = 3
+        let gap: CGFloat = 1
+        let keySide = max((height - gap * (rows - 1)) / (rows + 0.92), 1)
+        let rail = min(88, max(60, keySide * 0.62))
+        return keySide * 3 + gap * 3 + rail
+    }
 
     var body: some View {
         GeometryReader { outerGeo in
@@ -86,7 +116,7 @@ struct KeyboardView: View {
             let sidePadding = max(totalWidth - mainGridWidth - spacing - backspaceRailWidth, 0)
 
             let armWidth = keySide * 0.40
-            let layoutOriginX = state.commandBarOnRight
+            let layoutOriginX = commandBarOnRight
                 ? sidePadding
                 : backspaceRailWidth + spacing
             let hitLayout = LatticeHitLayout(
@@ -99,7 +129,7 @@ struct KeyboardView: View {
                 keySide: keySide,
                 rowHeight: keySide,
                 bottomRowHeight: spaceBarHeight,
-                commandBarOnRight: state.commandBarOnRight
+                commandBarOnRight: commandBarOnRight
             )
 
             ZStack(alignment: .topLeading) {
@@ -218,14 +248,14 @@ struct KeyboardView: View {
                     }
             )
             .overlay {
-                if state.showGestureTrail && !state.gestureTrailPoints.isEmpty {
+                if showsSharedVisuals && state.showGestureTrail && !state.gestureTrailPoints.isEmpty {
                     GestureTrailView(points: state.gestureTrailPoints, theme: state.theme)
                         .allowsHitTesting(false)
                 }
             }
             .coordinateSpace(name: "keyboard")
         }
-        .frame(height: state.keyboardHeight)
+        .frame(height: state.effectiveKeyboardHeight)
         .onAppear {
             gestureEngine.updateKeyRegions(keyRegions)
             gestureEngine.updateSpaceBarRegion(spaceBarRegion, gutterRegion: spaceBarGutterRegion)
@@ -249,9 +279,9 @@ struct KeyboardView: View {
         bottomRowHeight: CGFloat,
         armWidth: CGFloat = 0
     ) -> some View {
-        let mainX = state.commandBarOnRight ? 0 : commandColWidth
+        let mainX = commandBarOnRight ? 0 : commandColWidth
         let diamondSide = min(keySide, rowHeight) * 0.60
-        let commandBarCol = state.commandBarOnRight ? 3 : -1
+        let commandBarCol = commandBarOnRight ? 3 : -1
 
         ZStack(alignment: .topLeading) {
             mainGrid(width: mainGridWidth, height: mainGridHeight, rowHeight: rowHeight, armWidth: armWidth)
@@ -308,13 +338,13 @@ struct KeyboardView: View {
     ) -> some View {
         let gridBottom = stripHeight + mainGridHeight
         let spaceHeight = max(totalHeight - gridBottom, 0)
-        let railX = state.commandBarOnRight
+        let railX = commandBarOnRight
             ? layoutOriginX + mainGridWidth + spacing
             : 0
         let railWidth = max(backspaceRailWidth, 0)
         let railHeight = max(mainGridHeight, 0)
-        let cornerMinX = state.commandBarOnRight ? layoutOriginX + mainGridWidth : 0
-        let cornerMaxX = state.commandBarOnRight ? railX + railWidth : layoutOriginX
+        let cornerMinX = commandBarOnRight ? layoutOriginX + mainGridWidth : 0
+        let cornerMaxX = commandBarOnRight ? railX + railWidth : layoutOriginX
         let cornerWidth = max(cornerMaxX - cornerMinX, 0)
         let bottomControls = bottomControlMetrics(
             layoutOriginX: layoutOriginX,
@@ -510,12 +540,12 @@ struct KeyboardView: View {
         let keySide = rowHeight
         let mainGridHeight = keySide * CGFloat(gridRows) + spacing * CGFloat(gridRows - 1)
         let gridBottom = stripHeight + mainGridHeight
-        let railX = state.commandBarOnRight
+        let railX = commandBarOnRight
             ? layoutOriginX + mainGridWidth + spacing
             : 0
         let railEndX = railX + backspaceRailWidth
-        let cornerMinX = state.commandBarOnRight ? layoutOriginX + mainGridWidth : 0
-        let cornerMaxX = state.commandBarOnRight ? railEndX : layoutOriginX
+        let cornerMinX = commandBarOnRight ? layoutOriginX + mainGridWidth : 0
+        let cornerMaxX = commandBarOnRight ? railEndX : layoutOriginX
 
         if point.x >= cornerMinX,
            point.x <= cornerMaxX,
@@ -566,6 +596,9 @@ struct KeyboardView: View {
 
     private func beginLogicalGesture(at point: CGPoint, ctx: GestureLayoutContext) {
         logicalGestureActive = true
+        if isSplitHalf {
+            state.activeSplitHalf = commandBarSideOverride
+        }
         longPressTriggered = false
         activeBridge = bridgeAt(
             point,
@@ -816,7 +849,7 @@ struct KeyboardView: View {
 
         let spaceWidth = mainGridWidth / 3
         let zeroWidth = max(mainGridWidth - spaceWidth - spacing, 0)
-        if state.commandBarOnRight {
+        if commandBarOnRight {
             return BottomControlMetrics(
                 spaceX: layoutOriginX + zeroWidth + spacing,
                 spaceWidth: spaceWidth,
@@ -853,7 +886,7 @@ struct KeyboardView: View {
     ) -> some View {
         DiamondCommandKeyView(
             config: config,
-            isActive: state.activeKeyPosition == position,
+            isActive: isHighlighted(position),
             isShifted: config.specialAction == .shift ? state.isShifted : false,
             isCapsLocked: config.specialAction == .shift ? state.isCapsLocked : false,
             theme: state.theme,
@@ -902,7 +935,7 @@ struct KeyboardView: View {
                         let config = grid[row][col]
                         let visualConfig = isSymbolOverlay ? KeyboardLayoutData.activeSymbolOverlayGrid()[row][col] : config
                         let letterSwipeLabels = isSymbolOverlay ? KeyboardLayoutData.activeLetterGrid()[row][col].swipes : nil
-                        let isActive = state.activeKeyPosition == pos
+                        let isActive = isHighlighted(pos)
                         let labelShift: CGFloat = 0
 
                         CharacterKeyView(
@@ -949,14 +982,14 @@ struct KeyboardView: View {
     private func commandBar(width: CGFloat, totalHeight: CGFloat) -> some View {
         let commands = state.currentCommandBar
         let rowHeight = (totalHeight - spacing * CGFloat(commands.count - 1)) / CGFloat(commands.count)
-        let side: CommandVisualSide = state.commandBarOnRight ? .right : .left
+        let side: CommandVisualSide = commandBarOnRight ? .right : .left
 
         ZStack {
             if let backspaceIndex = commands.firstIndex(where: { $0.specialAction == .backspace }) {
-                let backspacePos = GridPosition(row: backspaceIndex, col: state.commandBarOnRight ? 3 : -1)
+                let backspacePos = GridPosition(row: backspaceIndex, col: commandBarOnRight ? 3 : -1)
 
                 DeleteColumnKeyView(
-                    isActive: state.activeKeyPosition == backspacePos,
+                    isActive: isHighlighted(backspacePos),
                     side: side,
                     theme: state.theme,
                     cornerRadius: state.keyCornerRadius
@@ -968,7 +1001,7 @@ struct KeyboardView: View {
                     .foregroundColor(state.theme.specialTextColor)
                     .commandLabelDepth(for: state.theme)
                     .position(
-                        x: state.commandBarOnRight ? width * 0.62 : width * 0.38,
+                        x: commandBarOnRight ? width * 0.62 : width * 0.38,
                         y: rowCenter(for: backspaceIndex, rowHeight: rowHeight)
                     )
             }
@@ -978,13 +1011,13 @@ struct KeyboardView: View {
                 if config.specialAction != .backspace {
                     DiamondCommandKeyView(
                         config: config,
-                        isActive: state.activeKeyPosition == GridPosition(row: idx, col: state.commandBarOnRight ? 3 : -1),
+                        isActive: isHighlighted(GridPosition(row: idx, col: commandBarOnRight ? 3 : -1)),
                         theme: state.theme,
                         cornerRadius: state.keyCornerRadius
                     )
                     .frame(width: rowHeight * 0.72, height: rowHeight * 0.72)
                     .position(
-                        x: state.commandBarOnRight ? width * 0.08 : width * 0.92,
+                        x: commandBarOnRight ? width * 0.08 : width * 0.92,
                         y: rowCenter(for: idx, rowHeight: rowHeight)
                     )
                 }
@@ -992,7 +1025,7 @@ struct KeyboardView: View {
 
             ForEach(0..<commands.count, id: \.self) { idx in
                 let config = commands[idx]
-                let commandPos = GridPosition(row: idx, col: state.commandBarOnRight ? 3 : -1)
+                let commandPos = GridPosition(row: idx, col: commandBarOnRight ? 3 : -1)
 
                 Color.clear
                     .frame(width: width, height: rowHeight)
@@ -1033,7 +1066,7 @@ struct KeyboardView: View {
     private func bottomRow(width: CGFloat, height: CGFloat) -> some View {
         if state.currentLayer == .letters {
             SpaceBarView(
-                isActive: state.activeKeyPosition == GridPosition(row: 3, col: 0),
+                isActive: isHighlighted(GridPosition(row: 3, col: 0)),
                 theme: state.theme,
                 cornerRadius: state.keyCornerRadius
             )
@@ -1090,17 +1123,17 @@ struct KeyboardView: View {
 
     @ViewBuilder
     private func enterKey(width: CGFloat, height: CGFloat) -> some View {
-        let pos = GridPosition(row: 3, col: state.commandBarOnRight ? 3 : -1)
+        let pos = GridPosition(row: 3, col: commandBarOnRight ? 3 : -1)
 
         ZStack {
             DiamondCommandKeyView(
                 config: KeyConfig(tap: "", specialAction: .enter, displayLabel: "return"),
-                isActive: state.activeKeyPosition == pos,
+                isActive: isHighlighted(pos),
                 theme: state.theme,
                 cornerRadius: state.keyCornerRadius
             )
             .frame(width: height * 0.72, height: height * 0.72)
-            .position(x: state.commandBarOnRight ? width * 0.08 : width * 0.92, y: height / 2)
+            .position(x: commandBarOnRight ? width * 0.08 : width * 0.92, y: height / 2)
 
             Color.clear
                 .background(
@@ -1772,5 +1805,64 @@ struct ExtendedBridgeShape: Shape {
             p.closeSubpath()
         }
         return p
+    }
+}
+
+// MARK: - Landscape Split Keyboard
+
+/// Root keyboard view. Portrait shows the single keyboard; landscape shows a
+/// copy of the 3x3 grid at each screen edge so each thumb has its own,
+/// with the backspace/return rails facing the empty middle.
+struct KeyboardContainerView: View {
+    @ObservedObject var state: KeyboardState
+    let onCharacter: (String) -> Void
+    let onBackspace: () -> Void
+    let onDeleteWord: () -> Void
+    let onDeleteLine: () -> Void
+    let onEnter: () -> Void
+    let onMoveCursor: (Int) -> Void
+    let onNextKeyboard: (() -> Void)?
+
+    /// Neither half may take more than this share of the width, so a
+    /// narrow landscape window still leaves a gap between them.
+    private let maxHalfShare: CGFloat = 0.45
+
+    var body: some View {
+        if state.isSplitLayout {
+            GeometryReader { geo in
+                let height = state.effectiveKeyboardHeight
+                let halfWidth = min(
+                    KeyboardView.splitHalfWidth(forHeight: height),
+                    geo.size.width * maxHalfShare
+                )
+
+                HStack(spacing: 0) {
+                    keyboard(railOnRight: true)
+                        .frame(width: halfWidth)
+                    Spacer(minLength: 0)
+                    keyboard(railOnRight: false)
+                        .frame(width: halfWidth)
+                }
+                .frame(width: geo.size.width, height: height)
+            }
+            .frame(height: state.effectiveKeyboardHeight)
+            .background(state.theme.keyboardBackground)
+        } else {
+            keyboard(railOnRight: nil)
+        }
+    }
+
+    private func keyboard(railOnRight: Bool?) -> KeyboardView {
+        KeyboardView(
+            state: state,
+            onCharacter: onCharacter,
+            onBackspace: onBackspace,
+            onDeleteWord: onDeleteWord,
+            onDeleteLine: onDeleteLine,
+            onEnter: onEnter,
+            onMoveCursor: onMoveCursor,
+            onNextKeyboard: onNextKeyboard,
+            commandBarSideOverride: railOnRight
+        )
     }
 }
