@@ -1262,19 +1262,3 @@ struct BottomNumberKeyView: View {
         }
     }
 }
-
-// MARK: - Overlay Indicators
-
-struct ShiftIndicatorView: View {
-    let isShifted: Bool
-    let isCapsLocked: Bool
-    let theme: KeyboardTheme
-
-    var body: some View {
-        let symbolName = isCapsLocked ? "capslock.fill" : (isShifted ? "shift.fill" : "shift")
-        Image(systemName: symbolName)
-            .font(.system(size: 12))
-            .foregroundColor(theme.tapColor)
-            .labelDepth(for: theme)
-    }
-}

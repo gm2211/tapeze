@@ -1127,16 +1127,6 @@ struct KeyboardView: View {
     @ViewBuilder
     private func overlaysForKey(at pos: GridPosition, size: CGSize) -> some View {
         ZStack {
-            // Shift indicator on key (1,2)
-            if pos.row == 1 && pos.col == 2 {
-                ShiftIndicatorView(
-                    isShifted: state.isShifted,
-                    isCapsLocked: state.isCapsLocked,
-                    theme: state.theme
-                )
-                .position(x: size.width * 0.5, y: size.height * 0.12)
-            }
-
             // Tab indicator on key (2,0)
             if pos.row == 2 && pos.col == 0 {
                 Image(systemName: "arrow.right.to.line")
@@ -1358,11 +1348,6 @@ struct KeyboardView: View {
         }
 
         // Check for special overlays first
-        if pos.row == 1 && pos.col == 2 && direction == .top {
-            // Shift on 'r' key
-            state.toggleShift()
-            return
-        }
         if pos.row == 2 && pos.col == 0 && direction == .bottomRight {
             // Tab
             onCharacter("\t")
