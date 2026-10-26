@@ -54,6 +54,13 @@ class GestureEngine {
     /// proportionally more travel. A tap wobble stays under ~0.4; a swipe aimed
     /// at a subcell label crosses it comfortably.
     private let subcellActivationReach: CGFloat = 0.52
+    /// How far a stroke that starts on the space bar must travel before it
+    /// stops being a space and becomes a cursor move or a symbols toggle.
+    /// A thumb pressing the bar from the side rolls its contact point 15-25pt,
+    /// past the 15/20pt tap and swipe thresholds used elsewhere, which turned
+    /// ordinary space presses into cursor moves or layer toggles. Letter keys
+    /// already tolerate ~22pt of drift (see `subcellActivationReach`).
+    private let spaceGestureDistance: CGFloat = 30.0
 
     // MARK: - Setup
 
@@ -211,16 +218,16 @@ class GestureEngine {
             return .specialSwipe(.spaceSwipeUpAndBack)
         }
 
-        if totalDist < tapDistanceThreshold {
+        if totalDist < spaceGestureDistance {
             // Tap on spacebar
             return .tap(GridPosition(row: 3, col: 0)) // spacebar position
         }
 
-        if abs(dx) >= minSwipeDistance, abs(dx) > abs(dy) * 1.2 {
+        if abs(dx) >= spaceGestureDistance, abs(dx) > abs(dy) * 1.2 {
             return .specialSwipe(dx < 0 ? .spaceCursorLeft : .spaceCursorRight)
         }
 
-        if dy < -minSwipeDistance {
+        if dy < -spaceGestureDistance, abs(dy) > abs(dx) {
             return .specialSwipe(.spaceSwipeUp)
         }
 
