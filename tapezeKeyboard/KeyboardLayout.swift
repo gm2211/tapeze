@@ -271,8 +271,6 @@ struct KeyboardLayoutData {
     }
 
     static let persistentOverlays: [PersistentOverlay] = [
-        // Shift indicator on key (1,2) top
-        PersistentOverlay(position: GridPosition(row: 1, col: 2), direction: .top, action: .shift, displayLabel: "△"),
         // Tab on key (2,0) bottomRight
         PersistentOverlay(position: GridPosition(row: 2, col: 0), direction: .bottomRight, action: .tab, displayLabel: "⇥"),
         // Clipboard on key (0,0) topLeft
