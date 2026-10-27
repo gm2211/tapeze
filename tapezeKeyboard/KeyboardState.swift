@@ -12,6 +12,12 @@ enum AutocapitalizationMode {
     case allCharacters
 }
 
+// MARK: - Gesture Trail
+
+final class GestureTrailModel: ObservableObject {
+    @Published var points: [CGPoint] = []
+}
+
 // MARK: - Keyboard State
 
 class KeyboardState: ObservableObject {
@@ -24,7 +30,9 @@ class KeyboardState: ObservableObject {
     static let keyboardHeightDefaultsKey = "keyboardHeight"
     static let themeDefaultsKey = "keyboardTheme"
     static let defaultKeyCornerRadius: CGFloat = 5
-    static let defaultKeyboardHeight: CGFloat = 360
+    /// MessagEase's keyboard is four 72pt rows tall (~292pt). At 300pt the
+    /// 78:72 keys come out 82x76pt, the same footprint within a few points.
+    static let defaultKeyboardHeight: CGFloat = 300
     private let persistsSettings: Bool
 
     @Published var currentLayer: KeyboardLayer = .letters
@@ -86,7 +94,15 @@ class KeyboardState: ObservableObject {
     // Gesture feedback
     @Published var activeKeyPosition: GridPosition? = nil
     @Published var swipeDirection: SwipeDirection? = nil
-    @Published var gestureTrailPoints: [CGPoint] = []
+    /// The trail changes on every touch sample. Publishing it from here made
+    /// each sample re-render all nine keys, which backed up the main thread
+    /// and delayed the character inserted on lift. Only the trail overlay
+    /// observes this model.
+    let gestureTrail = GestureTrailModel()
+    var gestureTrailPoints: [CGPoint] {
+        get { gestureTrail.points }
+        set { gestureTrail.points = newValue }
+    }
 
     // Height constraints
     let minHeight: CGFloat = 200
@@ -220,7 +236,9 @@ class KeyboardState: ObservableObject {
         guard !(isShifted && !isShiftAutomatic) else { return }
 
         let shouldShift = Self.shouldAutocapitalize(context ?? "", mode: autocapitalizationMode)
-        isShifted = shouldShift
+        if isShifted != shouldShift {
+            isShifted = shouldShift
+        }
         isShiftAutomatic = shouldShift
     }
 
