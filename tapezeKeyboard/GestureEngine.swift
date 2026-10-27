@@ -42,6 +42,12 @@ class GestureEngine {
 
     var hasActiveGesture: Bool { !points.isEmpty }
 
+    /// Directions that carry a visible label on a key. A stroke that lands
+    /// just outside a labeled direction's 45° sector, in a neighbouring sector
+    /// with nothing drawn in it, is a slightly crooked swipe for the label,
+    /// not a request for an invisible target.
+    var labeledDirections: (GridPosition) -> Set<SwipeDirection> = { _ in [] }
+
     // Thresholds
     private let tapDistanceThreshold: CGFloat = 15.0
     private let minSwipeDistance: CGFloat = 20.0
@@ -61,6 +67,15 @@ class GestureEngine {
     /// ordinary space presses into cursor moves or layer toggles. Letter keys
     /// already tolerate ~22pt of drift (see `subcellActivationReach`).
     private let spaceGestureDistance: CGFloat = 30.0
+    /// How far a labeled direction's sector reaches, each side of its centre
+    /// line, into a neighbouring unlabeled sector. Plain sectors are ±22.5°.
+    private let labeledSectorHalfWidth: Double = .pi * 34 / 180
+    /// How much the key centre, rather than touchdown, pulls the resolved
+    /// direction. Users swipe in a direction; they do not aim at a label's
+    /// position. Measuring purely from the centre turned a short rightward
+    /// swipe that began left of centre into a left swipe ("c" for "b"),
+    /// because its farthest point was still left of centre.
+    private let centerAimWeight: CGFloat = 0.35
 
     // MARK: - Setup
 
@@ -622,12 +637,35 @@ class GestureEngine {
         guard let point = farthestPoint else { return nil }
 
         // Require deliberate travel from touchdown, then resolve the target
-        // from the key center so off-center starts do not skew corner swipes.
-        let dx = Double(point.x - center.x)
-        let dy = Double(point.y - center.y)
+        // mostly from the stroke itself, with a lighter pull from the key
+        // centre so a long stroke toward a corner label still lands on it.
+        let dx = Double((point.x - start.x) + (point.x - center.x) * centerAimWeight)
+        let dy = Double((point.y - start.y) + (point.y - center.y) * centerAimWeight)
         // Convert to math-style angle (y up positive).
         let angle = atan2(-dy, dx)
-        return (SwipeDirection.fromAngle(angle), normalizedReach(farthestDistance, in: region))
+        return (resolveDirection(angle: angle, on: key), normalizedReach(farthestDistance, in: region))
+    }
+
+    /// The 45° sector for `angle`, unless that sector has no label on this key
+    /// and a labeled neighbour's centre line is within `labeledSectorHalfWidth`.
+    private func resolveDirection(angle: Double, on key: GridPosition) -> SwipeDirection {
+        let sector = SwipeDirection.fromAngle(angle)
+        let labeled = labeledDirections(key)
+        guard !labeled.isEmpty, !labeled.contains(sector) else { return sector }
+
+        let nearest = labeled
+            .map { ($0, angularDistance(angle, $0.angle)) }
+            .min { $0.1 < $1.1 }
+        if let nearest, nearest.1 <= labeledSectorHalfWidth {
+            return nearest.0
+        }
+        return sector
+    }
+
+    private func angularDistance(_ a: Double, _ b: Double) -> Double {
+        var d = (a - b).truncatingRemainder(dividingBy: 2 * .pi)
+        if d < 0 { d += 2 * .pi }
+        return min(d, 2 * .pi - d)
     }
 
     /// Peak travel from touchdown expressed in key half-sides.

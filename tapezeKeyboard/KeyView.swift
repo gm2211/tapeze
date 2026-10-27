@@ -801,7 +801,9 @@ struct CharacterKeyView: View {
     }
 
     private func swipeFontSize(_ geo: GeometryProxy) -> CGFloat {
-        min(geo.size.width, geo.size.height) * 0.20
+        // 0.20 drew the secondary letters at half the primary's size, loud
+        // enough to compete with it. MessagEase keeps them near 0.17.
+        min(geo.size.width, geo.size.height) * 0.17
     }
 
     private func symbolOverlayFontSize(_ geo: GeometryProxy) -> CGFloat {
@@ -809,7 +811,7 @@ struct CharacterKeyView: View {
     }
 
     private func swipeLabelSize(_ geo: GeometryProxy) -> CGFloat {
-        min(geo.size.width, geo.size.height) * 0.26
+        min(geo.size.width, geo.size.height) * 0.22
     }
 
     private func symbolOverlayLabelSize(_ geo: GeometryProxy) -> CGFloat {
@@ -817,58 +819,28 @@ struct CharacterKeyView: View {
     }
 
     private func positionForDirection(_ dir: SwipeDirection, in size: CGSize) -> CGPoint {
-        // Equal insets on every side keep the satellite labels in a ring that
-        // is concentric with the center character (most visible on "o").
-        let xInset: CGFloat = 0.28
-        let topInset: CGFloat = 0.28
-        let bottomInset: CGFloat = 0.28
-        let xPositions: [CGFloat] = [xInset, 0.5, 1.0 - xInset]
-        let yPositions: [CGFloat] = [topInset, 0.5, 1.0 - bottomInset]
-
-        let col: Int
-        let row: Int
-
-        switch dir {
-        case .topLeft:     col = 0; row = 0
-        case .top:         col = 1; row = 0
-        case .topRight:    col = 2; row = 0
-        case .left:        col = 0; row = 1
-        case .right:       col = 2; row = 1
-        case .bottomLeft:  col = 0; row = 2
-        case .bottom:      col = 1; row = 2
-        case .bottomRight: col = 2; row = 2
-        }
-
-        return CGPoint(
-            x: xPositions[col] * size.width,
-            y: yPositions[row] * size.height
-        )
+        Self.labelPosition(for: dir, in: size)
     }
 
     private func symbolOverlayPositionForDirection(_ dir: SwipeDirection, in size: CGSize) -> CGPoint {
-        let xInset: CGFloat = 0.28
-        let topInset: CGFloat = 0.28
-        let bottomInset: CGFloat = 0.28
-        let xPositions: [CGFloat] = [xInset, 0.5, 1.0 - xInset]
-        let yPositions: [CGFloat] = [topInset, 0.5, 1.0 - bottomInset]
+        Self.labelPosition(for: dir, in: size)
+    }
 
-        let col: Int
-        let row: Int
-
-        switch dir {
-        case .topLeft:     col = 0; row = 0
-        case .top:         col = 1; row = 0
-        case .topRight:    col = 2; row = 0
-        case .left:        col = 0; row = 1
-        case .right:       col = 2; row = 1
-        case .bottomLeft:  col = 0; row = 2
-        case .bottom:      col = 1; row = 2
-        case .bottomRight: col = 2; row = 2
-        }
+    /// Satellite labels sit out by the key's edges, the way MessagEase draws
+    /// them, so they frame the primary letter instead of crowding it. At the
+    /// old 0.22 offset the ring around "o" touched the glyph itself.
+    /// Edge labels go further out than corner ones: the corners of inner keys
+    /// are cut away for the command diamonds, and a corner label at the same
+    /// offset would sit on that cut.
+    static func labelPosition(for dir: SwipeDirection, in size: CGSize) -> CGPoint {
+        let edgeOffset: CGFloat = 0.34
+        let cornerOffset: CGFloat = 0.28
+        let isCorner = dir.colOffset != 0 && dir.rowOffset != 0
+        let offset = isCorner ? cornerOffset : edgeOffset
 
         return CGPoint(
-            x: xPositions[col] * size.width,
-            y: yPositions[row] * size.height
+            x: (0.5 + CGFloat(dir.colOffset) * offset) * size.width,
+            y: (0.5 + CGFloat(dir.rowOffset) * offset) * size.height
         )
     }
 }
