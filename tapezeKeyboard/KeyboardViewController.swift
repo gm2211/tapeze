@@ -13,7 +13,7 @@ class KeyboardViewController: UIInputViewController {
         super.viewDidLoad()
         configureTransparentBackgrounds()
 
-        let heightConstraint = view.heightAnchor.constraint(equalToConstant: keyboardState.keyboardHeight)
+        let heightConstraint = view.heightAnchor.constraint(equalToConstant: keyboardState.effectiveKeyboardHeight)
         // The system installs its own default-height constraint on the input
         // view. At `.defaultHigh` ours lost the first layout pass, so the
         // keyboard came up at the system height and only grew afterwards - by
@@ -25,7 +25,7 @@ class KeyboardViewController: UIInputViewController {
 
         // Publish the height before the first appearance so the very first
         // keyboard frame the host is notified about already carries our size.
-        preferredContentSize = CGSize(width: 0, height: keyboardState.keyboardHeight)
+        preferredContentSize = CGSize(width: 0, height: keyboardState.effectiveKeyboardHeight)
 
         let keyboardView = KeyboardView(
             state: keyboardState,
@@ -83,7 +83,8 @@ class KeyboardViewController: UIInputViewController {
         super.viewWillAppear(animated)
         configureTransparentBackgrounds()
         keyboardState.reloadPersistedAppearanceSettings()
-        applyKeyboardHeight(keyboardState.keyboardHeight, animated: false, force: true)
+        updateDisplayHeightLimit()
+        applyKeyboardHeight(keyboardState.effectiveKeyboardHeight, animated: false, force: true)
         updateInputContext()
     }
 
@@ -107,7 +108,7 @@ class KeyboardViewController: UIInputViewController {
     /// once we are on screen so a corrective frame change reaches the host
     /// while the field is still focused, instead of only on the next focus.
     private func reassertKeyboardHeightIfNeeded() {
-        let desired = keyboardState.keyboardHeight
+        let desired = keyboardState.effectiveKeyboardHeight
         guard abs(view.bounds.height - desired) > 0.5 else { return }
 
         heightConstraint?.constant = desired
@@ -120,11 +121,69 @@ class KeyboardViewController: UIInputViewController {
 
     override func viewWillLayoutSubviews() {
         super.viewWillLayoutSubviews()
-        applyKeyboardHeight(keyboardState.keyboardHeight, animated: false)
+        updateDisplayHeightLimit()
+        applyKeyboardHeight(keyboardState.effectiveKeyboardHeight, animated: false)
+    }
+
+    // MARK: - Foldable displays
+
+    /// Gap kept between the keyboard's top edge and the middle of the screen,
+    /// so the top key row never sits on the crease. Apple has not published
+    /// the fold's width, so this leans generous.
+    static let foldClearance: CGFloat = 14
+
+    static let innerDisplayMinimumShortSide: CGFloat = 600
+
+    /// Keyboard extensions get no hinge updates on iPhone Duo, so laptop mode
+    /// is recognised from the shape of the display instead: on an iPhone,
+    /// only the unfolded inner display is regular in both size classes, and
+    /// when it is wider than tall the fold runs horizontally across it. The
+    /// system keyboard moves to the lower half there, and so do we. The same
+    /// limit applies when the phone lies flat in that orientation, where
+    /// half a 669pt-tall screen is still more than enough keyboard.
+    static func displayHeightLimit(
+        screenSize: CGSize,
+        horizontalSizeClass: UIUserInterfaceSizeClass,
+        verticalSizeClass: UIUserInterfaceSizeClass,
+        bottomInset: CGFloat,
+        minimumHeight: CGFloat
+    ) -> CGFloat? {
+        // Extensions can be handed the host's traits late or not at all, so
+        // the screen's short side backs up the size classes: every other
+        // iPhone is under 450pt across in landscape, the inner display 669pt.
+        let isInnerDisplay = (horizontalSizeClass == .regular && verticalSizeClass == .regular)
+            || screenSize.height >= innerDisplayMinimumShortSide
+        guard isInnerDisplay, screenSize.width > screenSize.height else { return nil }
+
+        let lowerHalf = screenSize.height / 2 - foldClearance - bottomInset
+        return max(minimumHeight, lowerHalf.rounded(.down))
+    }
+
+    private func updateDisplayHeightLimit() {
+        // Without a window there is no screen to measure; keep the last value
+        // rather than falling back to the deprecated main screen, which is
+        // the wrong display on a two-screen phone.
+        guard let window = view.window,
+              let screen = window.windowScene?.screen else { return }
+
+        let limit = Self.displayHeightLimit(
+            screenSize: screen.bounds.size,
+            horizontalSizeClass: traitCollection.horizontalSizeClass,
+            verticalSizeClass: traitCollection.verticalSizeClass,
+            bottomInset: window.safeAreaInsets.bottom,
+            minimumHeight: keyboardState.minHeight
+        )
+        if keyboardState.displayHeightLimit != limit {
+            keyboardState.displayHeightLimit = limit
+        }
     }
 
     private func bindKeyboardHeight() {
-        heightCancellable = keyboardState.$keyboardHeight
+        heightCancellable = Publishers.CombineLatest(
+            keyboardState.$keyboardHeight,
+            keyboardState.$displayHeightLimit
+        )
+            .map { height, limit in limit.map { min(height, $0) } ?? height }
             .removeDuplicates()
             .receive(on: RunLoop.main)
             .sink { [weak self] height in
