@@ -18,6 +18,12 @@ final class GestureTrailModel: ObservableObject {
     @Published var points: [CGPoint] = []
 }
 
+// MARK: - Key Highlight
+
+final class KeyHighlightModel: ObservableObject {
+    @Published var position: GridPosition? = nil
+}
+
 // MARK: - Keyboard State
 
 class KeyboardState: ObservableObject {
@@ -96,7 +102,18 @@ class KeyboardState: ObservableObject {
     }
 
     // Gesture feedback
-    @Published var activeKeyPosition: GridPosition? = nil
+    /// The pressed key changes on every touchdown and lift. Publishing it from
+    /// here re-rendered the entire keyboard twice per tap, which backed up the
+    /// main thread when typing fast. Only each key's highlight observes it.
+    let keyHighlight = KeyHighlightModel()
+    var activeKeyPosition: GridPosition? {
+        get { keyHighlight.position }
+        set {
+            if keyHighlight.position != newValue {
+                keyHighlight.position = newValue
+            }
+        }
+    }
     @Published var swipeDirection: SwipeDirection? = nil
     /// The trail changes on every touch sample. Publishing it from here made
     /// each sample re-render all nine keys, which backed up the main thread

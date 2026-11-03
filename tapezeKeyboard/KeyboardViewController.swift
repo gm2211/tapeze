@@ -94,6 +94,16 @@ class KeyboardViewController: UIInputViewController {
     override func viewDidAppear(_ animated: Bool) {
         super.viewDidAppear(animated)
         reassertKeyboardHeightIfNeeded()
+        stopSystemGesturesDelayingTouches()
+    }
+
+    /// The system's screen-edge gesture recognizers on the keyboard's window
+    /// hold back `touchesBegan` near the bottom edge until they rule out a
+    /// home-indicator swipe, so the space row and lower keys registered late,
+    /// and a delayed touch could even land after the next key's. Keys must
+    /// see every touch the moment it starts.
+    private func stopSystemGesturesDelayingTouches() {
+        view.window?.gestureRecognizers?.forEach { $0.delaysTouchesBegan = false }
     }
 
     private func configureTransparentBackgrounds() {

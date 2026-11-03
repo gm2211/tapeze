@@ -1,5 +1,6 @@
 import SwiftUI
 import UIKit
+import Combine
 
 // MARK: - Main Keyboard View
 
@@ -26,7 +27,9 @@ struct KeyboardView: View {
     @State private var longPressTriggered = false
     @State private var logicalGestureActive = false
     @State private var lastTrackedPoint: CGPoint?
-    @State private var currentDragStart: CGPoint?
+    /// The finger driving the current logical gesture. Other fingers that are
+    /// still down after being superseded are ignored until they lift.
+    @State private var primaryTouch: ObjectIdentifier?
 
     private let gridRows = 3
     private let gridCols = 3
@@ -146,10 +149,18 @@ struct KeyboardView: View {
             .onChange(of: state.currentLayer) { _ in
                 registerHitLayout(hitLayout)
             }
-            .gesture(
-                DragGesture(minimumDistance: 0, coordinateSpace: .named("keyboard"))
-                    .onChanged { value in
-                        let ctx = GestureLayoutContext(
+            .overlay {
+                // One UIKit view sees every finger separately. SwiftUI's
+                // DragGesture follows a single touch, so when a second thumb
+                // landed before the first lifted (normal when typing fast) the
+                // second tap was either lost or read as a swipe from the first
+                // key, which dropped letters.
+                MultiTouchSurface { touch, phase, point in
+                    handleTouch(
+                        touch,
+                        phase: phase,
+                        at: point,
+                        ctx: GestureLayoutContext(
                             totalWidth: totalWidth,
                             totalHeight: totalHeight,
                             stripHeight: topInset,
@@ -159,64 +170,9 @@ struct KeyboardView: View {
                             mainGridWidth: mainGridWidth,
                             backspaceRailWidth: backspaceRailWidth
                         )
-
-                        // A fresh drag while state still says a gesture is active
-                        // means the previous drag was cancelled by the system and
-                        // onEnded never fired. Clear the stale state instead of
-                        // ignoring input until the keyboard is dismissed.
-                        if currentDragStart != value.startLocation {
-                            if logicalGestureActive {
-                                abandonStaleGesture()
-                            }
-                            currentDragStart = value.startLocation
-                        }
-
-                        if logicalGestureActive,
-                           let last = lastTrackedPoint,
-                           distance(last, value.location) > teleportThreshold(ctx.keySide) {
-                            // During fast two-thumb typing SwiftUI hands the single
-                            // drag over to the second finger, teleporting the
-                            // location. Commit the interrupted gesture where it was
-                            // and start a fresh one at the new finger.
-                            finishLogicalGesture(at: last, ctx: ctx)
-                            beginLogicalGesture(at: value.location, ctx: ctx)
-                        } else if !logicalGestureActive {
-                            beginLogicalGesture(at: value.startLocation, ctx: ctx)
-                        }
-
-                        continueLogicalGesture(at: value.location, ctx: ctx)
-                        lastTrackedPoint = value.location
-                    }
-                    .onEnded { value in
-                        let ctx = GestureLayoutContext(
-                            totalWidth: totalWidth,
-                            totalHeight: totalHeight,
-                            stripHeight: topInset,
-                            armWidth: armWidth,
-                            keySide: keySide,
-                            layoutOriginX: layoutOriginX,
-                            mainGridWidth: mainGridWidth,
-                            backspaceRailWidth: backspaceRailWidth
-                        )
-
-                        if currentDragStart != value.startLocation, logicalGestureActive {
-                            abandonStaleGesture()
-                        }
-
-                        if logicalGestureActive,
-                           let last = lastTrackedPoint,
-                           distance(last, value.location) > teleportThreshold(ctx.keySide) {
-                            finishLogicalGesture(at: last, ctx: ctx)
-                            beginLogicalGesture(at: value.location, ctx: ctx)
-                        } else if !logicalGestureActive {
-                            beginLogicalGesture(at: value.startLocation, ctx: ctx)
-                        }
-
-                        finishLogicalGesture(at: value.location, ctx: ctx)
-                        currentDragStart = nil
-                        lastTrackedPoint = nil
-                    }
-            )
+                    )
+                }
+            }
             .overlay {
                 if state.showGestureTrail {
                     GestureTrailView(model: state.gestureTrail, theme: state.theme)
@@ -561,10 +517,54 @@ struct KeyboardView: View {
 
     // MARK: - Logical Gesture Lifecycle
 
-    /// A drag can teleport when SwiftUI hands it from one finger to another, so a
-    /// jump larger than a key can't be real finger travel between two samples.
-    private func teleportThreshold(_ keySide: CGFloat) -> CGFloat {
-        max(keySide * 1.05, 96)
+    /// Routes per-finger touches into the single logical gesture.
+    ///
+    /// Typing order is touchdown order: when a new finger lands while another
+    /// is still down, the earlier gesture is committed where that finger is
+    /// now, and the new finger takes over. The earlier finger's later moves
+    /// and lift are ignored, so neither tap is lost and the second tap can't
+    /// be mistaken for a swipe out of the first key.
+    private func handleTouch(
+        _ touch: ObjectIdentifier,
+        phase: MultiTouchSurface.Phase,
+        at point: CGPoint,
+        ctx: GestureLayoutContext
+    ) {
+        switch phase {
+        case .began:
+            if logicalGestureActive {
+                if let last = lastTrackedPoint {
+                    finishLogicalGesture(at: last, ctx: ctx)
+                } else {
+                    abandonStaleGesture()
+                }
+            }
+            primaryTouch = touch
+            beginLogicalGesture(at: point, ctx: ctx)
+            continueLogicalGesture(at: point, ctx: ctx)
+            lastTrackedPoint = point
+
+        case .moved:
+            guard touch == primaryTouch, logicalGestureActive else { return }
+            continueLogicalGesture(at: point, ctx: ctx)
+            lastTrackedPoint = point
+
+        case .ended:
+            guard touch == primaryTouch else { return }
+            if logicalGestureActive {
+                finishLogicalGesture(at: point, ctx: ctx)
+            }
+            primaryTouch = nil
+            lastTrackedPoint = nil
+
+        case .cancelled:
+            guard touch == primaryTouch else { return }
+            if logicalGestureActive {
+                abandonStaleGesture()
+            }
+            primaryTouch = nil
+            lastTrackedPoint = nil
+        }
     }
 
     private func beginLogicalGesture(at point: CGPoint, ctx: GestureLayoutContext) {
@@ -875,14 +875,16 @@ struct KeyboardView: View {
         updatesGlobe: Bool,
         updatesResize: Bool = false
     ) -> some View {
-        DiamondCommandKeyView(
-            config: config,
-            isActive: state.activeKeyPosition == position,
-            isShifted: config.specialAction == .shift ? state.isShifted : false,
-            isCapsLocked: config.specialAction == .shift ? state.isCapsLocked : false,
-            theme: state.theme,
-            cornerRadius: state.keyCornerRadius
-        )
+        ActiveKeyReader(highlight: state.keyHighlight, position: position) { isActive in
+            DiamondCommandKeyView(
+                config: config,
+                isActive: isActive,
+                isShifted: config.specialAction == .shift ? state.isShifted : false,
+                isCapsLocked: config.specialAction == .shift ? state.isCapsLocked : false,
+                theme: state.theme,
+                cornerRadius: state.keyCornerRadius
+            )
+        }
         .frame(width: size, height: size)
         .position(center)
     }
@@ -926,22 +928,23 @@ struct KeyboardView: View {
                         let config = grid[row][col]
                         let visualConfig = isSymbolOverlay ? KeyboardLayoutData.activeSymbolOverlayGrid()[row][col] : config
                         let letterSwipeLabels = isSymbolOverlay ? KeyboardLayoutData.activeLetterGrid()[row][col].swipes : nil
-                        let isActive = state.activeKeyPosition == pos
                         let labelShift: CGFloat = 0
 
-                        CharacterKeyView(
-                            config: visualConfig,
-                            letterSwipeLabels: letterSwipeLabels,
-                            isActive: isActive,
-                            showCenter: showCenter,
-                            showSwipes: showSwipes,
-                            showSymbolOverlay: isSymbolOverlay,
-                            isShifted: state.isShifted || state.isCapsLocked,
-                            theme: state.theme,
-                            cornerRadius: state.keyCornerRadius,
-                            cutCorners: cutCornersForKey(row: row, col: col),
-                            labelHorizontalShift: labelShift
-                        )
+                        ActiveKeyReader(highlight: state.keyHighlight, position: pos) { isActive in
+                            CharacterKeyView(
+                                config: visualConfig,
+                                letterSwipeLabels: letterSwipeLabels,
+                                isActive: isActive,
+                                showCenter: showCenter,
+                                showSwipes: showSwipes,
+                                showSymbolOverlay: isSymbolOverlay,
+                                isShifted: state.isShifted || state.isCapsLocked,
+                                theme: state.theme,
+                                cornerRadius: state.keyCornerRadius,
+                                cutCorners: cutCornersForKey(row: row, col: col),
+                                labelHorizontalShift: labelShift
+                            )
+                        }
                         .frame(width: colWidth, height: rowHeight)
                         .background(
                             GeometryReader { geo in
@@ -979,12 +982,14 @@ struct KeyboardView: View {
             if let backspaceIndex = commands.firstIndex(where: { $0.specialAction == .backspace }) {
                 let backspacePos = GridPosition(row: backspaceIndex, col: state.commandBarOnRight ? 3 : -1)
 
-                DeleteColumnKeyView(
-                    isActive: state.activeKeyPosition == backspacePos,
-                    side: side,
-                    theme: state.theme,
-                    cornerRadius: state.keyCornerRadius
-                )
+                ActiveKeyReader(highlight: state.keyHighlight, position: backspacePos) { isActive in
+                    DeleteColumnKeyView(
+                        isActive: isActive,
+                        side: side,
+                        theme: state.theme,
+                        cornerRadius: state.keyCornerRadius
+                    )
+                }
                 .frame(width: width * 0.96, height: totalHeight)
 
                 Image(systemName: "delete.backward.fill")
@@ -1000,12 +1005,14 @@ struct KeyboardView: View {
             ForEach(0..<commands.count, id: \.self) { idx in
                 let config = commands[idx]
                 if config.specialAction != .backspace {
-                    DiamondCommandKeyView(
-                        config: config,
-                        isActive: state.activeKeyPosition == GridPosition(row: idx, col: state.commandBarOnRight ? 3 : -1),
-                        theme: state.theme,
-                        cornerRadius: state.keyCornerRadius
-                    )
+                    ActiveKeyReader(highlight: state.keyHighlight, position: GridPosition(row: idx, col: state.commandBarOnRight ? 3 : -1)) { isActive in
+                        DiamondCommandKeyView(
+                            config: config,
+                            isActive: isActive,
+                            theme: state.theme,
+                            cornerRadius: state.keyCornerRadius
+                        )
+                    }
                     .frame(width: rowHeight * 0.72, height: rowHeight * 0.72)
                     .position(
                         x: state.commandBarOnRight ? width * 0.08 : width * 0.92,
@@ -1056,11 +1063,13 @@ struct KeyboardView: View {
     @ViewBuilder
     private func bottomRow(width: CGFloat, height: CGFloat) -> some View {
         if state.currentLayer == .letters {
-            SpaceBarView(
-                isActive: state.activeKeyPosition == GridPosition(row: 3, col: 0),
-                theme: state.theme,
-                cornerRadius: state.keyCornerRadius
-            )
+            ActiveKeyReader(highlight: state.keyHighlight, position: GridPosition(row: 3, col: 0)) { isActive in
+                SpaceBarView(
+                    isActive: isActive,
+                    theme: state.theme,
+                    cornerRadius: state.keyCornerRadius
+                )
+            }
                 .frame(width: width, height: height)
                 .background(
                     GeometryReader { geo in
@@ -1117,12 +1126,14 @@ struct KeyboardView: View {
         let pos = GridPosition(row: 3, col: state.commandBarOnRight ? 3 : -1)
 
         ZStack {
-            DiamondCommandKeyView(
-                config: KeyConfig(tap: "", specialAction: .enter, displayLabel: "return"),
-                isActive: state.activeKeyPosition == pos,
-                theme: state.theme,
-                cornerRadius: state.keyCornerRadius
-            )
+            ActiveKeyReader(highlight: state.keyHighlight, position: pos) { isActive in
+                DiamondCommandKeyView(
+                    config: KeyConfig(tap: "", specialAction: .enter, displayLabel: "return"),
+                    isActive: isActive,
+                    theme: state.theme,
+                    cornerRadius: state.keyCornerRadius
+                )
+            }
             .frame(width: height * 0.72, height: height * 0.72)
             .position(x: state.commandBarOnRight ? width * 0.08 : width * 0.92, y: height / 2)
 
@@ -1610,6 +1621,89 @@ private struct LatticeHitLayout: Equatable {
             width: max(commandBarOnRight ? originX : layoutWidth - gridEndX, 0),
             height: bottomRowHeight
         )
+    }
+}
+
+// MARK: - Key Highlight
+
+/// Renders `content` with whether `position` is the pressed key. It listens to
+/// the highlight on its own, so a press re-renders only the key it lands on
+/// and the key it leaves, not the whole keyboard.
+private struct ActiveKeyReader<Content: View>: View {
+    let highlight: KeyHighlightModel
+    let position: GridPosition
+    @ViewBuilder let content: (Bool) -> Content
+    @State private var isActive = false
+
+    var body: some View {
+        content(isActive)
+            .onReceive(highlight.$position.map { $0 == position }.removeDuplicates()) { active in
+                if isActive != active {
+                    isActive = active
+                }
+            }
+    }
+}
+
+// MARK: - Multi-touch Surface
+
+/// A transparent UIKit view that reports every finger on its own, identified
+/// across its lifetime, in the view's own coordinates (the same space as the
+/// "keyboard" coordinate space it overlays).
+struct MultiTouchSurface: UIViewRepresentable {
+    enum Phase {
+        case began, moved, ended, cancelled
+    }
+
+    let onTouch: (ObjectIdentifier, Phase, CGPoint) -> Void
+
+    func makeUIView(context: Context) -> TouchView {
+        let view = TouchView()
+        view.onTouch = onTouch
+        return view
+    }
+
+    func updateUIView(_ view: TouchView, context: Context) {
+        view.onTouch = onTouch
+    }
+
+    final class TouchView: UIView {
+        var onTouch: ((ObjectIdentifier, Phase, CGPoint) -> Void)?
+
+        override init(frame: CGRect) {
+            super.init(frame: frame)
+            isMultipleTouchEnabled = true
+            isExclusiveTouch = false
+            backgroundColor = .clear
+            isOpaque = false
+        }
+
+        required init?(coder: NSCoder) {
+            fatalError("init(coder:) has not been implemented")
+        }
+
+        override func touchesBegan(_ touches: Set<UITouch>, with event: UIEvent?) {
+            report(touches, .began)
+        }
+
+        override func touchesMoved(_ touches: Set<UITouch>, with event: UIEvent?) {
+            report(touches, .moved)
+        }
+
+        override func touchesEnded(_ touches: Set<UITouch>, with event: UIEvent?) {
+            report(touches, .ended)
+        }
+
+        override func touchesCancelled(_ touches: Set<UITouch>, with event: UIEvent?) {
+            report(touches, .cancelled)
+        }
+
+        private func report(_ touches: Set<UITouch>, _ phase: Phase) {
+            // Fingers that change in the same frame are replayed oldest first.
+            for touch in touches.sorted(by: { $0.timestamp < $1.timestamp }) {
+                onTouch?(ObjectIdentifier(touch), phase, touch.location(in: self))
+            }
+        }
     }
 }
 
