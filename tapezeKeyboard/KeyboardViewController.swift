@@ -83,6 +83,9 @@ class KeyboardViewController: UIInputViewController {
         super.viewWillAppear(animated)
         configureTransparentBackgrounds()
         keyboardState.reloadPersistedAppearanceSettings()
+        // The app may have saved a new layout while we were off screen.
+        KeyboardLayoutData.invalidateLayoutCache()
+        keyboardState.refreshLayout()
         updateDisplayHeightLimit()
         applyKeyboardHeight(keyboardState.effectiveKeyboardHeight, animated: false, force: true)
         updateInputContext()
@@ -271,11 +274,17 @@ class KeyboardViewController: UIInputViewController {
     }
 
     private func updateInputContext() {
+        let isURLField: Bool
         switch textDocumentProxy.keyboardType {
         case .URL, .webSearch:
-            keyboardState.isURLField = true
+            isURLField = true
         default:
-            keyboardState.isURLField = false
+            isURLField = false
+        }
+        // Every @Published write re-renders the whole keyboard even when the
+        // value is unchanged, and this runs after every inserted character.
+        if keyboardState.isURLField != isURLField {
+            keyboardState.isURLField = isURLField
         }
 
         keyboardState.autocapitalizationMode = Self.autocapitalizationMode(

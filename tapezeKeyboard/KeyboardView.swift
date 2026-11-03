@@ -41,48 +41,47 @@ struct KeyboardView: View {
             let totalHeight = max(outerGeo.size.height, 1)
 
             let minimumControlExtent: CGFloat = 60
-            let absoluteMaximumControlExtent: CGFloat = 88
-            // spaceBarHeightScale no longer drives the primary space bar height
-            // (that's spaceBarRowRatio below, tied to the key-row height). It only
-            // scales minimumControlExtent to produce a floor the space bar won't
-            // shrink below.
-            let spaceBarHeightScale: CGFloat = 1.26
-            let minimumSpaceBarHeight = minimumControlExtent * spaceBarHeightScale
+            /// Floor for very short keyboards so the bar stays a usable target.
+            let minimumSpaceBarHeight: CGFloat = 56
             /// Space bar height as a multiple of one key row. 10% shorter than the 1.02 ratio
             /// measured from the reference layout (252px over 3 rows with an 86px bar).
             let spaceBarRowRatio: CGFloat = 0.92
-            let maxKeySideByWidth = max(
-                (totalWidth - minimumControlExtent - spacing * CGFloat(gridCols)) / CGFloat(gridCols),
-                1
-            )
-            // Solve for the key side so that `gridRows` key rows plus a space bar
+            /// MessagEase keys are a little wider than tall: 78x72pt measured on the
+            /// same device, with the command column exactly one key wide (four equal
+            /// columns). Square keys plus a 61pt rail made tapeze read as a
+            /// different, chunkier keyboard at the same height.
+            let keyAspectRatio: CGFloat = 78.0 / 72.0
+            // Solve for the row height so that `gridRows` key rows plus a space bar
             // sized at `spaceBarRowRatio` key rows, plus the inter-row spacing,
-            // exactly fill the available height. This ties the space bar's height
-            // directly to the key rows instead of pinning it between an independent
-            // min/max derived from the (unrelated) horizontal rail width.
-            let keySideByRowRatio = max(
+            // exactly fill the available height.
+            let keyHeightByRowRatio = max(
                 (totalHeight - spacing * CGFloat(gridRows - 1)) / (CGFloat(gridRows) + spaceBarRowRatio),
                 1
             )
-            let keySide = min(maxKeySideByWidth, keySideByRowRatio)
+            let keyHeightBySpaceFloor = max(
+                (totalHeight - spacing * CGFloat(gridRows - 1) - minimumSpaceBarHeight) / CGFloat(gridRows),
+                1
+            )
+            let keyHeight = min(keyHeightByRowRatio, keyHeightBySpaceFloor)
+            // Three key columns plus a command column of the same width.
+            let maxKeyWidthByWidth = max(
+                (totalWidth - spacing * CGFloat(gridCols)) / CGFloat(gridCols + 1),
+                1
+            )
+            let keyWidth = min(keyHeight * keyAspectRatio, maxKeyWidthByWidth)
+            // Diamonds, label sizes and gesture thresholds key off the shorter side.
+            let keySide = keyHeight
 
             let shouldDisableCompact = false
             let commandColWidth: CGFloat = 0
-            let mainGridWidth = keySide * CGFloat(gridCols) + spacing * CGFloat(gridCols - 1)
-            let mainGridHeight = keySide * CGFloat(gridRows) + spacing * CGFloat(gridRows - 1)
-            let maximumControlExtent = min(
-                absoluteMaximumControlExtent,
-                max(minimumControlExtent, keySide * 0.62)
-            )
+            let mainGridWidth = keyWidth * CGFloat(gridCols) + spacing * CGFloat(gridCols - 1)
+            let mainGridHeight = keyHeight * CGFloat(gridRows) + spacing * CGFloat(gridRows - 1)
 
-            // Floor only: a very short keyboard still gets a usable bar, but there is
-            // no longer an upper clamp — the bar simply matches `spaceBarRowRatio`
-            // key rows whenever the derived keySide isn't width-constrained.
-            let spaceBarHeight = max(keySide * spaceBarRowRatio, minimumSpaceBarHeight)
+            let spaceBarHeight = max(totalHeight - mainGridHeight, minimumSpaceBarHeight)
             let topInset = max(totalHeight - mainGridHeight - spaceBarHeight, 0)
 
             let availableRailWidth = max(totalWidth - mainGridWidth - spacing, minimumControlExtent)
-            let backspaceRailWidth = min(availableRailWidth, maximumControlExtent)
+            let backspaceRailWidth = min(availableRailWidth, max(keyWidth, minimumControlExtent))
             let sidePadding = max(totalWidth - mainGridWidth - spacing - backspaceRailWidth, 0)
 
             let armWidth = keySide * 0.40
@@ -96,8 +95,8 @@ struct KeyboardView: View {
                 mainGridWidth: mainGridWidth,
                 mainGridHeight: mainGridHeight,
                 commandColWidth: commandColWidth,
-                keySide: keySide,
-                rowHeight: keySide,
+                keySide: keyWidth,
+                rowHeight: keyHeight,
                 bottomRowHeight: spaceBarHeight,
                 commandBarOnRight: state.commandBarOnRight
             )
@@ -119,8 +118,8 @@ struct KeyboardView: View {
                     mainGridWidth: mainGridWidth,
                     mainGridHeight: mainGridHeight,
                     commandColWidth: commandColWidth,
-                    keySide: keySide,
-                    rowHeight: keySide,
+                    keySide: keyWidth,
+                    rowHeight: keyHeight,
                     bottomRowHeight: spaceBarHeight,
                     armWidth: armWidth
                 )
@@ -218,8 +217,8 @@ struct KeyboardView: View {
                     }
             )
             .overlay {
-                if state.showGestureTrail && !state.gestureTrailPoints.isEmpty {
-                    GestureTrailView(points: state.gestureTrailPoints, theme: state.theme)
+                if state.showGestureTrail {
+                    GestureTrailView(model: state.gestureTrail, theme: state.theme)
                         .allowsHitTesting(false)
                 }
             }
@@ -625,8 +624,7 @@ struct KeyboardView: View {
         logicalGestureActive = false
         cancelNumberLongPress()
         activeBridge = .none
-        state.activeKeyPosition = nil
-        state.swipeDirection = nil
+        setActiveKey(nil)
 
         switch bridge {
         case .enter:
@@ -701,8 +699,7 @@ struct KeyboardView: View {
         logicalGestureActive = false
         lastTrackedPoint = nil
         state.gestureTrailPoints = []
-        state.activeKeyPosition = nil
-        state.swipeDirection = nil
+        setActiveKey(nil)
     }
 
     private func registerHitLayout(_ layout: LatticeHitLayout) {
@@ -782,6 +779,9 @@ struct KeyboardView: View {
         spaceBarGutterRegion = layout.spaceBarGutterRegion
         globeRegion = regions[GridPosition(row: 0, col: commandCol)] ?? .zero
         gestureEngine.updateKeyRegions(regions)
+        gestureEngine.labeledDirections = { [state] pos in
+            Self.assignedSwipeDirections(at: pos, state: state)
+        }
         gestureEngine.updateSpaceBarRegion(bottomBridgeStripRect, gutterRegion: spaceBarGutterRegion)
         gestureEngine.updateGlobeRegion(globeRegion)
         gestureEngine.updateResizeRegion(regions[GridPosition(row: 3, col: commandCol)] ?? .zero)
@@ -799,6 +799,26 @@ struct KeyboardView: View {
                 height: commandTapSide
             )
         ])
+    }
+
+    /// Directions on a main-grid key that type something the user can see or
+    /// has learned: the key's own swipes, the symbol overlay while it is
+    /// shown, and the persistent tab and ".com" shortcuts.
+    private static func assignedSwipeDirections(at pos: GridPosition, state: KeyboardState) -> Set<SwipeDirection> {
+        let grid = state.currentGrid
+        guard grid.indices.contains(pos.row), grid[pos.row].indices.contains(pos.col) else { return [] }
+
+        var directions = Set(grid[pos.row][pos.col].swipes.keys)
+        if state.currentLayer == .letters && state.isSymbolOverlayActive && state.showSymbolLabels {
+            directions.formUnion(KeyboardLayoutData.activeSymbolOverlayGrid()[pos.row][pos.col].swipes.keys)
+        }
+        if pos == GridPosition(row: 2, col: 0) {
+            directions.insert(.bottomRight)
+        }
+        if state.currentLayer == .letters && state.isURLField && pos == KeyboardLayoutData.dotComPosition {
+            directions.insert(.bottom)
+        }
+        return directions
     }
 
     private func bottomControlMetrics(
@@ -1165,11 +1185,22 @@ struct KeyboardView: View {
 
     private func updateActiveKey(at point: CGPoint) {
         if let pos = gestureEngine.keyPosition(at: point) {
-            state.activeKeyPosition = pos
+            setActiveKey(pos)
             return
         }
         if spaceBarRegion.contains(point) {
-            state.activeKeyPosition = GridPosition(row: 3, col: 0)
+            setActiveKey(GridPosition(row: 3, col: 0))
+        }
+    }
+
+    /// Runs on every touch sample. A @Published write re-renders the whole
+    /// keyboard even when the value is unchanged, so only write on a change.
+    private func setActiveKey(_ pos: GridPosition?) {
+        if state.activeKeyPosition != pos {
+            state.activeKeyPosition = pos
+        }
+        if pos == nil, state.swipeDirection != nil {
+            state.swipeDirection = nil
         }
     }
 
@@ -1534,8 +1565,10 @@ struct KeyboardView: View {
 }
 
 private struct GestureTrailView: View {
-    let points: [CGPoint]
+    @ObservedObject var model: GestureTrailModel
     let theme: KeyboardTheme
+
+    private var points: [CGPoint] { model.points }
 
     var body: some View {
         Path { path in

@@ -281,15 +281,44 @@ struct KeyboardLayoutData {
     static let dotComPosition = GridPosition(row: 1, col: 0)
 
     static func activeLetterGrid() -> [[KeyConfig]] {
-        savedEditableLayout()?.letterGrid.map { row in row.map(\.keyConfig) } ?? letterGrid
+        resolvedGrids().letters
     }
 
     static func activeNumberGrid() -> [[KeyConfig]] {
-        savedEditableLayout()?.numberGrid.map { row in row.map(\.keyConfig) } ?? numberGrid
+        resolvedGrids().numbers
     }
 
     static func activeSymbolOverlayGrid() -> [[KeyConfig]] {
-        savedEditableLayout()?.symbolOverlayGrid.map { row in row.map(\.keyConfig) } ?? symbolOverlayGrid
+        resolvedGrids().symbolOverlay
+    }
+
+    private struct ResolvedGrids {
+        let letters: [[KeyConfig]]
+        let numbers: [[KeyConfig]]
+        let symbolOverlay: [[KeyConfig]]
+    }
+
+    /// The grids are read on every render and every keypress, and the keyboard
+    /// re-renders on each touch sample. Decoding the saved layout from the app
+    /// group each time put a JSON decode on the input path, so resolve once and
+    /// drop the cache when the layout can have changed: on save/restore in this
+    /// process, and when the keyboard reappears after the app edited it.
+    private static var cachedGrids: ResolvedGrids?
+
+    private static func resolvedGrids() -> ResolvedGrids {
+        if let cachedGrids { return cachedGrids }
+        let saved = savedEditableLayout()
+        let grids = ResolvedGrids(
+            letters: saved?.letterGrid.map { row in row.map(\.keyConfig) } ?? letterGrid,
+            numbers: saved?.numberGrid.map { row in row.map(\.keyConfig) } ?? numberGrid,
+            symbolOverlay: saved?.symbolOverlayGrid.map { row in row.map(\.keyConfig) } ?? symbolOverlayGrid
+        )
+        cachedGrids = grids
+        return grids
+    }
+
+    static func invalidateLayoutCache() {
+        cachedGrids = nil
     }
 
     static func savedEditableLayout() -> EditableKeyboardLayout? {
@@ -316,10 +345,12 @@ struct KeyboardLayoutData {
     static func saveEditableLayout(_ layout: EditableKeyboardLayout) {
         guard let data = try? JSONEncoder().encode(layout) else { return }
         UserDefaults(suiteName: KeyboardState.appGroupSuiteName)?.set(data, forKey: customLayoutDefaultsKey)
+        invalidateLayoutCache()
     }
 
     static func restoreDefaultEditableLayout() {
         UserDefaults(suiteName: KeyboardState.appGroupSuiteName)?.removeObject(forKey: customLayoutDefaultsKey)
+        invalidateLayoutCache()
     }
 }
 
