@@ -30,9 +30,9 @@ class KeyboardState: ObservableObject {
     static let keyboardHeightDefaultsKey = "keyboardHeight"
     static let themeDefaultsKey = "keyboardTheme"
     static let defaultKeyCornerRadius: CGFloat = 5
-    /// MessagEase's keyboard is four 72pt rows tall (~292pt). At 300pt the
-    /// 78:72 keys come out 82x76pt, the same footprint within a few points.
-    static let defaultKeyboardHeight: CGFloat = 300
+    /// MessagEase's keyboard is four 72pt rows with 2pt gaps. 294pt gives the
+    /// same 78x72pt keys and a space row as tall as a key row.
+    static let defaultKeyboardHeight: CGFloat = 294
     private let persistsSettings: Bool
 
     @Published var currentLayer: KeyboardLayer = .letters
