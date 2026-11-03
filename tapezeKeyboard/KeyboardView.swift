@@ -1,5 +1,6 @@
 import SwiftUI
 import UIKit
+import Combine
 
 // MARK: - Main Keyboard View
 
@@ -874,14 +875,16 @@ struct KeyboardView: View {
         updatesGlobe: Bool,
         updatesResize: Bool = false
     ) -> some View {
-        DiamondCommandKeyView(
-            config: config,
-            isActive: state.activeKeyPosition == position,
-            isShifted: config.specialAction == .shift ? state.isShifted : false,
-            isCapsLocked: config.specialAction == .shift ? state.isCapsLocked : false,
-            theme: state.theme,
-            cornerRadius: state.keyCornerRadius
-        )
+        ActiveKeyReader(highlight: state.keyHighlight, position: position) { isActive in
+            DiamondCommandKeyView(
+                config: config,
+                isActive: isActive,
+                isShifted: config.specialAction == .shift ? state.isShifted : false,
+                isCapsLocked: config.specialAction == .shift ? state.isCapsLocked : false,
+                theme: state.theme,
+                cornerRadius: state.keyCornerRadius
+            )
+        }
         .frame(width: size, height: size)
         .position(center)
     }
@@ -925,22 +928,23 @@ struct KeyboardView: View {
                         let config = grid[row][col]
                         let visualConfig = isSymbolOverlay ? KeyboardLayoutData.activeSymbolOverlayGrid()[row][col] : config
                         let letterSwipeLabels = isSymbolOverlay ? KeyboardLayoutData.activeLetterGrid()[row][col].swipes : nil
-                        let isActive = state.activeKeyPosition == pos
                         let labelShift: CGFloat = 0
 
-                        CharacterKeyView(
-                            config: visualConfig,
-                            letterSwipeLabels: letterSwipeLabels,
-                            isActive: isActive,
-                            showCenter: showCenter,
-                            showSwipes: showSwipes,
-                            showSymbolOverlay: isSymbolOverlay,
-                            isShifted: state.isShifted || state.isCapsLocked,
-                            theme: state.theme,
-                            cornerRadius: state.keyCornerRadius,
-                            cutCorners: cutCornersForKey(row: row, col: col),
-                            labelHorizontalShift: labelShift
-                        )
+                        ActiveKeyReader(highlight: state.keyHighlight, position: pos) { isActive in
+                            CharacterKeyView(
+                                config: visualConfig,
+                                letterSwipeLabels: letterSwipeLabels,
+                                isActive: isActive,
+                                showCenter: showCenter,
+                                showSwipes: showSwipes,
+                                showSymbolOverlay: isSymbolOverlay,
+                                isShifted: state.isShifted || state.isCapsLocked,
+                                theme: state.theme,
+                                cornerRadius: state.keyCornerRadius,
+                                cutCorners: cutCornersForKey(row: row, col: col),
+                                labelHorizontalShift: labelShift
+                            )
+                        }
                         .frame(width: colWidth, height: rowHeight)
                         .background(
                             GeometryReader { geo in
@@ -978,12 +982,14 @@ struct KeyboardView: View {
             if let backspaceIndex = commands.firstIndex(where: { $0.specialAction == .backspace }) {
                 let backspacePos = GridPosition(row: backspaceIndex, col: state.commandBarOnRight ? 3 : -1)
 
-                DeleteColumnKeyView(
-                    isActive: state.activeKeyPosition == backspacePos,
-                    side: side,
-                    theme: state.theme,
-                    cornerRadius: state.keyCornerRadius
-                )
+                ActiveKeyReader(highlight: state.keyHighlight, position: backspacePos) { isActive in
+                    DeleteColumnKeyView(
+                        isActive: isActive,
+                        side: side,
+                        theme: state.theme,
+                        cornerRadius: state.keyCornerRadius
+                    )
+                }
                 .frame(width: width * 0.96, height: totalHeight)
 
                 Image(systemName: "delete.backward.fill")
@@ -999,12 +1005,14 @@ struct KeyboardView: View {
             ForEach(0..<commands.count, id: \.self) { idx in
                 let config = commands[idx]
                 if config.specialAction != .backspace {
-                    DiamondCommandKeyView(
-                        config: config,
-                        isActive: state.activeKeyPosition == GridPosition(row: idx, col: state.commandBarOnRight ? 3 : -1),
-                        theme: state.theme,
-                        cornerRadius: state.keyCornerRadius
-                    )
+                    ActiveKeyReader(highlight: state.keyHighlight, position: GridPosition(row: idx, col: state.commandBarOnRight ? 3 : -1)) { isActive in
+                        DiamondCommandKeyView(
+                            config: config,
+                            isActive: isActive,
+                            theme: state.theme,
+                            cornerRadius: state.keyCornerRadius
+                        )
+                    }
                     .frame(width: rowHeight * 0.72, height: rowHeight * 0.72)
                     .position(
                         x: state.commandBarOnRight ? width * 0.08 : width * 0.92,
@@ -1055,11 +1063,13 @@ struct KeyboardView: View {
     @ViewBuilder
     private func bottomRow(width: CGFloat, height: CGFloat) -> some View {
         if state.currentLayer == .letters {
-            SpaceBarView(
-                isActive: state.activeKeyPosition == GridPosition(row: 3, col: 0),
-                theme: state.theme,
-                cornerRadius: state.keyCornerRadius
-            )
+            ActiveKeyReader(highlight: state.keyHighlight, position: GridPosition(row: 3, col: 0)) { isActive in
+                SpaceBarView(
+                    isActive: isActive,
+                    theme: state.theme,
+                    cornerRadius: state.keyCornerRadius
+                )
+            }
                 .frame(width: width, height: height)
                 .background(
                     GeometryReader { geo in
@@ -1116,12 +1126,14 @@ struct KeyboardView: View {
         let pos = GridPosition(row: 3, col: state.commandBarOnRight ? 3 : -1)
 
         ZStack {
-            DiamondCommandKeyView(
-                config: KeyConfig(tap: "", specialAction: .enter, displayLabel: "return"),
-                isActive: state.activeKeyPosition == pos,
-                theme: state.theme,
-                cornerRadius: state.keyCornerRadius
-            )
+            ActiveKeyReader(highlight: state.keyHighlight, position: pos) { isActive in
+                DiamondCommandKeyView(
+                    config: KeyConfig(tap: "", specialAction: .enter, displayLabel: "return"),
+                    isActive: isActive,
+                    theme: state.theme,
+                    cornerRadius: state.keyCornerRadius
+                )
+            }
             .frame(width: height * 0.72, height: height * 0.72)
             .position(x: state.commandBarOnRight ? width * 0.08 : width * 0.92, y: height / 2)
 
@@ -1609,6 +1621,27 @@ private struct LatticeHitLayout: Equatable {
             width: max(commandBarOnRight ? originX : layoutWidth - gridEndX, 0),
             height: bottomRowHeight
         )
+    }
+}
+
+// MARK: - Key Highlight
+
+/// Renders `content` with whether `position` is the pressed key. It listens to
+/// the highlight on its own, so a press re-renders only the key it lands on
+/// and the key it leaves, not the whole keyboard.
+private struct ActiveKeyReader<Content: View>: View {
+    let highlight: KeyHighlightModel
+    let position: GridPosition
+    @ViewBuilder let content: (Bool) -> Content
+    @State private var isActive = false
+
+    var body: some View {
+        content(isActive)
+            .onReceive(highlight.$position.map { $0 == position }.removeDuplicates()) { active in
+                if isActive != active {
+                    isActive = active
+                }
+            }
     }
 }
 
