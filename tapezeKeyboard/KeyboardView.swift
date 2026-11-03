@@ -30,7 +30,8 @@ struct KeyboardView: View {
 
     private let gridRows = 3
     private let gridCols = 3
-    private let spacing: CGFloat = 1
+    /// MessagEase leaves 2pt between keys, including above the space row.
+    private let spacing: CGFloat = 2
     private let maxTrailDisplayPoints = 42
     private let minTrailPointDistance: CGFloat = 7
     private let numberHoldDuration: TimeInterval = 0.6
@@ -43,23 +44,23 @@ struct KeyboardView: View {
             let minimumControlExtent: CGFloat = 60
             /// Floor for very short keyboards so the bar stays a usable target.
             let minimumSpaceBarHeight: CGFloat = 56
-            /// Space bar height as a multiple of one key row. 10% shorter than the 1.02 ratio
-            /// measured from the reference layout (252px over 3 rows with an 86px bar).
-            let spaceBarRowRatio: CGFloat = 0.92
+            /// Space bar height as a multiple of one key row. MessagEase draws four equal
+            /// 72pt rows, so the space row matches a key row.
+            let spaceBarRowRatio: CGFloat = 1.0
             /// MessagEase keys are a little wider than tall: 78x72pt measured on the
             /// same device, with the command column exactly one key wide (four equal
             /// columns). Square keys plus a 61pt rail made tapeze read as a
             /// different, chunkier keyboard at the same height.
             let keyAspectRatio: CGFloat = 78.0 / 72.0
             // Solve for the row height so that `gridRows` key rows plus a space bar
-            // sized at `spaceBarRowRatio` key rows, plus the inter-row spacing,
-            // exactly fill the available height.
+            // sized at `spaceBarRowRatio` key rows, plus the inter-row spacing
+            // (including the gap above the space row), exactly fill the available height.
             let keyHeightByRowRatio = max(
-                (totalHeight - spacing * CGFloat(gridRows - 1)) / (CGFloat(gridRows) + spaceBarRowRatio),
+                (totalHeight - spacing * CGFloat(gridRows)) / (CGFloat(gridRows) + spaceBarRowRatio),
                 1
             )
             let keyHeightBySpaceFloor = max(
-                (totalHeight - spacing * CGFloat(gridRows - 1) - minimumSpaceBarHeight) / CGFloat(gridRows),
+                (totalHeight - spacing * CGFloat(gridRows) - minimumSpaceBarHeight) / CGFloat(gridRows),
                 1
             )
             let keyHeight = min(keyHeightByRowRatio, keyHeightBySpaceFloor)
@@ -306,7 +307,10 @@ struct KeyboardView: View {
         backspaceRailWidth: CGFloat
     ) -> some View {
         let gridBottom = stripHeight + mainGridHeight
-        let spaceHeight = max(totalHeight - gridBottom, 0)
+        // The bottom row is drawn below a `spacing` gap like the key rows. Its touch
+        // targets still start at the grid bottom, so the gap is not a dead zone.
+        let spaceTop = gridBottom + spacing
+        let spaceHeight = max(totalHeight - spaceTop, 0)
         let railX = state.commandBarOnRight
             ? layoutOriginX + mainGridWidth + spacing
             : 0
@@ -326,7 +330,7 @@ struct KeyboardView: View {
                 .frame(width: bottomControls.spaceWidth, height: spaceHeight)
                 .position(
                     x: bottomControls.spaceX + bottomControls.spaceWidth / 2,
-                    y: gridBottom + spaceHeight / 2
+                    y: spaceTop + spaceHeight / 2
                 )
 
             if bottomControls.hasZeroKey {
@@ -335,7 +339,7 @@ struct KeyboardView: View {
                     .frame(width: bottomControls.zeroWidth, height: spaceHeight)
                     .position(
                         x: bottomControls.zeroX + bottomControls.zeroWidth / 2,
-                        y: gridBottom + spaceHeight / 2
+                        y: spaceTop + spaceHeight / 2
                     )
 
                 Text("0")
@@ -345,7 +349,7 @@ struct KeyboardView: View {
                     .frame(width: bottomControls.zeroWidth, height: spaceHeight)
                     .position(
                         x: bottomControls.zeroX + bottomControls.zeroWidth / 2,
-                        y: gridBottom + spaceHeight / 2
+                        y: spaceTop + spaceHeight / 2
                     )
             }
 
@@ -357,12 +361,12 @@ struct KeyboardView: View {
             Rectangle()
                 .fill(backspaceBridgeFill)
                 .frame(width: cornerWidth, height: spaceHeight)
-                .position(x: cornerMinX + cornerWidth / 2, y: gridBottom + spaceHeight / 2)
+                .position(x: cornerMinX + cornerWidth / 2, y: spaceTop + spaceHeight / 2)
                 .overlay {
                     Rectangle()
                         .stroke(state.theme.keyBorder, lineWidth: state.theme.keyBorderWidth)
                         .frame(width: cornerWidth, height: spaceHeight)
-                        .position(x: cornerMinX + cornerWidth / 2, y: gridBottom + spaceHeight / 2)
+                        .position(x: cornerMinX + cornerWidth / 2, y: spaceTop + spaceHeight / 2)
                 }
 
             Image(systemName: "delete.left")
@@ -379,7 +383,7 @@ struct KeyboardView: View {
                 .foregroundColor(state.theme.specialTextColor)
                 .commandLabelDepth(for: state.theme)
                 .frame(width: cornerWidth, height: spaceHeight)
-                .position(x: cornerMinX + cornerWidth / 2, y: gridBottom + spaceHeight / 2)
+                .position(x: cornerMinX + cornerWidth / 2, y: spaceTop + spaceHeight / 2)
 
             Group {
                 if state.currentLayer == .letters && state.showCenterLabels {
@@ -394,7 +398,7 @@ struct KeyboardView: View {
             .frame(width: bottomControls.spaceWidth, height: spaceHeight)
             .position(
                 x: bottomControls.spaceX + bottomControls.spaceWidth / 2,
-                y: gridBottom + spaceHeight / 2
+                y: spaceTop + spaceHeight / 2
             )
         }
         .frame(width: totalWidth, height: totalHeight, alignment: .topLeading)
