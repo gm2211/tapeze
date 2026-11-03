@@ -225,7 +225,7 @@ struct KeyboardView: View {
             }
             .coordinateSpace(name: "keyboard")
         }
-        .frame(height: state.keyboardHeight)
+        .frame(height: state.effectiveKeyboardHeight)
         .onAppear {
             gestureEngine.updateKeyRegions(keyRegions)
             gestureEngine.updateSpaceBarRegion(spaceBarRegion, gutterRegion: spaceBarGutterRegion)

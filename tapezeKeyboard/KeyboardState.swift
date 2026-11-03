@@ -43,6 +43,10 @@ class KeyboardState: ObservableObject {
             }
         }
     }
+    /// Ceiling the current display puts on the keyboard, independent of the
+    /// height the user picked. Set while laptop mode on a foldable makes only
+    /// the half below the fold usable; nil everywhere else.
+    @Published var displayHeightLimit: CGFloat? = nil
     @Published var commandBarOnRight: Bool = true {
         didSet {
             if persistsSettings {
@@ -127,6 +131,13 @@ class KeyboardState: ObservableObject {
         } else {
             keyboardHeight = min(maxHeight, max(minHeight, CGFloat(Self.settingsDefaults.double(forKey: Self.keyboardHeightDefaultsKey))))
         }
+    }
+
+    /// The height the keyboard is actually drawn at. The user's own height is
+    /// kept untouched so it comes back as soon as the display limit lifts.
+    var effectiveKeyboardHeight: CGFloat {
+        guard let displayHeightLimit else { return keyboardHeight }
+        return min(keyboardHeight, displayHeightLimit)
     }
 
     var theme: KeyboardTheme {
