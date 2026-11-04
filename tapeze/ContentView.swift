@@ -377,6 +377,7 @@ private struct LayoutEditorView: View {
             }
             .padding()
             .background(Color(.systemGroupedBackground))
+            .onDisappear(perform: saveIfChanged)
             .navigationTitle("Layout")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
@@ -403,6 +404,14 @@ private struct LayoutEditorView: View {
                 }
             }
         }
+    }
+
+    /// Leaving the editor keeps the edits. Before, only Save stored them, so
+    /// Done or swiping the sheet away silently threw every move away.
+    private func saveIfChanged() {
+        guard layout != EditableKeyboardLayout.savedOrDefault else { return }
+        KeyboardLayoutData.saveEditableLayout(layout)
+        onLayoutChanged()
     }
 
     private func key(atRow row: Int, col: Int) -> EditableKeyConfig {
@@ -481,7 +490,12 @@ private struct EditableKeyTile: View {
                             RoundedRectangle(cornerRadius: 6, style: .continuous)
                                 .fill(position == .center ? theme.activeKeyBackground.opacity(0.38) : Color.white.opacity(0.055))
                         )
-                        .position(cellCenter(for: position, cellSide: cellSide))
+                        // Drag and drop must attach before .position: a
+                        // positioned view fills the whole tile, so attaching
+                        // after it stacked all nine targets over the tile and
+                        // the last (bottom-right, usually empty) cell took
+                        // every drag and drop.
+                        .contentShape(Rectangle())
                         .onDrag {
                             NSItemProvider(object: reference.payload as NSString)
                         } preview: {
@@ -500,6 +514,7 @@ private struct EditableKeyTile: View {
                                 onDropCell: onDropCell
                             )
                         )
+                        .position(cellCenter(for: position, cellSide: cellSide))
                 }
             }
         }
@@ -537,6 +552,10 @@ private struct LayoutCellDropDelegate: DropDelegate {
     let col: Int
     let position: KeyCellPosition
     let onDropCell: (String, Int, Int, KeyCellPosition) -> Void
+
+    func dropUpdated(info: DropInfo) -> DropProposal? {
+        DropProposal(operation: .move)
+    }
 
     func performDrop(info: DropInfo) -> Bool {
         guard let provider = info.itemProviders(for: [UTType.plainText]).first else { return false }
