@@ -19,12 +19,26 @@
   ul { list-style:none; padding:0; }
   li { margin:.5rem 0; }
   a { color:var(--accent); }
+  .shots {
+    display:grid; grid-template-columns:repeat(3, 1fr); gap:.75rem;
+    margin:0 0 2rem; padding:0; list-style:none;
+  }
+  .shots li { margin:0; }
+  .shots img { display:block; width:100%; height:auto; border-radius:.9rem; }
+  @media (max-width: 30rem) {
+    .shots { grid-template-columns:1fr; max-width:18rem; margin-inline:auto; }
+  }
 </style>
 </head>
 <body>
 <main>
   <h1>Tapeze</h1>
   <p>A compact gesture keyboard for iOS.</p>
+  <ul class="shots">
+    <li><img src="screenshots/store-01-gesture-keyboard.jpg" width="660" height="1434" alt="Tapeze settings with the keyboard preview: nine keys, tap a center letter and swipe toward the rest."></li>
+    <li><img src="screenshots/store-02-themes.jpg" width="660" height="1434" alt="Tapeze in dark mode with the Ember color theme selected."></li>
+    <li><img src="screenshots/store-03-layout-editor.jpg" width="660" height="1434" alt="The layout editor showing the letters on each of the nine keys."></li>
+  </ul>
   <ul>
     <li><a href="privacy.html">Privacy Policy</a></li>
     <li><a href="https://github.com/gm2211/tapeze">Source code on GitHub</a></li>
