@@ -786,6 +786,12 @@ struct KeyboardView: View {
         gestureEngine.labeledDirections = { [state] pos in
             Self.assignedSwipeDirections(at: pos, state: state)
         }
+        gestureEngine.hiddenTargetDirections = { [state] pos in
+            Self.hiddenSymbolDirections(at: pos, state: state)
+        }
+        gestureEngine.hiddenTargetMinimumReach = { [state] in
+            Self.symbolSwipeMinimumReach(state: state)
+        }
         gestureEngine.updateSpaceBarRegion(bottomBridgeStripRect, gutterRegion: spaceBarGutterRegion)
         gestureEngine.updateGlobeRegion(globeRegion)
         gestureEngine.updateResizeRegion(regions[GridPosition(row: 3, col: commandCol)] ?? .zero)
@@ -823,6 +829,16 @@ struct KeyboardView: View {
             directions.insert(.bottom)
         }
         return directions
+    }
+
+    /// Symbol-overlay directions on the letter layer that still type their
+    /// symbol while its label is hidden (see `hiddenSymbolSwipe`).
+    private static func hiddenSymbolDirections(at pos: GridPosition, state: KeyboardState) -> Set<SwipeDirection> {
+        guard state.currentLayer == .letters else { return [] }
+        let overlay = KeyboardLayoutData.activeSymbolOverlayGrid()
+        guard overlay.indices.contains(pos.row), overlay[pos.row].indices.contains(pos.col) else { return [] }
+        return Set(overlay[pos.row][pos.col].swipes.keys)
+            .subtracting(assignedSwipeDirections(at: pos, state: state))
     }
 
     private func bottomControlMetrics(
@@ -1436,6 +1452,10 @@ struct KeyboardView: View {
     /// label is not currently drawn. Visible labels fire at normal sensitivity;
     /// this only guards the unlabeled ones.
     private var symbolSwipeMinimumReach: CGFloat {
+        Self.symbolSwipeMinimumReach(state: state)
+    }
+
+    private static func symbolSwipeMinimumReach(state: KeyboardState) -> CGFloat {
         state.isSymbolOverlayActive ? 0 : 0.80
     }
 

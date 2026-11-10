@@ -48,6 +48,18 @@ class GestureEngine {
     /// not a request for an invisible target.
     var labeledDirections: (GridPosition) -> Set<SwipeDirection> = { _ in [] }
 
+    /// Directions that type something even though no label is drawn for them,
+    /// such as the symbol overlay while its labels are hidden ("?" to the left
+    /// of "i"). Users learn these positions, so a labeled neighbour must not
+    /// widen into them: a leftward flick on "i" that dips a few degrees below
+    /// horizontal is a "?", not the "x" an eighth of a turn further round.
+    var hiddenTargetDirections: (GridPosition) -> Set<SwipeDirection> = { _ in [] }
+    /// Reach, in key half-sides, a stroke needs before a hidden target can
+    /// fire (the keyboard's unlabeled-symbol gate). Shorter strokes cannot type
+    /// the hidden symbol anyway, so they keep the labeled neighbour's wider
+    /// sector rather than collapsing to the key's own letter.
+    var hiddenTargetMinimumReach: () -> CGFloat = { 0 }
+
     // Thresholds
     private let tapDistanceThreshold: CGFloat = 15.0
     private let minSwipeDistance: CGFloat = 20.0
@@ -643,15 +655,21 @@ class GestureEngine {
         let dy = Double((point.y - start.y) + (point.y - center.y) * centerAimWeight)
         // Convert to math-style angle (y up positive).
         let angle = atan2(-dy, dx)
-        return (resolveDirection(angle: angle, on: key), normalizedReach(farthestDistance, in: region))
+        let reach = normalizedReach(farthestDistance, in: region)
+        return (resolveDirection(angle: angle, on: key, reach: reach), reach)
     }
 
-    /// The 45° sector for `angle`, unless that sector has no label on this key
-    /// and a labeled neighbour's centre line is within `labeledSectorHalfWidth`.
-    private func resolveDirection(angle: Double, on key: GridPosition) -> SwipeDirection {
+    /// The 45° sector for `angle`, unless that sector would type nothing for
+    /// this stroke and a labeled neighbour's centre line is within
+    /// `labeledSectorHalfWidth`. A hidden target's sector belongs to it once
+    /// the stroke reaches far enough to type it.
+    func resolveDirection(angle: Double, on key: GridPosition, reach: CGFloat) -> SwipeDirection {
         let sector = SwipeDirection.fromAngle(angle)
         let labeled = labeledDirections(key)
         guard !labeled.isEmpty, !labeled.contains(sector) else { return sector }
+        if reach >= hiddenTargetMinimumReach(), hiddenTargetDirections(key).contains(sector) {
+            return sector
+        }
 
         let nearest = labeled
             .map { ($0, angularDistance(angle, $0.angle)) }
