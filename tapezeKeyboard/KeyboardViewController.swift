@@ -83,6 +83,9 @@ class KeyboardViewController: UIInputViewController {
         super.viewWillAppear(animated)
         configureTransparentBackgrounds()
         keyboardState.reloadPersistedAppearanceSettings()
+        if hasFullAccess {
+            KeyboardState.settingsDefaults.set(true, forKey: KeyboardState.keyboardReadsSettingsDefaultsKey)
+        }
         // The app may have saved a new layout while we were off screen.
         KeyboardLayoutData.invalidateLayoutCache()
         keyboardState.refreshLayout()
