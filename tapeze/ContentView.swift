@@ -336,48 +336,70 @@ private struct LayoutCellReference {
     }
 }
 
+
+/// The layout editor works on one key at a time: a small map of all nine keys
+/// picks the key, and that key fills the width of the screen with nine large
+/// slots. Tap a slot and type to replace its character, drag one slot onto
+/// another to swap them, or use Swap to trade with a slot on a different key.
 private struct LayoutEditorView: View {
     @Environment(\.dismiss) private var dismiss
     @State private var selectedLayer: LayoutEditorLayer = .letters
     @State private var layout = EditableKeyboardLayout.savedOrDefault
-    @State private var savedMarker = false
+    @State private var focusedRow = 1
+    @State private var focusedCol = 1
+    @State private var selectedPosition: KeyCellPosition?
+    @State private var swapSource: LayoutCellReference?
+    @State private var draft = ""
+    @FocusState private var isTyping: Bool
 
     let theme: KeyboardTheme
     let onLayoutChanged: () -> Void
 
     var body: some View {
         NavigationStack {
-            VStack(spacing: 16) {
-                Picker("Layer", selection: $selectedLayer) {
-                    ForEach(LayoutEditorLayer.allCases) { layer in
-                        Text(layer.title).tag(layer)
-                    }
-                }
-                .pickerStyle(.segmented)
-
-                VStack(spacing: 8) {
-                    ForEach(0..<3, id: \.self) { row in
-                        HStack(spacing: 8) {
-                            ForEach(0..<3, id: \.self) { col in
-                                EditableKeyTile(
-                                    layer: selectedLayer,
-                                    row: row,
-                                    col: col,
-                                    key: key(atRow: row, col: col),
-                                    theme: theme,
-                                    onDropCell: moveCell
-                                )
-                            }
+            ScrollView {
+                VStack(spacing: 14) {
+                    Picker("Layer", selection: $selectedLayer) {
+                        ForEach(LayoutEditorLayer.allCases) { layer in
+                            Text(layer.title).tag(layer)
                         }
                     }
-                }
-                .padding(.top, 10)
+                    .pickerStyle(.segmented)
 
-                Spacer(minLength: 0)
+                    miniMap
+
+                    Text(swapSource == nil ? "Tap a key to zoom in" : "Pick any key, then the slot to swap with")
+                        .font(.footnote)
+                        .foregroundStyle(swapSource == nil ? Color.secondary : Color.accentColor)
+
+                    FocusKeyView(
+                        layer: selectedLayer,
+                        row: focusedRow,
+                        col: focusedCol,
+                        key: key(atRow: focusedRow, col: focusedCol),
+                        theme: theme,
+                        selectedPosition: selectedPosition,
+                        swapSource: swapSource,
+                        onTap: tapSlot,
+                        onDropCell: moveCell
+                    )
+                    .frame(maxWidth: 440)
+
+                    inspector
+                }
+                .padding()
             }
-            .padding()
+            .scrollDismissesKeyboard(.interactively)
             .background(Color(.systemGroupedBackground))
             .onDisappear(perform: saveIfChanged)
+            .onChange(of: selectedLayer) { _ in
+                selectedPosition = nil
+                swapSource = nil
+                isTyping = false
+            }
+            .onChange(of: draft) { newValue in
+                applyDraft(newValue)
+            }
             .navigationTitle("Layout")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
@@ -385,25 +407,171 @@ private struct LayoutEditorView: View {
                     Button("Done") {
                         dismiss()
                     }
+                    .fontWeight(.semibold)
                 }
 
-                ToolbarItemGroup(placement: .confirmationAction) {
+                ToolbarItem(placement: .confirmationAction) {
                     Button("Restore") {
                         layout = .default
                         KeyboardLayoutData.restoreDefaultEditableLayout()
-                        savedMarker.toggle()
+                        selectedPosition = nil
+                        swapSource = nil
                         onLayoutChanged()
                     }
-
-                    Button("Save") {
-                        KeyboardLayoutData.saveEditableLayout(layout)
-                        savedMarker.toggle()
-                        onLayoutChanged()
-                    }
-                    .fontWeight(.semibold)
                 }
             }
         }
+    }
+
+    // MARK: Mini map
+
+    private var miniMap: some View {
+        VStack(spacing: 6) {
+            ForEach(0..<3, id: \.self) { row in
+                HStack(spacing: 6) {
+                    ForEach(0..<3, id: \.self) { col in
+                        let isFocused = row == focusedRow && col == focusedCol
+                        Button {
+                            focusedRow = row
+                            focusedCol = col
+                            if swapSource == nil {
+                                selectedPosition = nil
+                                isTyping = false
+                            }
+                        } label: {
+                            MiniKeyView(key: key(atRow: row, col: col), theme: theme)
+                                .frame(width: 64, height: 64)
+                                .overlay(
+                                    RoundedRectangle(cornerRadius: 14, style: .continuous)
+                                        .stroke(Color.accentColor, lineWidth: isFocused ? 3 : 0)
+                                        .padding(-4)
+                                )
+                        }
+                        .buttonStyle(.plain)
+                        .accessibilityLabel("Key \(key(atRow: row, col: col).value(at: .center))")
+                    }
+                }
+            }
+        }
+        .padding(.vertical, 4)
+    }
+
+    // MARK: Inspector
+
+    @ViewBuilder
+    private var inspector: some View {
+        if let swapSource {
+            HStack(spacing: 12) {
+                Image(systemName: "arrow.left.arrow.right")
+                    .font(.title3.weight(.semibold))
+                Text("Swapping \(Text(value(for: swapSource)).bold()). Tap the slot to trade with.")
+                    .font(.callout)
+                Spacer(minLength: 0)
+                Button("Cancel") { self.swapSource = nil }
+            }
+            .padding(14)
+            .background(cardBackground)
+        } else if let position = selectedPosition {
+            let reference = currentReference(position)
+            HStack(spacing: 12) {
+                Image(systemName: Self.symbol(for: position))
+                    .font(.title2.weight(.semibold))
+                    .frame(width: 28)
+
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(Self.gestureName(for: position))
+                        .font(.callout.weight(.semibold))
+                    Text("on \(key(atRow: focusedRow, col: focusedCol).value(at: .center))")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+
+                Spacer(minLength: 0)
+
+                TextField(value(for: reference).isEmpty ? "–" : value(for: reference), text: $draft)
+                    .font(.title2.weight(.bold))
+                    .multilineTextAlignment(.center)
+                    .textInputAutocapitalization(.never)
+                    .autocorrectionDisabled()
+                    .focused($isTyping)
+                    .frame(width: 56, height: 44)
+                    .background(
+                        RoundedRectangle(cornerRadius: 10, style: .continuous)
+                            .stroke(Color.accentColor, lineWidth: 2)
+                    )
+
+                Menu {
+                    Button {
+                        swapSource = reference
+                        isTyping = false
+                    } label: {
+                        Label("Swap with another slot", systemImage: "arrow.left.arrow.right")
+                    }
+                    if position != .center {
+                        Button(role: .destructive) {
+                            setValue("", for: reference)
+                            draft = ""
+                        } label: {
+                            Label("Clear", systemImage: "xmark.circle")
+                        }
+                    }
+                } label: {
+                    Image(systemName: "ellipsis.circle")
+                        .font(.title2)
+                        .frame(width: 44, height: 44)
+                }
+            }
+            .padding(14)
+            .background(cardBackground)
+
+            Text("Type to replace · drag between slots to swap")
+                .font(.footnote)
+                .foregroundStyle(.secondary)
+        } else {
+            Text("Tap a slot to change it, or drag one slot onto another to swap them.")
+                .font(.footnote)
+                .foregroundStyle(.secondary)
+                .multilineTextAlignment(.center)
+                .padding(.top, 4)
+        }
+    }
+
+    private var cardBackground: some View {
+        RoundedRectangle(cornerRadius: 14, style: .continuous)
+            .fill(Color(.secondarySystemGroupedBackground))
+    }
+
+    // MARK: Actions
+
+    private func tapSlot(_ position: KeyCellPosition) {
+        let target = currentReference(position)
+        if let source = swapSource {
+            swap(source, target)
+            swapSource = nil
+            selectedPosition = position
+            draft = ""
+            return
+        }
+        selectedPosition = position
+        draft = ""
+        isTyping = true
+    }
+
+    /// Each keystroke replaces the slot with the last character typed, so the
+    /// field never has to be cleared first.
+    private func applyDraft(_ newValue: String) {
+        guard let position = selectedPosition, let last = newValue.last else { return }
+        let character = String(last)
+        if newValue != character {
+            draft = character
+            return
+        }
+        guard character.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false else { return }
+        setValue(character, for: currentReference(position))
+    }
+
+    private func currentReference(_ position: KeyCellPosition) -> LayoutCellReference {
+        LayoutCellReference(layer: selectedLayer, row: focusedRow, col: focusedCol, position: position)
     }
 
     /// Leaving the editor keeps the edits. Before, only Save stored them, so
@@ -436,15 +604,21 @@ private struct LayoutEditorView: View {
         return grid(for: reference.layer)[reference.row][reference.col].value(at: reference.position)
     }
 
-    private func moveCell(payload: String, toRow row: Int, col: Int, position: KeyCellPosition) {
+    private func moveCell(payload: String, position: KeyCellPosition) {
         guard let source = LayoutCellReference(payload: payload) else { return }
-        let target = LayoutCellReference(layer: selectedLayer, row: row, col: col, position: position)
+        swap(source, currentReference(position))
+        selectedPosition = position
+    }
+
+    private func swap(_ source: LayoutCellReference, _ target: LayoutCellReference) {
         guard source.payload != target.payload else { return }
-
         let sourceValue = value(for: source)
-        guard !sourceValue.isEmpty else { return }
-
         let targetValue = value(for: target)
+        guard !sourceValue.isEmpty || !targetValue.isEmpty else { return }
+        // A tap character can't be left empty, so refuse a swap that would empty one.
+        if (source.position == .center && targetValue.isEmpty) || (target.position == .center && sourceValue.isEmpty) {
+            return
+        }
         setValue(sourceValue, for: target)
         setValue(targetValue, for: source)
     }
@@ -461,97 +635,186 @@ private struct LayoutEditorView: View {
             layout.numberGrid[reference.row][reference.col].setValue(value, at: reference.position)
         }
     }
+
+    // MARK: Labels
+
+    static func symbol(for position: KeyCellPosition) -> String {
+        switch position {
+        case .topLeft: return "arrow.up.left"
+        case .top: return "arrow.up"
+        case .topRight: return "arrow.up.right"
+        case .left: return "arrow.left"
+        case .center: return "hand.tap"
+        case .right: return "arrow.right"
+        case .bottomLeft: return "arrow.down.left"
+        case .bottom: return "arrow.down"
+        case .bottomRight: return "arrow.down.right"
+        }
+    }
+
+    static func gestureName(for position: KeyCellPosition) -> String {
+        switch position {
+        case .topLeft: return "Swipe up-left"
+        case .top: return "Swipe up"
+        case .topRight: return "Swipe up-right"
+        case .left: return "Swipe left"
+        case .center: return "Tap"
+        case .right: return "Swipe right"
+        case .bottomLeft: return "Swipe down-left"
+        case .bottom: return "Swipe down"
+        case .bottomRight: return "Swipe down-right"
+        }
+    }
 }
 
-private struct EditableKeyTile: View {
+private let keyCellRows: [[KeyCellPosition]] = [
+    [.topLeft, .top, .topRight],
+    [.left, .center, .right],
+    [.bottomLeft, .bottom, .bottomRight],
+]
+
+private struct KeyBackground: View {
+    let theme: KeyboardTheme
+    let cornerRadius: CGFloat
+
+    var body: some View {
+        OctagonalKeyShape(cornerRadius: cornerRadius)
+            .fill(
+                LinearGradient(
+                    colors: [theme.keyGradientTop ?? theme.keyBackground, theme.keyGradientBottom ?? theme.keyBackground],
+                    startPoint: .topLeading,
+                    endPoint: .bottomTrailing
+                )
+            )
+            .overlay(
+                OctagonalKeyShape(cornerRadius: cornerRadius)
+                    .stroke(theme.keyBorder, lineWidth: 1)
+            )
+    }
+}
+
+/// A small read-only key for the mini map.
+private struct MiniKeyView: View {
+    let key: EditableKeyConfig
+    let theme: KeyboardTheme
+
+    var body: some View {
+        VStack(spacing: 0) {
+            ForEach(0..<3, id: \.self) { row in
+                HStack(spacing: 0) {
+                    ForEach(keyCellRows[row], id: \.self) { position in
+                        Text(key.value(at: position))
+                            .font(.system(size: position == .center ? 20 : 8, weight: .bold, design: .rounded))
+                            .foregroundStyle(position == .center ? theme.tapColor : theme.swipeColor)
+                            .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    }
+                }
+            }
+        }
+        .padding(3)
+        .background(KeyBackground(theme: theme, cornerRadius: 8))
+    }
+}
+
+/// The focused key, drawn as large as the screen allows. Every slot is a
+/// separate view in a plain grid, so each one owns its own hit area.
+private struct FocusKeyView: View {
     let layer: LayoutEditorLayer
     let row: Int
     let col: Int
     let key: EditableKeyConfig
     let theme: KeyboardTheme
-    let onDropCell: (String, Int, Int, KeyCellPosition) -> Void
+    let selectedPosition: KeyCellPosition?
+    let swapSource: LayoutCellReference?
+    let onTap: (KeyCellPosition) -> Void
+    let onDropCell: (String, KeyCellPosition) -> Void
 
     var body: some View {
         GeometryReader { geo in
-            let cellSide = geo.size.width / 3
-
-            ZStack {
-                ForEach(Array(KeyCellPosition.allCases), id: \.self) { position in
-                    let value = key.value(at: position)
-                    let reference = LayoutCellReference(layer: layer, row: row, col: col, position: position)
-
-                    Text(value)
-                        .font(.system(size: position == .center ? cellSide * 0.56 : cellSide * 0.34, weight: position == .center ? .bold : .semibold, design: .rounded))
-                        .foregroundStyle(position == .center ? theme.tapColor : theme.swipeColor)
-                        .lineLimit(1)
-                        .minimumScaleFactor(0.45)
-                        .frame(width: cellSide, height: cellSide)
-                        .background(
-                            RoundedRectangle(cornerRadius: 6, style: .continuous)
-                                .fill(position == .center ? theme.activeKeyBackground.opacity(0.38) : Color.white.opacity(0.055))
-                        )
-                        // Drag and drop must attach before .position: a
-                        // positioned view fills the whole tile, so attaching
-                        // after it stacked all nine targets over the tile and
-                        // the last (bottom-right, usually empty) cell took
-                        // every drag and drop.
-                        .contentShape(Rectangle())
-                        .onDrag {
-                            NSItemProvider(object: reference.payload as NSString)
-                        } preview: {
-                            Text(value.isEmpty ? " " : value)
-                                .font(.title2.bold())
-                                .foregroundStyle(position == .center ? theme.tapColor : theme.swipeColor)
-                                .padding(12)
-                                .background(.thinMaterial, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+            let side = geo.size.width / 3
+            VStack(spacing: 0) {
+                ForEach(0..<3, id: \.self) { r in
+                    HStack(spacing: 0) {
+                        ForEach(keyCellRows[r], id: \.self) { position in
+                            slot(position, side: side)
                         }
-                        .onDrop(
-                            of: [UTType.plainText],
-                            delegate: LayoutCellDropDelegate(
-                                row: row,
-                                col: col,
-                                position: position,
-                                onDropCell: onDropCell
-                            )
-                        )
-                        .position(cellCenter(for: position, cellSide: cellSide))
+                    }
                 }
             }
         }
-        .padding(5)
-        .background(
-            OctagonalKeyShape(cornerRadius: 8)
-                .fill(
-                    LinearGradient(
-                        colors: [theme.keyGradientTop ?? theme.keyBackground, theme.keyGradientBottom ?? theme.keyBackground],
-                        startPoint: .topLeading,
-                        endPoint: .bottomTrailing
-                    )
-                )
-                .overlay(
-                    OctagonalKeyShape(cornerRadius: 8)
-                        .stroke(theme.keyBorder, lineWidth: 1)
-                )
-        )
         .aspectRatio(1, contentMode: .fit)
+        .padding(10)
+        .background(KeyBackground(theme: theme, cornerRadius: 22))
     }
 
-    private func cellCenter(for position: KeyCellPosition, cellSide: CGFloat) -> CGPoint {
-        let index = KeyCellPosition.allCases.firstIndex(of: position) ?? 0
-        let row = index / 3
-        let col = index % 3
-        return CGPoint(
-            x: CGFloat(col) * cellSide + cellSide / 2,
-            y: CGFloat(row) * cellSide + cellSide / 2
-        )
+    private func slot(_ position: KeyCellPosition, side: CGFloat) -> some View {
+        let value = key.value(at: position)
+        let reference = LayoutCellReference(layer: layer, row: row, col: col, position: position)
+        let isSelected = selectedPosition == position && swapSource == nil
+        let isSwapSource = swapSource?.payload == reference.payload
+        let isCenter = position == .center
+
+        return ZStack {
+            RoundedRectangle(cornerRadius: 14, style: .continuous)
+                .fill(isCenter ? theme.activeKeyBackground.opacity(0.38) : Color.white.opacity(0.05))
+            RoundedRectangle(cornerRadius: 14, style: .continuous)
+                .stroke(isSwapSource ? Color.orange : Color.accentColor, lineWidth: isSelected || isSwapSource ? 3 : 0)
+            if swapSource != nil && !isSwapSource {
+                RoundedRectangle(cornerRadius: 14, style: .continuous)
+                    .stroke(Color.white.opacity(0.35), style: StrokeStyle(lineWidth: 1.5, dash: [5, 4]))
+            }
+
+            Text(value)
+                .font(.system(size: isCenter ? side * 0.62 : side * 0.42, weight: isCenter ? .bold : .semibold, design: .rounded))
+                .foregroundStyle(isCenter ? theme.tapColor : theme.swipeColor)
+                .lineLimit(1)
+                .minimumScaleFactor(0.4)
+
+            if !isCenter {
+                Image(systemName: LayoutEditorView.symbol(for: position))
+                    .font(.system(size: 10, weight: .bold))
+                    .foregroundStyle(theme.swipeColor.opacity(0.45))
+                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: arrowAlignment(position))
+                    .padding(7)
+            }
+        }
+        .padding(3)
+        .frame(width: side, height: side)
+        .contentShape(Rectangle())
+        .onTapGesture { onTap(position) }
+        .onDrag {
+            NSItemProvider(object: reference.payload as NSString)
+        } preview: {
+            Text(value.isEmpty ? " " : value)
+                .font(.largeTitle.bold())
+                .foregroundStyle(isCenter ? theme.tapColor : theme.swipeColor)
+                .padding(16)
+                .background(.thinMaterial, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+        }
+        .onDrop(of: [UTType.plainText], delegate: LayoutCellDropDelegate(position: position, onDropCell: onDropCell))
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel("\(LayoutEditorView.gestureName(for: position)): \(value.isEmpty ? "empty" : value)")
+        .accessibilityAddTraits(.isButton)
+    }
+
+    private func arrowAlignment(_ position: KeyCellPosition) -> Alignment {
+        switch position {
+        case .topLeft: return .topLeading
+        case .top: return .top
+        case .topRight: return .topTrailing
+        case .left: return .leading
+        case .center: return .center
+        case .right: return .trailing
+        case .bottomLeft: return .bottomLeading
+        case .bottom: return .bottom
+        case .bottomRight: return .bottomTrailing
+        }
     }
 }
 
 private struct LayoutCellDropDelegate: DropDelegate {
-    let row: Int
-    let col: Int
     let position: KeyCellPosition
-    let onDropCell: (String, Int, Int, KeyCellPosition) -> Void
+    let onDropCell: (String, KeyCellPosition) -> Void
 
     func dropUpdated(info: DropInfo) -> DropProposal? {
         DropProposal(operation: .move)
@@ -574,7 +837,7 @@ private struct LayoutCellDropDelegate: DropDelegate {
 
             guard let payload else { return }
             DispatchQueue.main.async {
-                onDropCell(payload, row, col, position)
+                onDropCell(payload, position)
             }
         }
 
