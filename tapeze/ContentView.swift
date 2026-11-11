@@ -350,6 +350,8 @@ private struct LayoutEditorView: View {
     @State private var selectedPosition: KeyCellPosition?
     @State private var swapSource: LayoutCellReference?
     @State private var draft = ""
+    @State private var history: [EditableKeyboardLayout] = []
+    @State private var isConfirmingRestore = false
     @FocusState private var isTyping: Bool
 
     let theme: KeyboardTheme
@@ -412,6 +414,18 @@ private struct LayoutEditorView: View {
             .onChange(of: draft) { newValue in
                 applyDraft(newValue)
             }
+            .confirmationDialog("Restore the default layout?", isPresented: $isConfirmingRestore, titleVisibility: .visible) {
+                Button("Restore Default Layout", role: .destructive) {
+                    recordHistory()
+                    layout = .default
+                    KeyboardLayoutData.restoreDefaultEditableLayout()
+                    selectedPosition = nil
+                    swapSource = nil
+                    onLayoutChanged()
+                }
+            } message: {
+                Text("This replaces every change you made. You can undo it until you close the editor.")
+            }
             .navigationTitle("Layout")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
@@ -422,19 +436,17 @@ private struct LayoutEditorView: View {
                     .fontWeight(.semibold)
                 }
 
-                ToolbarItemGroup(placement: .keyboard) {
-                    Spacer()
-                    Button("Done") { isTyping = false }
-                        .fontWeight(.semibold)
-                }
+                ToolbarItemGroup(placement: .confirmationAction) {
+                    Button {
+                        undo()
+                    } label: {
+                        Image(systemName: "arrow.uturn.backward")
+                    }
+                    .disabled(history.isEmpty)
+                    .accessibilityLabel("Undo")
 
-                ToolbarItem(placement: .confirmationAction) {
                     Button("Restore") {
-                        layout = .default
-                        KeyboardLayoutData.restoreDefaultEditableLayout()
-                        selectedPosition = nil
-                        swapSource = nil
-                        onLayoutChanged()
+                        isConfirmingRestore = true
                     }
                 }
             }
@@ -511,6 +523,7 @@ private struct LayoutEditorView: View {
                     .multilineTextAlignment(.center)
                     .textInputAutocapitalization(.never)
                     .autocorrectionDisabled()
+                    .keyboardType(.asciiCapable)
                     .focused($isTyping)
                     .submitLabel(.done)
                     .onSubmit { isTyping = false }
@@ -529,6 +542,7 @@ private struct LayoutEditorView: View {
                     }
                     if position != .center {
                         Button(role: .destructive) {
+                            recordHistory()
                             setValue("", for: reference)
                             draft = ""
                         } label: {
@@ -586,7 +600,10 @@ private struct LayoutEditorView: View {
             return
         }
         guard character.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false else { return }
-        setValue(character, for: currentReference(position))
+        let reference = currentReference(position)
+        guard value(for: reference) != character else { return }
+        recordHistory()
+        setValue(character, for: reference)
     }
 
     private func currentReference(_ position: KeyCellPosition) -> LayoutCellReference {
@@ -638,8 +655,21 @@ private struct LayoutEditorView: View {
         if (source.position == .center && targetValue.isEmpty) || (target.position == .center && sourceValue.isEmpty) {
             return
         }
+        recordHistory()
         setValue(sourceValue, for: target)
         setValue(targetValue, for: source)
+    }
+
+    private func recordHistory() {
+        history.append(layout)
+        if history.count > 50 { history.removeFirst() }
+    }
+
+    private func undo() {
+        guard let previous = history.popLast() else { return }
+        layout = previous
+        swapSource = nil
+        draft = ""
     }
 
     private func setValue(_ value: String, for reference: LayoutCellReference) {
