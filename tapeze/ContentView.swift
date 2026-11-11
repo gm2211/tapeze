@@ -8,6 +8,7 @@ struct ContentView: View {
     @AppStorage(KeyboardState.themeDefaultsKey, store: KeyboardState.settingsDefaults) private var selectedThemeID = KeyboardTheme.tapeze.id
     @State private var testText: String = ""
     @State private var isLayoutEditorPresented = false
+    @State private var keyboardReadsSettings = true
     @StateObject private var previewState = KeyboardState(isPreview: true)
 
     var body: some View {
@@ -24,6 +25,7 @@ struct ContentView: View {
         }
         .background(Color(.systemGroupedBackground))
         .onAppear {
+            refreshKeyboardReadsSettings()
             previewState.resetLearningPreview()
             previewState.showGestureTrail = showGestureTrail
             previewState.keyCornerRadius = CGFloat(keyCornerRadius)
@@ -40,6 +42,7 @@ struct ContentView: View {
         }
         .onChange(of: scenePhase) { newPhase in
             if newPhase == .active {
+                refreshKeyboardReadsSettings()
                 previewState.resetLearningPreview()
             }
         }
@@ -145,8 +148,9 @@ struct ContentView: View {
             instructionRow(number: 1, text: "Open Settings → General → Keyboard → Keyboards")
             instructionRow(number: 2, text: "Tap \"Add New Keyboard...\"")
             instructionRow(number: 3, text: "Select \"tapeze\"")
-            instructionRow(number: 4, text: "Open Notes or the test field below")
-            instructionRow(number: 5, text: "Long-press 🌐 and select \"tapeze\"")
+            instructionRow(number: 4, text: "Tap \"tapeze\" and turn on \"Allow Full Access\" so it picks up your color and other settings")
+            instructionRow(number: 5, text: "Open Notes or the test field below")
+            instructionRow(number: 6, text: "Long-press 🌐 and select \"tapeze\"")
 
             Text("Some system fields, including password fields and Safari's address bar, may force Apple's keyboard.")
                 .font(.caption)
@@ -168,6 +172,10 @@ struct ContentView: View {
                     .font(.caption.weight(.semibold))
                     .foregroundColor(.secondary)
                     .textCase(.uppercase)
+
+                if !keyboardReadsSettings {
+                    fullAccessNotice
+                }
 
                 HStack(spacing: 8) {
                     ForEach(KeyboardTheme.all) { theme in
@@ -221,6 +229,37 @@ struct ContentView: View {
         }
         .padding(14)
         .background(sectionBackground)
+    }
+
+    private func refreshKeyboardReadsSettings() {
+        keyboardReadsSettings = KeyboardState.settingsDefaults.bool(forKey: KeyboardState.keyboardReadsSettingsDefaultsKey)
+    }
+
+    /// Shown until the keyboard has appeared once with Full Access. Without it
+    /// iOS keeps the keyboard from reading these settings, so a new color shows
+    /// in the preview but not in the real keyboard.
+    private var fullAccessNotice: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Label("The keyboard can't see these settings yet", systemImage: "exclamationmark.triangle.fill")
+                .font(.subheadline.weight(.semibold))
+                .foregroundColor(.orange)
+            Text("Turn on Allow Full Access for tapeze, then switch to the tapeze keyboard once. Until then it keeps the default color. tapeze never sends what you type anywhere.")
+                .font(.caption)
+                .foregroundColor(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+            Button("Open Settings") {
+                if let url = URL(string: UIApplication.openSettingsURLString) {
+                    UIApplication.shared.open(url)
+                }
+            }
+            .font(.caption.weight(.semibold))
+        }
+        .padding(10)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(
+            RoundedRectangle(cornerRadius: 10, style: .continuous)
+                .fill(Color.orange.opacity(0.12))
+        )
     }
 
     private var sectionBackground: some View {

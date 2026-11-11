@@ -35,6 +35,11 @@ class KeyboardState: ObservableObject {
     static let showCenterLabelsDefaultsKey = "showCenterLabels"
     static let keyboardHeightDefaultsKey = "keyboardHeight"
     static let themeDefaultsKey = "keyboardTheme"
+    /// Written by the keyboard whenever it appears with Full Access. Without
+    /// Full Access iOS hides the shared app group from the keyboard, so it
+    /// cannot read the app's settings (color, edge softness, trail) and this
+    /// is never written. The app uses its absence to warn the user.
+    static let keyboardReadsSettingsDefaultsKey = "keyboardReadsSettings"
     static let defaultKeyCornerRadius: CGFloat = 5
     /// MessagEase's keyboard is four 72pt rows with 2pt gaps. 294pt gives the
     /// same 78x72pt keys and a space row as tall as a key row.

@@ -23,7 +23,7 @@ open Tapeze.xcodeproj
 2. Add **tapeze** under **Settings → General → Keyboard → Keyboards → Add New Keyboard**.
 3. In Notes, hold the globe key and choose **tapeze**, or practice in the app’s preview.
 
-Some system fields require Apple’s keyboard. **Allow Full Access** is optional for clipboard access.
+Some system fields require Apple’s keyboard. Turn on **Allow Full Access** so the keyboard can read the color, edge softness and gesture trail you pick in the app; without it iOS hides the app's settings from the keyboard and it keeps the defaults.
 
 To regenerate the project with [XcodeGen](https://github.com/yonaskolb/XcodeGen), run `xcodegen generate`.
 
