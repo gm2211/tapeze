@@ -357,6 +357,7 @@ private struct LayoutEditorView: View {
 
     var body: some View {
         NavigationStack {
+            ScrollViewReader { proxy in
             ScrollView {
                 VStack(spacing: 14) {
                     Picker("Layer", selection: $selectedLayer) {
@@ -386,8 +387,19 @@ private struct LayoutEditorView: View {
                     .frame(maxWidth: 440)
 
                     inspector
+                        .id("inspector")
                 }
                 .padding()
+            }
+            .onChange(of: selectedPosition) { _ in
+                withAnimation { proxy.scrollTo("inspector", anchor: .bottom) }
+            }
+            .onChange(of: isTyping) { typing in
+                guard typing else { return }
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) {
+                    withAnimation { proxy.scrollTo("inspector", anchor: .bottom) }
+                }
+            }
             }
             .scrollDismissesKeyboard(.interactively)
             .background(Color(.systemGroupedBackground))
@@ -408,6 +420,12 @@ private struct LayoutEditorView: View {
                         dismiss()
                     }
                     .fontWeight(.semibold)
+                }
+
+                ToolbarItemGroup(placement: .keyboard) {
+                    Spacer()
+                    Button("Done") { isTyping = false }
+                        .fontWeight(.semibold)
                 }
 
                 ToolbarItem(placement: .confirmationAction) {
@@ -431,24 +449,24 @@ private struct LayoutEditorView: View {
                 HStack(spacing: 6) {
                     ForEach(0..<3, id: \.self) { col in
                         let isFocused = row == focusedRow && col == focusedCol
-                        Button {
-                            focusedRow = row
-                            focusedCol = col
-                            if swapSource == nil {
-                                selectedPosition = nil
-                                isTyping = false
-                            }
-                        } label: {
-                            MiniKeyView(key: key(atRow: row, col: col), theme: theme)
+                        MiniKeyView(key: key(atRow: row, col: col), theme: theme)
                                 .frame(width: 64, height: 64)
                                 .overlay(
                                     RoundedRectangle(cornerRadius: 14, style: .continuous)
                                         .stroke(Color.accentColor, lineWidth: isFocused ? 3 : 0)
                                         .padding(-4)
                                 )
-                        }
-                        .buttonStyle(.plain)
-                        .accessibilityLabel("Key \(key(atRow: row, col: col).value(at: .center))")
+                                .contentShape(Rectangle())
+                                .onTapGesture {
+                                    focusedRow = row
+                                    focusedCol = col
+                                    if swapSource == nil {
+                                        selectedPosition = nil
+                                        isTyping = false
+                                    }
+                                }
+                                .accessibilityAddTraits(.isButton)
+                                .accessibilityLabel("Key \(key(atRow: row, col: col).value(at: .center))")
                     }
                 }
             }
@@ -494,6 +512,8 @@ private struct LayoutEditorView: View {
                     .textInputAutocapitalization(.never)
                     .autocorrectionDisabled()
                     .focused($isTyping)
+                    .submitLabel(.done)
+                    .onSubmit { isTyping = false }
                     .frame(width: 56, height: 44)
                     .background(
                         RoundedRectangle(cornerRadius: 10, style: .continuous)
@@ -554,7 +574,6 @@ private struct LayoutEditorView: View {
         }
         selectedPosition = position
         draft = ""
-        isTyping = true
     }
 
     /// Each keystroke replaces the slot with the last character typed, so the
@@ -744,7 +763,23 @@ private struct FocusKeyView: View {
         }
         .aspectRatio(1, contentMode: .fit)
         .padding(10)
-        .background(KeyBackground(theme: theme, cornerRadius: 22))
+        // A rounded square rather than the keyboard's octagon: the corner
+        // slots are full squares, and an octagon cut through them.
+        .background(
+            RoundedRectangle(cornerRadius: 28, style: .continuous)
+                .fill(
+                    LinearGradient(
+                        colors: [theme.keyGradientTop ?? theme.keyBackground, theme.keyGradientBottom ?? theme.keyBackground],
+                        startPoint: .topLeading,
+                        endPoint: .bottomTrailing
+                    )
+                )
+                .overlay(
+                    RoundedRectangle(cornerRadius: 28, style: .continuous)
+                        .stroke(theme.keyBorder, lineWidth: 1)
+                )
+        )
+        .clipShape(RoundedRectangle(cornerRadius: 28, style: .continuous))
     }
 
     private func slot(_ position: KeyCellPosition, side: CGFloat) -> some View {
@@ -756,7 +791,7 @@ private struct FocusKeyView: View {
 
         return ZStack {
             RoundedRectangle(cornerRadius: 14, style: .continuous)
-                .fill(isCenter ? theme.activeKeyBackground.opacity(0.38) : Color.white.opacity(0.05))
+                .fill(isCenter ? theme.activeKeyBackground.opacity(0.38) : theme.swipeColor.opacity(0.06))
             RoundedRectangle(cornerRadius: 14, style: .continuous)
                 .stroke(isSwapSource ? Color.orange : Color.accentColor, lineWidth: isSelected || isSwapSource ? 3 : 0)
             if swapSource != nil && !isSwapSource {
@@ -765,7 +800,7 @@ private struct FocusKeyView: View {
             }
 
             Text(value)
-                .font(.system(size: isCenter ? side * 0.62 : side * 0.42, weight: isCenter ? .bold : .semibold, design: .rounded))
+                .font(.system(size: isCenter ? side * 0.56 : side * 0.38, weight: isCenter ? .bold : .semibold, design: .rounded))
                 .foregroundStyle(isCenter ? theme.tapColor : theme.swipeColor)
                 .lineLimit(1)
                 .minimumScaleFactor(0.4)
