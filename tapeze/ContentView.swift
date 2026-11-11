@@ -414,18 +414,6 @@ private struct LayoutEditorView: View {
             .onChange(of: draft) { newValue in
                 applyDraft(newValue)
             }
-            .confirmationDialog("Restore the default layout?", isPresented: $isConfirmingRestore, titleVisibility: .visible) {
-                Button("Restore Default Layout", role: .destructive) {
-                    recordHistory()
-                    layout = .default
-                    KeyboardLayoutData.restoreDefaultEditableLayout()
-                    selectedPosition = nil
-                    swapSource = nil
-                    onLayoutChanged()
-                }
-            } message: {
-                Text("This replaces every change you made. You can undo it until you close the editor.")
-            }
             .navigationTitle("Layout")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
@@ -447,6 +435,18 @@ private struct LayoutEditorView: View {
 
                     Button("Restore") {
                         isConfirmingRestore = true
+                    }
+                    .confirmationDialog("Restore the default layout?", isPresented: $isConfirmingRestore, titleVisibility: .visible) {
+                        Button("Restore Default Layout", role: .destructive) {
+                            recordHistory()
+                            layout = .default
+                            KeyboardLayoutData.restoreDefaultEditableLayout()
+                            selectedPosition = nil
+                            swapSource = nil
+                            onLayoutChanged()
+                        }
+                    } message: {
+                        Text("This replaces every change you made. You can undo it until you close the editor.")
                     }
                 }
             }
