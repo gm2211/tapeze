@@ -120,5 +120,25 @@ expect("e flick at 200° types ,", typed(stroke(on: eKey, degrees: 200, length: 
 expect("short t flick at 72° types y", typed(stroke(on: tKey, degrees: 72, length: halfSide * 0.65)), "y")
 expect("t flick at 45° types y", typed(stroke(on: tKey, degrees: 45, length: committed)), "y")
 
+print("taps that drift stay taps")
+let oKey = GridPosition(row: 1, col: 1)
+// A thumb rolling off a fast tap moves the contact point 15-20pt. On the key
+// that types the centre letter, wherever the drift heads.
+for angle in [0.0, 45, 90, 135, 180, 225, 270, 315] {
+    expect("o tap drifting 20pt at \(Int(angle))° types o", typed(stroke(on: oKey, degrees: angle, length: 20)), "o")
+}
+// The same drift from near the key edge crosses into the neighbour. That is
+// still a tap, not a swipe toward the neighbour ("b" for "o").
+expect("o tap near right edge drifting 17pt into r types o",
+       typed(stroke(on: oKey, degrees: 0, length: 17, offset: CGPoint(x: keyWidth / 2 - 5, y: 0))), "o")
+expect("o tap near top edge drifting 17pt into n types o",
+       typed(stroke(on: oKey, degrees: 90, length: 17, offset: CGPoint(x: 0, y: -(keyHeight / 2 - 5)))), "o")
+expect("e tap near left edge drifting 17pt into t types e",
+       typed(stroke(on: eKey, degrees: 180, length: 17, offset: CGPoint(x: -(keyWidth / 2 - 5), y: 0))), "e")
+// Deliberate swipes still land, including short ones and ones that cross.
+expect("short o flick right (0.65 half-sides) types b", typed(stroke(on: oKey, degrees: 0, length: halfSide * 0.65)), "b")
+expect("o swipe right into r types b", typed(stroke(on: oKey, degrees: 0, length: keyWidth * 0.8)), "b")
+expect("o swipe up-left types q", typed(stroke(on: oKey, degrees: 135, length: committed)), "q")
+
 print("\n\(passes) passed, \(failures) failed")
 exit(failures == 0 ? 0 : 1)

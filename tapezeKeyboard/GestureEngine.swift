@@ -69,9 +69,11 @@ class GestureEngine {
     /// drift a tap produces.
     private let subcellActivationDistance: CGFloat = 18.0
     /// The same commitment expressed in key half-sides, so large keys demand
-    /// proportionally more travel. A tap wobble stays under ~0.4; a swipe aimed
-    /// at a subcell label crosses it comfortably.
-    private let subcellActivationReach: CGFloat = 0.52
+    /// proportionally more travel. On the default 78x72pt key this is 21.6pt
+    /// (was 18.7pt at 0.52, which a thumb rolling off a fast tap could reach).
+    /// Short deliberate flicks run ~0.65 half-sides and the unlabeled-symbol
+    /// gate sits at 0.80, so both stay above it.
+    private let subcellActivationReach: CGFloat = 0.60
     /// How far a stroke that starts on the space bar must travel before it
     /// stops being a space and becomes a cursor move or a symbols toggle.
     /// A thumb pressing the bar from the side rolls its contact point 15-25pt,
@@ -217,13 +219,12 @@ class GestureEngine {
             return .swipe(fromKey: startKey, direction: subcell.direction, reach: subcell.reach)
         }
 
-        // Finger ended on a different key: prefer the destination key's grid
-        // direction so slightly off-center starts still resolve cleanly.
-        let direction = endKey.flatMap { gridDirection(from: startKey, to: $0) }
-            ?? peakSwipeDirection(from: startKey)
-        // Crossing into a neighbouring key is itself a committed gesture.
-        let crossKeyReach = keyRegions[startKey].map { normalizedReach(maxDistance, in: $0) } ?? 1
-        return .swipe(fromKey: startKey, direction: direction, reach: crossKeyReach)
+        // The finger lifted on a different key without ever travelling far
+        // enough to commit to a swipe. That is a tap that drifted over a key
+        // border, not a swipe: the same drift in the middle of the key types
+        // the key's letter, so it must here too. Treating border crossings as
+        // committed turned edge taps that rolled 15-19pt into border letters.
+        return .tap(startKey)
     }
 
     // MARK: - Special Gesture Analysis
@@ -586,45 +587,6 @@ class GestureEngine {
 
     private func orientation(_ a: CGPoint, _ b: CGPoint, _ c: CGPoint) -> CGFloat {
         (b.x - a.x) * (c.y - a.y) - (b.y - a.y) * (c.x - a.x)
-    }
-
-    // MARK: - Helper: Peak swipe direction
-
-    private func peakSwipeDirection(from key: GridPosition) -> SwipeDirection {
-        guard let region = keyRegions[key] else { return .top }
-        let center = CGPoint(x: region.midX, y: region.midY)
-
-        // Find the point furthest from the key center
-        var maxDist: CGFloat = 0
-        var peakPoint = center
-
-        for point in points {
-            let d = distance(point, center)
-            if d > maxDist {
-                maxDist = d
-                peakPoint = point
-            }
-        }
-
-        let angle = atan2(-(peakPoint.y - center.y), peakPoint.x - center.x)
-        return SwipeDirection.fromAngle(Double(angle))
-    }
-
-    private func gridDirection(from start: GridPosition, to end: GridPosition) -> SwipeDirection? {
-        let row = max(-1, min(1, end.row - start.row))
-        let col = max(-1, min(1, end.col - start.col))
-
-        switch (row, col) {
-        case (-1, -1): return .topLeft
-        case (-1, 0):  return .top
-        case (-1, 1):  return .topRight
-        case (0, -1):  return .left
-        case (0, 1):   return .right
-        case (1, -1):  return .bottomLeft
-        case (1, 0):   return .bottom
-        case (1, 1):   return .bottomRight
-        default:       return nil
-        }
     }
 
     private func firstSubcellDirection(from key: GridPosition) -> (direction: SwipeDirection, reach: CGFloat)? {
