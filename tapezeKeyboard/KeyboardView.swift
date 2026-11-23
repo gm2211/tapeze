@@ -282,7 +282,8 @@ struct KeyboardView: View {
                 position: GridPosition(row: 0, col: commandBarCol),
                 size: diamondSide,
                 center: CGPoint(x: mainX + keySide + spacing / 2, y: rowHeight + spacing / 2),
-                updatesGlobe: true
+                updatesGlobe: true,
+                isMirror: !registersRegions
             )
 
             internalCommandDiamond(
@@ -290,7 +291,8 @@ struct KeyboardView: View {
                 position: GridPosition(row: 1, col: commandBarCol),
                 size: diamondSide,
                 center: CGPoint(x: mainX + keySide * 2 + spacing * 1.5, y: rowHeight + spacing / 2),
-                updatesGlobe: false
+                updatesGlobe: false,
+                isMirror: !registersRegions
             )
 
             internalCommandDiamond(
@@ -299,7 +301,8 @@ struct KeyboardView: View {
                 size: diamondSide,
                 center: CGPoint(x: mainX + keySide * 2 + spacing * 1.5, y: rowHeight * 2 + spacing * 1.5),
                 updatesGlobe: false,
-                updatesResize: true
+                updatesResize: true,
+                isMirror: !registersRegions
             )
 
             internalCommandDiamond(
@@ -307,7 +310,8 @@ struct KeyboardView: View {
                 position: GridPosition(row: 4, col: commandBarCol),
                 size: diamondSide,
                 center: CGPoint(x: mainX + keySide + spacing / 2, y: rowHeight * 2 + spacing * 1.5),
-                updatesGlobe: false
+                updatesGlobe: false,
+                isMirror: !registersRegions
             )
         }
         .frame(width: layoutWidth, height: mainGridHeight, alignment: .topLeading)
@@ -645,6 +649,11 @@ struct KeyboardView: View {
             let dx = mirror?.offset(forX: point.x) ?? 0
             splitTouchOffsets[touch] = dx == 0 ? nil : dx
             trailOffsetX = -dx
+            // Light up only the half under the finger, not both copies.
+            let onMirror = dx != 0
+            if state.keyHighlight.isOnMirror != onMirror {
+                state.keyHighlight.isOnMirror = onMirror
+            }
             return dx
         case .moved:
             return splitTouchOffsets[touch] ?? 0
@@ -977,9 +986,10 @@ struct KeyboardView: View {
         size: CGFloat,
         center: CGPoint,
         updatesGlobe: Bool,
-        updatesResize: Bool = false
+        updatesResize: Bool = false,
+        isMirror: Bool = false
     ) -> some View {
-        ActiveKeyReader(highlight: state.keyHighlight, position: position) { isActive in
+        ActiveKeyReader(highlight: state.keyHighlight, position: position, isMirror: isMirror) { isActive in
             DiamondCommandKeyView(
                 config: config,
                 isActive: isActive,
@@ -1040,7 +1050,7 @@ struct KeyboardView: View {
                         let letterSwipeLabels = isSymbolOverlay ? KeyboardLayoutData.activeLetterGrid()[row][col].swipes : nil
                         let labelShift: CGFloat = 0
 
-                        ActiveKeyReader(highlight: state.keyHighlight, position: pos) { isActive in
+                        ActiveKeyReader(highlight: state.keyHighlight, position: pos, isMirror: !registersRegions) { isActive in
                             CharacterKeyView(
                                 config: visualConfig,
                                 letterSwipeLabels: letterSwipeLabels,
@@ -1752,12 +1762,19 @@ private struct LatticeHitLayout: Equatable {
 private struct ActiveKeyReader<Content: View>: View {
     let highlight: KeyHighlightModel
     let position: GridPosition
+    /// Whether this key is drawn on the split keyboard's mirror half.
+    var isMirror: Bool = false
     @ViewBuilder let content: (Bool) -> Content
     @State private var isActive = false
 
     var body: some View {
         content(isActive)
-            .onReceive(highlight.$position.map { $0 == position }.removeDuplicates()) { active in
+            .onReceive(
+                highlight.$position
+                    .combineLatest(highlight.$isOnMirror)
+                    .map { [position, isMirror] in $0.0 == position && $0.1 == isMirror }
+                    .removeDuplicates()
+            ) { active in
                 if isActive != active {
                     isActive = active
                 }

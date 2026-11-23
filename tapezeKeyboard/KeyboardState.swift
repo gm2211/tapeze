@@ -22,6 +22,9 @@ final class GestureTrailModel: ObservableObject {
 
 final class KeyHighlightModel: ObservableObject {
     @Published var position: GridPosition? = nil
+    /// True while the pressed key is on the split keyboard's mirror half, so
+    /// only the half under the finger lights up.
+    @Published var isOnMirror: Bool = false
 }
 
 // MARK: - Keyboard State
