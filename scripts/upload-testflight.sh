@@ -194,6 +194,33 @@ if [[ ! -f "$IPA_PATH" ]]; then
 	exit 1
 fi
 
+# The app and the keyboard share settings (color, edge softness, trail, layout)
+# through an app group. If the archive was built unsigned (for example with
+# CODE_SIGNING_ALLOWED=NO) the export still succeeds and the provisioning
+# profiles still list the group, but the signed binaries lack the entitlement,
+# so each side silently gets a private store. Build 47 shipped that way: the
+# keyboard never saw the chosen color and the app kept its Full Access warning.
+APP_GROUP="${APP_GROUP:-group.com.gm2211.tapeze}"
+verify_app_group_entitlements() {
+	local tmp bundle entitlements missing=0
+	tmp="$(mktemp -d)"
+	/usr/bin/ditto -x -k "$IPA_PATH" "$tmp"
+	while IFS= read -r bundle; do
+		entitlements="$(/usr/bin/codesign -d --entitlements - --xml "$bundle" 2>/dev/null || true)"
+		if [[ "$entitlements" != *"$APP_GROUP"* ]]; then
+			echo "Signed bundle is missing the $APP_GROUP app group entitlement: ${bundle#"$tmp"/}" >&2
+			missing=1
+		fi
+	done < <(/usr/bin/find "$tmp/Payload" \( -name '*.app' -o -name '*.appex' \) -type d)
+	rm -rf "$tmp"
+	if [[ "$missing" == "1" ]]; then
+		echo "Refusing to ship: the keyboard could not read the app's settings. Archive with code signing enabled." >&2
+		exit 1
+	fi
+	echo "App group entitlement present in every signed bundle."
+}
+verify_app_group_entitlements
+
 echo "IPA ready: $IPA_PATH"
 
 if [[ "$SKIP_UPLOAD" == "1" ]]; then
