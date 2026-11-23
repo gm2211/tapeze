@@ -30,6 +30,12 @@ struct KeyboardView: View {
     /// The finger driving the current logical gesture. Other fingers that are
     /// still down after being superseded are ignored until they lift.
     @State private var primaryTouch: ObjectIdentifier?
+    /// Horizontal shift applied to each finger that landed on the split
+    /// keyboard's mirror half, so it is read as the same spot on the primary
+    /// half. Fixed at touchdown so a swipe keeps its direction and length.
+    @State private var splitTouchOffsets: [ObjectIdentifier: CGFloat] = [:]
+    /// Draws the trail back under the finger when it is on the mirror half.
+    @State private var trailOffsetX: CGFloat = 0
 
     private let gridRows = 3
     private let gridCols = 3
@@ -92,6 +98,16 @@ struct KeyboardView: View {
             let layoutOriginX = state.commandBarOnRight
                 ? sidePadding
                 : backspaceRailWidth + spacing
+            let splitMirror = SplitMirrorLayout.make(
+                enabled: state.splitOnWideScreens,
+                totalWidth: totalWidth,
+                keyWidth: keyWidth,
+                spacing: spacing,
+                primaryGridX: layoutOriginX,
+                mainGridWidth: mainGridWidth,
+                railWidth: backspaceRailWidth,
+                primaryRailOnRight: state.commandBarOnRight
+            )
             let hitLayout = LatticeHitLayout(
                 originX: layoutOriginX,
                 originY: topInset,
@@ -114,7 +130,8 @@ struct KeyboardView: View {
                     rowHeight: keySide,
                     layoutOriginX: layoutOriginX,
                     mainGridWidth: mainGridWidth,
-                    backspaceRailWidth: backspaceRailWidth
+                    backspaceRailWidth: backspaceRailWidth,
+                    railOnRight: state.commandBarOnRight
                 )
 
                 latticeKeyboard(
@@ -129,6 +146,37 @@ struct KeyboardView: View {
                 )
                 .frame(width: mainGridWidth, height: mainGridHeight)
                 .position(x: layoutOriginX + mainGridWidth / 2, y: topInset + mainGridHeight / 2)
+
+                // Wide screens: a second, draw-only copy on the far side with its
+                // backspace rail on the outer edge. Its touches are shifted onto
+                // the primary half, so both halves type exactly the same thing.
+                if let splitMirror {
+                    bridgeBackground(
+                        totalWidth: totalWidth,
+                        totalHeight: totalHeight,
+                        stripHeight: topInset,
+                        mainGridHeight: mainGridHeight,
+                        rowHeight: keySide,
+                        layoutOriginX: splitMirror.gridX,
+                        mainGridWidth: mainGridWidth,
+                        backspaceRailWidth: backspaceRailWidth,
+                        railOnRight: splitMirror.railOnRight
+                    )
+
+                    latticeKeyboard(
+                        layoutWidth: mainGridWidth,
+                        mainGridWidth: mainGridWidth,
+                        mainGridHeight: mainGridHeight,
+                        commandColWidth: commandColWidth,
+                        keySide: keyWidth,
+                        rowHeight: keyHeight,
+                        bottomRowHeight: spaceBarHeight,
+                        armWidth: armWidth,
+                        registersRegions: false
+                    )
+                    .frame(width: mainGridWidth, height: mainGridHeight)
+                    .position(x: splitMirror.gridX + mainGridWidth / 2, y: topInset + mainGridHeight / 2)
+                }
             }
             .frame(maxWidth: .infinity, maxHeight: totalHeight)
             .background(state.theme.keyboardBackground)
@@ -156,10 +204,11 @@ struct KeyboardView: View {
                 // second tap was either lost or read as a swipe from the first
                 // key, which dropped letters.
                 MultiTouchSurface { touch, phase, point in
+                    let dx = splitTouchOffset(touch, phase: phase, at: point, mirror: splitMirror)
                     handleTouch(
                         touch,
                         phase: phase,
-                        at: point,
+                        at: CGPoint(x: point.x + dx, y: point.y),
                         ctx: GestureLayoutContext(
                             totalWidth: totalWidth,
                             totalHeight: totalHeight,
@@ -176,6 +225,7 @@ struct KeyboardView: View {
             .overlay {
                 if state.showGestureTrail {
                     GestureTrailView(model: state.gestureTrail, theme: state.theme)
+                        .offset(x: trailOffsetX)
                         .allowsHitTesting(false)
                 }
             }
@@ -203,14 +253,21 @@ struct KeyboardView: View {
         keySide: CGFloat,
         rowHeight: CGFloat,
         bottomRowHeight: CGFloat,
-        armWidth: CGFloat = 0
+        armWidth: CGFloat = 0,
+        registersRegions: Bool = true
     ) -> some View {
         let mainX = state.commandBarOnRight ? 0 : commandColWidth
         let diamondSide = min(keySide, rowHeight) * 0.60
         let commandBarCol = state.commandBarOnRight ? 3 : -1
 
         ZStack(alignment: .topLeading) {
-            mainGrid(width: mainGridWidth, height: mainGridHeight, rowHeight: rowHeight, armWidth: armWidth)
+            mainGrid(
+                width: mainGridWidth,
+                height: mainGridHeight,
+                rowHeight: rowHeight,
+                armWidth: armWidth,
+                registersRegions: registersRegions
+            )
                 .frame(width: mainGridWidth, height: mainGridHeight)
                 .position(x: mainX + mainGridWidth / 2, y: mainGridHeight / 2)
 
@@ -260,20 +317,21 @@ struct KeyboardView: View {
         rowHeight: CGFloat,
         layoutOriginX: CGFloat,
         mainGridWidth: CGFloat,
-        backspaceRailWidth: CGFloat
+        backspaceRailWidth: CGFloat,
+        railOnRight: Bool
     ) -> some View {
         let gridBottom = stripHeight + mainGridHeight
         // The bottom row is drawn below a `spacing` gap like the key rows. Its touch
         // targets still start at the grid bottom, so the gap is not a dead zone.
         let spaceTop = gridBottom + spacing
         let spaceHeight = max(totalHeight - spaceTop, 0)
-        let railX = state.commandBarOnRight
-            ? layoutOriginX + mainGridWidth + spacing
-            : 0
         let railWidth = max(backspaceRailWidth, 0)
+        let railX = railOnRight
+            ? layoutOriginX + mainGridWidth + spacing
+            : max(layoutOriginX - spacing - railWidth, 0)
         let railHeight = max(mainGridHeight, 0)
-        let cornerMinX = state.commandBarOnRight ? layoutOriginX + mainGridWidth : 0
-        let cornerMaxX = state.commandBarOnRight ? railX + railWidth : layoutOriginX
+        let cornerMinX = railOnRight ? layoutOriginX + mainGridWidth : railX
+        let cornerMaxX = railOnRight ? railX + railWidth : layoutOriginX
         let cornerWidth = max(cornerMaxX - cornerMinX, 0)
         let bottomControls = bottomControlMetrics(
             layoutOriginX: layoutOriginX,
@@ -564,6 +622,30 @@ struct KeyboardView: View {
             }
             primaryTouch = nil
             lastTrackedPoint = nil
+        }
+    }
+
+    /// The shift that moves this finger from the split mirror onto the same
+    /// spot of the primary half (0 off the mirror). Decided at touchdown and
+    /// kept until lift, so a swipe that leaves the mirror keeps its shape.
+    private func splitTouchOffset(
+        _ touch: ObjectIdentifier,
+        phase: MultiTouchSurface.Phase,
+        at point: CGPoint,
+        mirror: SplitMirrorLayout?
+    ) -> CGFloat {
+        switch phase {
+        case .began:
+            let dx = mirror?.offset(forX: point.x) ?? 0
+            splitTouchOffsets[touch] = dx == 0 ? nil : dx
+            trailOffsetX = -dx
+            return dx
+        case .moved:
+            return splitTouchOffsets[touch] ?? 0
+        case .ended, .cancelled:
+            let dx = splitTouchOffsets[touch] ?? 0
+            splitTouchOffsets[touch] = nil
+            return dx
         }
     }
 
@@ -929,7 +1011,13 @@ struct KeyboardView: View {
     }
 
     @ViewBuilder
-    private func mainGrid(width: CGFloat, height: CGFloat, rowHeight: CGFloat, armWidth: CGFloat = 0) -> some View {
+    private func mainGrid(
+        width: CGFloat,
+        height: CGFloat,
+        rowHeight: CGFloat,
+        armWidth: CGFloat = 0,
+        registersRegions: Bool = true
+    ) -> some View {
         let colWidth = max((width - spacing * CGFloat(gridCols - 1)) / CGFloat(gridCols), 1)
         let grid = state.currentGrid
         let isSymbolOverlay = state.currentLayer == .letters && state.isSymbolOverlayActive && state.showSymbolLabels
@@ -963,17 +1051,23 @@ struct KeyboardView: View {
                         }
                         .frame(width: colWidth, height: rowHeight)
                         .background(
-                            GeometryReader { geo in
-                                let frame = geo.frame(in: .named("keyboard"))
-                                Color.clear
-                                    .onAppear {
-                                        keyRegions[pos] = frame
-                                        gestureEngine.updateKeyRegions(keyRegions)
+                            Group {
+                                // Only the primary half owns hit regions; the
+                                // split mirror would overwrite them with its own.
+                                if registersRegions {
+                                    GeometryReader { geo in
+                                        let frame = geo.frame(in: .named("keyboard"))
+                                        Color.clear
+                                            .onAppear {
+                                                keyRegions[pos] = frame
+                                                gestureEngine.updateKeyRegions(keyRegions)
+                                            }
+                                            .onChange(of: frame) { newFrame in
+                                                keyRegions[pos] = newFrame
+                                                gestureEngine.updateKeyRegions(keyRegions)
+                                            }
                                     }
-                                    .onChange(of: frame) { newFrame in
-                                        keyRegions[pos] = newFrame
-                                        gestureEngine.updateKeyRegions(keyRegions)
-                                    }
+                                }
                             }
                         )
                         .overlay(

@@ -6,6 +6,7 @@ struct ContentView: View {
     @AppStorage(KeyboardState.showGestureTrailDefaultsKey, store: KeyboardState.settingsDefaults) private var showGestureTrail = true
     @AppStorage(KeyboardState.keyCornerRadiusDefaultsKey, store: KeyboardState.settingsDefaults) private var keyCornerRadius = Double(KeyboardState.defaultKeyCornerRadius)
     @AppStorage(KeyboardState.themeDefaultsKey, store: KeyboardState.settingsDefaults) private var selectedThemeID = KeyboardTheme.tapeze.id
+    @AppStorage(KeyboardState.splitOnWideScreensDefaultsKey, store: KeyboardState.settingsDefaults) private var splitOnWideScreens = true
     @State private var testText: String = ""
     @State private var isLayoutEditorPresented = false
     @State private var keyboardReadsSettings = true
@@ -218,6 +219,14 @@ struct ContentView: View {
 
             Toggle("Show gesture trail", isOn: $showGestureTrail)
                 .font(.subheadline)
+
+            VStack(alignment: .leading, spacing: 2) {
+                Toggle("Split keyboard on wide screens", isOn: $splitOnWideScreens)
+                    .font(.subheadline)
+                Text("On an iPad, in landscape or unfolded, show a keyboard under each thumb.")
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+            }
 
             Button {
                 isLayoutEditorPresented = true
