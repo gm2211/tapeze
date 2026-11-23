@@ -1,3 +1,4 @@
+import CoreGraphics
 import Foundation
 
 // MARK: - Direction
@@ -445,5 +446,77 @@ struct EditableKeyboardLayout: Codable, Equatable {
 
     static var savedOrDefault: EditableKeyboardLayout {
         KeyboardLayoutData.savedEditableLayout() ?? .default
+    }
+}
+
+// MARK: - Split Keyboard
+
+/// Where the split keyboard's second half sits on a wide screen, and how its
+/// touches map onto the primary half that owns the hit regions.
+struct SplitMirrorLayout: Equatable {
+    /// Left edge of the mirror's 3x3 grid.
+    let gridX: CGFloat
+    /// Left edge of the mirror's backspace rail.
+    let railX: CGFloat
+    let railWidth: CGFloat
+    let spacing: CGFloat
+    /// The mirror keeps its rail on the outer edge, opposite the primary's.
+    let railOnRight: Bool
+    /// Shift from a mirror grid / space-bar point to the primary one.
+    let gridOffset: CGFloat
+    /// Shift from a mirror rail / return-corner point to the primary one.
+    let railOffset: CGFloat
+    let minX: CGFloat
+    let maxX: CGFloat
+
+    /// The halves need at least this much clear space between them, in keys,
+    /// so the split only appears when each half is still a full-size keyboard.
+    static let minimumGapInKeys: CGFloat = 1.5
+
+    static func make(
+        enabled: Bool,
+        totalWidth: CGFloat,
+        keyWidth: CGFloat,
+        spacing: CGFloat,
+        primaryGridX: CGFloat,
+        mainGridWidth: CGFloat,
+        railWidth: CGFloat,
+        primaryRailOnRight: Bool
+    ) -> SplitMirrorLayout? {
+        let halfWidth = mainGridWidth + spacing + railWidth
+        guard enabled,
+              keyWidth > 0,
+              totalWidth >= halfWidth * 2 + keyWidth * minimumGapInKeys else {
+            return nil
+        }
+
+        let primaryRailX = primaryRailOnRight
+            ? primaryGridX + mainGridWidth + spacing
+            : primaryGridX - spacing - railWidth
+        let mirrorRailOnRight = !primaryRailOnRight
+        let mirrorMinX = mirrorRailOnRight ? totalWidth - halfWidth : 0
+        let mirrorGridX = mirrorRailOnRight ? mirrorMinX : railWidth + spacing
+        let mirrorRailX = mirrorRailOnRight ? totalWidth - railWidth : 0
+
+        return SplitMirrorLayout(
+            gridX: mirrorGridX,
+            railX: mirrorRailX,
+            railWidth: railWidth,
+            spacing: spacing,
+            railOnRight: mirrorRailOnRight,
+            gridOffset: primaryGridX - mirrorGridX,
+            railOffset: primaryRailX - mirrorRailX,
+            minX: mirrorMinX,
+            maxX: mirrorMinX + halfWidth
+        )
+    }
+
+    /// The shift for a touch that lands at `x`, or 0 when it is not on the mirror.
+    func offset(forX x: CGFloat) -> CGFloat {
+        guard x >= minX, x <= maxX else { return 0 }
+        let inRailColumn = railOnRight
+            ? x >= railX - spacing / 2
+            : x <= railX + railWidth + spacing / 2
+        return inRailColumn ? railOffset : gridOffset
     }
 }

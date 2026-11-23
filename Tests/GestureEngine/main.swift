@@ -140,5 +140,38 @@ expect("short o flick right (0.65 half-sides) types b", typed(stroke(on: oKey, d
 expect("o swipe right into r types b", typed(stroke(on: oKey, degrees: 0, length: keyWidth * 0.8)), "b")
 expect("o swipe up-left types q", typed(stroke(on: oKey, degrees: 135, length: committed)), "q")
 
+print("split keyboard on wide screens")
+// Default 294pt keyboard: 78pt keys with 2pt gaps (a 238pt grid), a 2pt gap,
+// and a one-key 78pt rail, so one half is 318pt wide.
+func split(width: CGFloat, railOnRight: Bool = true, enabled: Bool = true) -> SplitMirrorLayout? {
+    let gridWidth: CGFloat = 238
+    let rail: CGFloat = 78
+    let gridX = railOnRight ? width - gridWidth - 2 - rail : rail + 2
+    return SplitMirrorLayout.make(
+        enabled: enabled, totalWidth: width, keyWidth: keyWidth, spacing: 2,
+        primaryGridX: gridX, mainGridWidth: gridWidth, railWidth: rail,
+        primaryRailOnRight: railOnRight
+    )
+}
+func mode(_ layout: SplitMirrorLayout?) -> String { layout == nil ? "single" : "split" }
+expect("iPhone portrait (393pt) stays single", mode(split(width: 393)), "single")
+expect("narrow landscape (700pt) stays single", mode(split(width: 700)), "single")
+expect("iPad / unfolded (1000pt) splits", mode(split(width: 1000)), "split")
+expect("setting off keeps one keyboard", mode(split(width: 1000, enabled: false)), "single")
+if let mirror = split(width: 1000) {
+    // Primary: grid 682...920, rail 922...1000. Mirror: rail 0...78, grid 80...318.
+    expect("mirror rail sits on the outer left edge", "\(mirror.railX),\(mirror.gridX)", "0.0,80.0")
+    expect("mirror grid touch maps onto the primary grid", "\(120 + mirror.offset(forX: 120))", "722.0")
+    expect("mirror rail touch maps onto the primary rail", "\(10 + mirror.offset(forX: 10))", "932.0")
+    expect("primary touches are not shifted", "\(mirror.offset(forX: 700))", "0.0")
+    expect("the gap between halves is not shifted", "\(mirror.offset(forX: 450))", "0.0")
+}
+if let mirror = split(width: 1000, railOnRight: false) {
+    // Primary: rail 0...78, grid 80...318. Mirror: grid 682...920, rail 922...1000.
+    expect("rail-left primary puts the mirror rail on the right edge", "\(mirror.railX),\(mirror.railOnRight)", "922.0,true")
+    expect("its grid touch maps onto the primary grid", "\(700 + mirror.offset(forX: 700))", "98.0")
+    expect("its rail touch maps onto the primary rail", "\(990 + mirror.offset(forX: 990))", "68.0")
+}
+
 print("\n\(passes) passed, \(failures) failed")
 exit(failures == 0 ? 0 : 1)
