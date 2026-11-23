@@ -71,6 +71,14 @@ _Add your build and test commands here_
 # npm test
 ```
 
+## Shipping to TestFlight
+
+Run `scripts/upload-testflight.sh` on the Mac. Never archive with
+`CODE_SIGNING_ALLOWED=NO`: the export still succeeds, but the signed app and
+keyboard lose the `group.com.gm2211.tapeze` entitlement, so the keyboard can't
+read any setting from the app (build 47 shipped like this). The script now
+refuses to upload an IPA whose bundles lack that entitlement.
+
 ## Architecture Overview
 
 _Add a brief overview of your project architecture_
