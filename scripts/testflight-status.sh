@@ -1,22 +1,24 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-export DEVELOPER_DIR="${DEVELOPER_DIR:-/Applications/Xcode.app/Contents/Developer}"
-XCRUN="/usr/bin/xcrun"
+# shellcheck source=scripts/asc-auth.sh
+source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/asc-auth.sh" "$@"
 
-APPLE_ID="${APPLE_ID:-}"
+APPLE_ID="${APPLE_ID:-6771610102}"
 BUNDLE_VERSION="${BUNDLE_VERSION:-}"
-SHORT_VERSION="${SHORT_VERSION:-1.0}"
+SHORT_VERSION="${SHORT_VERSION:-}"
 
 usage() {
 	cat <<USAGE
-Usage: APPLE_ID=<app apple id> BUNDLE_VERSION=<build> scripts/testflight-status.sh
+Usage: [APPLE_ID=<app apple id>] BUNDLE_VERSION=<build> [SHORT_VERSION=<x.y.z>] \\
+  scripts/testflight-status.sh
 
-Checks App Store Connect processing status for an uploaded TestFlight build.
+Checks App Store Connect processing and TestFlight status for an uploaded
+build through the App Store Connect API. APPLE_ID defaults to Tapeze's
+(6771610102). (altool's --build-status only works with a --delivery-id now.)
 
-Authentication is the same as upload-testflight.sh:
-  ASC_API_KEY_ID + ASC_API_ISSUER_ID [ + ASC_API_KEY_PATH ], or
-  ASC_USERNAME + ASC_PASSWORD
+Authentication: ASC_API_KEY_ID + ASC_API_ISSUER_ID (env or login Keychain) and
+the .p8 key, found the same way as in upload-testflight.sh (scripts/asc-auth.sh).
 USAGE
 }
 
@@ -25,36 +27,50 @@ if [[ "${1:-}" == "-h" || "${1:-}" == "--help" ]]; then
 	exit 0
 fi
 
-if [[ -z "$APPLE_ID" || -z "$BUNDLE_VERSION" ]]; then
+if [[ -z "$BUNDLE_VERSION" ]]; then
 	usage >&2
 	exit 2
 fi
 
-ASC_API_KEY_ID="${ASC_API_KEY_ID:-$(security find-generic-password -s ASC_API_KEY_ID -w 2>/dev/null || true)}"
-ASC_API_ISSUER_ID="${ASC_API_ISSUER_ID:-$(security find-generic-password -s ASC_API_ISSUER_ID -w 2>/dev/null || true)}"
 if [[ -z "${ASC_API_KEY_PATH:-}" ]]; then
-	default_key_path="$HOME/.appstoreconnect/private_keys/AuthKey_${ASC_API_KEY_ID}.p8"
-	[[ -n "${ASC_API_KEY_ID:-}" && -f "$default_key_path" ]] && ASC_API_KEY_PATH="$default_key_path"
-fi
-
-auth_args=()
-if [[ -n "${ASC_API_KEY_ID:-}" && -n "${ASC_API_ISSUER_ID:-}" ]]; then
-	auth_args+=(--api-key "$ASC_API_KEY_ID" --api-issuer "$ASC_API_ISSUER_ID")
-	if [[ -n "${ASC_API_KEY_PATH:-}" ]]; then
-		auth_args+=(--p8-file-path "$ASC_API_KEY_PATH")
-	fi
-elif [[ -n "${ASC_USERNAME:-}" && -n "${ASC_PASSWORD:-}" ]]; then
-	auth_args=(-u "$ASC_USERNAME" -p "$ASC_PASSWORD")
-else
-	echo "Missing App Store Connect credentials." >&2
+	echo "Missing App Store Connect API key (ASC_API_KEY_ID, ASC_API_ISSUER_ID and the .p8)." >&2
 	exit 1
 fi
 
-"$XCRUN" altool \
-	--build-status \
-	--apple-id "$APPLE_ID" \
-	--bundle-short-version-string "$SHORT_VERSION" \
-	--bundle-version "$BUNDLE_VERSION" \
-	--platform ios \
-	"${auth_args[@]}" \
-	--output-format json
+query="filter%5Bapp%5D=$APPLE_ID&filter%5Bversion%5D=$BUNDLE_VERSION"
+if [[ -n "$SHORT_VERSION" ]]; then
+	query+="&filter%5BpreReleaseVersion.version%5D=$SHORT_VERSION"
+fi
+query+="&include=buildBetaDetail,preReleaseVersion"
+query+="&fields%5Bbuilds%5D=version,processingState,uploadedDate,expired,expirationDate,buildBetaDetail,preReleaseVersion"
+query+="&fields%5BbuildBetaDetails%5D=internalBuildState,externalBuildState"
+query+="&fields%5BpreReleaseVersions%5D=version"
+
+# The token goes to curl on stdin, never argv.
+response="$(printf 'header = "Authorization: Bearer %s"\n' "$(asc_jwt)" \
+	| /usr/bin/curl -sS --fail-with-body -K - "https://api.appstoreconnect.apple.com/v1/builds?$query")"
+
+printf '%s' "$response" | /usr/bin/python3 -I -c '
+import json, sys
+doc = json.load(sys.stdin)
+builds = doc.get("data", [])
+if not builds:
+    print("No matching build found."); sys.exit(1)
+inc = {(i["type"], i["id"]): i.get("attributes", {}) for i in doc.get("included", [])}
+for b in builds:
+    a = b["attributes"]; rel = b.get("relationships", {})
+    def related(name, typ):
+        d = (rel.get(name) or {}).get("data") or {}
+        return inc.get((typ, d.get("id")), {})
+    beta = related("buildBetaDetail", "buildBetaDetails")
+    pre = related("preReleaseVersion", "preReleaseVersions")
+    print(json.dumps({
+        "version": pre.get("version"),
+        "build": a.get("version"),
+        "processingState": a.get("processingState"),
+        "uploadedDate": a.get("uploadedDate"),
+        "expired": a.get("expired"),
+        "internalBuildState": beta.get("internalBuildState"),
+        "externalBuildState": beta.get("externalBuildState"),
+    }, indent=2))
+'
