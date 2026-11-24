@@ -401,6 +401,12 @@ class KeyboardState: ObservableObject {
         isFullWidth.toggle()
     }
 
+    /// The globe's out-and-back swipe. Splits on demand wherever two halves
+    /// fit (narrowing keys if needed), or goes back to one keyboard.
+    func toggleSplit(currentlySplit: Bool) {
+        splitMode = currentlySplit ? .off : .always
+    }
+
     func toggleCommandBarSide() {
         commandBarOnRight.toggle()
     }
