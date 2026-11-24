@@ -142,6 +142,27 @@ class KeyboardViewController: UIInputViewController {
         view.layoutIfNeeded()
     }
 
+    /// Folding, unfolding and rotating change the display under the keyboard
+    /// while it stays up. Re-measure once the change has settled, so a height
+    /// cap measured mid-transition (laptop mode on the inner display) does not
+    /// stick and leave the keyboard much smaller than it should be.
+    override func viewWillTransition(to size: CGSize, with coordinator: UIViewControllerTransitionCoordinator) {
+        super.viewWillTransition(to: size, with: coordinator)
+        coordinator.animate(alongsideTransition: nil) { [weak self] _ in
+            self?.remeasureDisplay()
+        }
+    }
+
+    override func traitCollectionDidChange(_ previousTraitCollection: UITraitCollection?) {
+        super.traitCollectionDidChange(previousTraitCollection)
+        remeasureDisplay()
+    }
+
+    private func remeasureDisplay() {
+        updateDisplayHeightLimit()
+        applyKeyboardHeight(keyboardState.effectiveKeyboardHeight, animated: false, force: true)
+    }
+
     override func viewWillLayoutSubviews() {
         super.viewWillLayoutSubviews()
         updateDisplayHeightLimit()
