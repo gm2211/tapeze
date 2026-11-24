@@ -6,7 +6,7 @@ struct ContentView: View {
     @AppStorage(KeyboardState.showGestureTrailDefaultsKey, store: KeyboardState.settingsDefaults) private var showGestureTrail = true
     @AppStorage(KeyboardState.keyCornerRadiusDefaultsKey, store: KeyboardState.settingsDefaults) private var keyCornerRadius = Double(KeyboardState.defaultKeyCornerRadius)
     @AppStorage(KeyboardState.themeDefaultsKey, store: KeyboardState.settingsDefaults) private var selectedThemeID = KeyboardTheme.tapeze.id
-    @AppStorage(KeyboardState.splitOnWideScreensDefaultsKey, store: KeyboardState.settingsDefaults) private var splitOnWideScreens = true
+    @State private var splitMode = KeyboardState.storedSplitMode()
     @State private var testText: String = ""
     @State private var isLayoutEditorPresented = false
     @State private var keyboardReadsSettings = true
@@ -221,9 +221,22 @@ struct ContentView: View {
                 .font(.subheadline)
 
             VStack(alignment: .leading, spacing: 2) {
-                Toggle("Split keyboard on wide screens", isOn: $splitOnWideScreens)
+                Text("Split keyboard")
                     .font(.subheadline)
-                Text("On an iPad, in landscape or unfolded, show a keyboard under each thumb.")
+                Picker("Split keyboard", selection: Binding(
+                    get: { splitMode },
+                    set: { newValue in
+                        splitMode = newValue
+                        previewState.splitMode = newValue
+                        KeyboardState.settingsDefaults.set(newValue.rawValue, forKey: KeyboardState.splitModeDefaultsKey)
+                    }
+                )) {
+                    ForEach(SplitKeyboardMode.allCases) { mode in
+                        Text(mode.title).tag(mode)
+                    }
+                }
+                .pickerStyle(.segmented)
+                Text("A keyboard under each thumb. Wide screens splits only where both halves fit at full size; Always splits in every orientation, with narrower keys when needed.")
                     .font(.caption)
                     .foregroundColor(.secondary)
             }

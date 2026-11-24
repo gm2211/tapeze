@@ -451,6 +451,67 @@ struct EditableKeyboardLayout: Codable, Equatable {
 
 // MARK: - Split Keyboard
 
+/// When the keyboard shows a second half for the other thumb.
+enum SplitKeyboardMode: String, CaseIterable, Identifiable {
+    /// One keyboard, always.
+    case off
+    /// Split only where both halves fit at full key size (iPad, landscape,
+    /// unfolded foldables in landscape).
+    case wideScreens
+    /// Split on every screen and orientation, narrowing keys when needed.
+    case always
+
+    var id: String { rawValue }
+
+    var title: String {
+        switch self {
+        case .off: return "Off"
+        case .wideScreens: return "Wide screens"
+        case .always: return "Always"
+        }
+    }
+}
+
+/// Key and rail widths for the chosen split mode at a given keyboard width.
+struct SplitSizing: Equatable {
+    let isSplit: Bool
+    let keyWidth: CGFloat
+    let railWidth: CGFloat
+
+    /// Gap kept between the halves when "Always" narrows keys to fit both.
+    static let minimumSqueezedGap: CGFloat = 12
+
+    static func resolve(
+        mode: SplitKeyboardMode,
+        totalWidth: CGFloat,
+        fullKeyWidth: CGFloat,
+        fullRailWidth: CGFloat,
+        spacing: CGFloat
+    ) -> SplitSizing {
+        let single = SplitSizing(isSplit: false, keyWidth: fullKeyWidth, railWidth: fullRailWidth)
+        let full = SplitSizing(isSplit: true, keyWidth: fullKeyWidth, railWidth: fullRailWidth)
+        // One half: three keys, two gaps, the gap before the rail, the rail.
+        let fullHalf = fullKeyWidth * 3 + spacing * 3 + fullRailWidth
+        let fitsFullSize = totalWidth >= fullHalf * 2 + fullKeyWidth * SplitMirrorLayout.minimumGapInKeys
+
+        switch mode {
+        case .off:
+            return single
+        case .wideScreens:
+            return fitsFullSize ? full : single
+        case .always:
+            if fitsFullSize { return full }
+            // Narrow keys so two halves (four key-wide columns each, rail
+            // included) plus a small middle gap fill the width.
+            let usable = totalWidth - minimumSqueezedGap - spacing * 6
+            let keyWidth = max(min(fullKeyWidth, usable / 8), 1)
+            let railRoom = usable / 2 - keyWidth * 3
+            let railWidth = max(min(fullRailWidth, railRoom), keyWidth)
+            return SplitSizing(isSplit: true, keyWidth: keyWidth, railWidth: railWidth)
+        }
+    }
+}
+
 /// Where the split keyboard's second half sits on a wide screen, and how its
 /// touches map onto the primary half that owns the hit regions.
 struct SplitMirrorLayout: Equatable {
@@ -469,8 +530,8 @@ struct SplitMirrorLayout: Equatable {
     let minX: CGFloat
     let maxX: CGFloat
 
-    /// The halves need at least this much clear space between them, in keys,
-    /// so the split only appears when each half is still a full-size keyboard.
+    /// In "Wide screens" mode the halves need at least this much clear space
+    /// between them, in keys, so each half is still a full-size keyboard.
     static let minimumGapInKeys: CGFloat = 1.5
 
     static func make(
@@ -484,9 +545,10 @@ struct SplitMirrorLayout: Equatable {
         primaryRailOnRight: Bool
     ) -> SplitMirrorLayout? {
         let halfWidth = mainGridWidth + spacing + railWidth
+        // `SplitSizing` decides whether to split; this only refuses overlap.
         guard enabled,
               keyWidth > 0,
-              totalWidth >= halfWidth * 2 + keyWidth * minimumGapInKeys else {
+              totalWidth >= halfWidth * 2 else {
             return nil
         }
 

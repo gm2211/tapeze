@@ -38,7 +38,9 @@ class KeyboardState: ObservableObject {
     static let showCenterLabelsDefaultsKey = "showCenterLabels"
     static let keyboardHeightDefaultsKey = "keyboardHeight"
     static let themeDefaultsKey = "keyboardTheme"
-    static let splitOnWideScreensDefaultsKey = "splitOnWideScreens"
+    static let splitModeDefaultsKey = "splitKeyboardMode"
+    /// Earlier on/off switch for the split; read once so "off" carries over.
+    static let legacySplitOnWideScreensDefaultsKey = "splitOnWideScreens"
     /// Written by the keyboard whenever it appears with Full Access. Without
     /// Full Access iOS hides the shared app group from the keyboard, so it
     /// cannot read the app's settings (color, edge softness, trail) and this
@@ -81,10 +83,10 @@ class KeyboardState: ObservableObject {
     /// On screens wide enough for two keyboards side by side (iPad, landscape,
     /// unfolded foldables), draw a second copy on the far side so each thumb
     /// has its own grid instead of one grid pinned to an edge.
-    @Published var splitOnWideScreens: Bool = true {
+    @Published var splitMode: SplitKeyboardMode = .wideScreens {
         didSet {
             if persistsSettings {
-                Self.settingsDefaults.set(splitOnWideScreens, forKey: Self.splitOnWideScreensDefaultsKey)
+                Self.settingsDefaults.set(splitMode.rawValue, forKey: Self.splitModeDefaultsKey)
             }
         }
     }
@@ -164,7 +166,7 @@ class KeyboardState: ObservableObject {
             showGestureTrail = Self.settingsDefaults.bool(forKey: Self.showGestureTrailDefaultsKey)
         }
 
-        splitOnWideScreens = Self.storedSplitOnWideScreens()
+        splitMode = Self.storedSplitMode()
 
         if isPreview || Self.settingsDefaults.object(forKey: Self.showCenterLabelsDefaultsKey) == nil {
             showCenterLabels = true
@@ -198,13 +200,20 @@ class KeyboardState: ObservableObject {
         KeyboardTheme.theme(for: selectedThemeID)
     }
 
-    private static func storedSplitOnWideScreens() -> Bool {
-        guard settingsDefaults.object(forKey: splitOnWideScreensDefaultsKey) != nil else { return true }
-        return settingsDefaults.bool(forKey: splitOnWideScreensDefaultsKey)
+    static func storedSplitMode() -> SplitKeyboardMode {
+        if let raw = settingsDefaults.string(forKey: splitModeDefaultsKey),
+           let mode = SplitKeyboardMode(rawValue: raw) {
+            return mode
+        }
+        if settingsDefaults.object(forKey: legacySplitOnWideScreensDefaultsKey) != nil,
+           !settingsDefaults.bool(forKey: legacySplitOnWideScreensDefaultsKey) {
+            return .off
+        }
+        return .wideScreens
     }
 
     func reloadPersistedAppearanceSettings() {
-        splitOnWideScreens = Self.storedSplitOnWideScreens()
+        splitMode = Self.storedSplitMode()
 
         if Self.settingsDefaults.object(forKey: Self.showGestureTrailDefaultsKey) == nil {
             showGestureTrail = true
