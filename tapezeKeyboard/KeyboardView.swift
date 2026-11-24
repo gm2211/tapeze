@@ -242,13 +242,14 @@ struct KeyboardView: View {
             }
             .coordinateSpace(name: "keyboard")
         }
-        .frame(height: state.effectiveKeyboardHeight)
-        // Landscape screens give the keyboard a bottom safe-area inset for the
-        // home indicator. SwiftUI then centered this fixed-height keyboard in
-        // the shorter safe area, which pushed the top key row off the top edge
-        // and left an empty strip below the space row. Use the full height;
-        // the side insets still keep keys clear of the rounded corners.
-        .ignoresSafeArea(.container, edges: .vertical)
+        // Fill whatever height the input view really got, up to the chosen
+        // height, pinned to the bottom. A fixed height was centered when the
+        // system gave less room (landscape adds a home-indicator inset), which
+        // pushed the top key row off the top edge and left an empty strip
+        // under the space row.
+        .frame(maxWidth: .infinity, maxHeight: state.effectiveKeyboardHeight)
+        .frame(maxHeight: .infinity, alignment: .bottom)
+        .ignoresSafeArea(edges: .vertical)
         .onAppear {
             gestureEngine.updateKeyRegions(keyRegions)
             gestureEngine.updateSpaceBarRegion(spaceBarRegion, gutterRegion: spaceBarGutterRegion)
