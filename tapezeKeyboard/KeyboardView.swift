@@ -828,10 +828,21 @@ struct KeyboardView: View {
         let commandTapSide = min(layout.keySide, layout.rowHeight) * 0.64
         let commandTapHalf = commandTapSide / 2
 
-        // Letter cell regions are now set via GeometryReader in mainGrid; only keep
-        // the existing GeometryReader-sourced letter regions and write diamond regions.
-        var regions: [GridPosition: CGRect] = keyRegions.filter { pos, _ in
-            !isCommandPosition(pos: pos)
+        // Letter cells come from the same layout numbers that draw the grid,
+        // all in one pass. They used to be written by a GeometryReader per key,
+        // and after a size change (fold, rotate, screen switch) this function
+        // could run with the old cell frames and write them back, so taps hit
+        // the previous grid until the keyboard was reopened.
+        var regions: [GridPosition: CGRect] = [:]
+        for row in 0..<gridRows {
+            for col in 0..<gridCols {
+                regions[GridPosition(row: row, col: col)] = CGRect(
+                    x: mainX + CGFloat(col) * (layout.keySide + spacing),
+                    y: originY + CGFloat(row) * (layout.rowHeight + spacing),
+                    width: layout.keySide,
+                    height: layout.rowHeight
+                )
+            }
         }
 
         let globeCenter = CGPoint(
@@ -1078,26 +1089,6 @@ struct KeyboardView: View {
                             )
                         }
                         .frame(width: colWidth, height: rowHeight)
-                        .background(
-                            Group {
-                                // Only the primary half owns hit regions; the
-                                // split mirror would overwrite them with its own.
-                                if registersRegions {
-                                    GeometryReader { geo in
-                                        let frame = geo.frame(in: .named("keyboard"))
-                                        Color.clear
-                                            .onAppear {
-                                                keyRegions[pos] = frame
-                                                gestureEngine.updateKeyRegions(keyRegions)
-                                            }
-                                            .onChange(of: frame) { newFrame in
-                                                keyRegions[pos] = newFrame
-                                                gestureEngine.updateKeyRegions(keyRegions)
-                                            }
-                                    }
-                                }
-                            }
-                        )
                         .overlay(
                             overlaysForKey(at: pos, size: CGSize(width: colWidth, height: rowHeight))
                         )
