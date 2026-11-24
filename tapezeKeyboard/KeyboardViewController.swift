@@ -62,6 +62,13 @@ class KeyboardViewController: UIInputViewController {
         hc.view.translatesAutoresizingMaskIntoConstraints = false
         hc.view.backgroundColor = .clear
         hc.view.isOpaque = false
+        // The hosting controller otherwise shrinks the SwiftUI layout by the
+        // window's safe area. In landscape that is a home-indicator inset at
+        // the bottom, which offset the keyboard and clipped its top row. The
+        // input view is already placed clear of the screen edges by the system.
+        if #available(iOS 16.4, *) {
+            hc.safeAreaRegions = []
+        }
 
         addChild(hc)
         view.addSubview(hc.view)
