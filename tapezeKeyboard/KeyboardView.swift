@@ -36,6 +36,8 @@ struct KeyboardView: View {
     @State private var splitTouchOffsets: [ObjectIdentifier: CGFloat] = [:]
     /// Draws the trail back under the finger when it is on the mirror half.
     @State private var trailOffsetX: CGFloat = 0
+    /// Whether the last layout pass drew two halves, for the globe toggle.
+    @State private var isSplitShown = false
 
     private let gridRows = 3
     private let gridCols = 3
@@ -204,6 +206,10 @@ struct KeyboardView: View {
             }
             .onChange(of: hitLayout) { newLayout in
                 registerHitLayout(newLayout)
+            }
+            .onAppear { isSplitShown = splitMirror != nil }
+            .onChange(of: splitMirror != nil) { shown in
+                isSplitShown = shown
             }
             .onChange(of: state.currentLayer) { _ in
                 registerHitLayout(hitLayout)
@@ -1708,6 +1714,8 @@ struct KeyboardView: View {
             state.decreaseHeight()
         case .globeCircle:
             state.toggleCommandBarSide()
+        case .globeBackAndForth:
+            state.toggleSplit(currentlySplit: isSplitShown)
         }
     }
 }

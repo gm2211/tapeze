@@ -236,7 +236,7 @@ struct ContentView: View {
                     }
                 }
                 .pickerStyle(.segmented)
-                Text("A keyboard under each thumb. Wide screens splits only where both halves fit at full size; Always splits in every orientation, with narrower keys when needed.")
+                Text("A keyboard under each thumb. Wide screens splits only where both halves fit at full size; Always splits in every orientation, with narrower keys when needed. On the keyboard, swipe out and back on the globe key to switch.")
                     .font(.caption)
                     .foregroundColor(.secondary)
             }

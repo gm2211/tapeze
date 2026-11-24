@@ -188,5 +188,25 @@ if let mirror = split(width: 1000, railOnRight: false) {
     expect("its rail touch maps onto the primary rail", "\(990 + mirror.offset(forX: 990))", "68.0")
 }
 
+print("globe out-and-back toggles the split")
+func globeStroke(_ path: [CGPoint]) -> String {
+    let engine = makeEngine()
+    let globe = CGRect(x: keyWidth - 20, y: keyHeight - 20, width: 40, height: 40)
+    engine.updateGlobeRegion(globe)
+    let origin = CGPoint(x: globe.midX, y: globe.midY)
+    engine.touchBegan(at: origin)
+    for p in path.dropLast() { engine.touchMoved(to: CGPoint(x: origin.x + p.x, y: origin.y + p.y)) }
+    let last = path.last ?? .zero
+    if case .specialSwipe(let special) = engine.touchEnded(at: CGPoint(x: origin.x + last.x, y: origin.y + last.y)) {
+        return "\(special)"
+    }
+    return "<none>"
+}
+let outAndBackLeft = (1...12).map { CGPoint(x: -CGFloat($0) * 4, y: 0) } + (0...11).reversed().map { CGPoint(x: -CGFloat($0) * 4, y: 0) }
+expect("globe swipe left and back right toggles split", globeStroke(outAndBackLeft), "globeBackAndForth")
+let outAndBackRight = (1...12).map { CGPoint(x: CGFloat($0) * 4, y: 0) } + (0...11).reversed().map { CGPoint(x: CGFloat($0) * 4, y: 0) }
+expect("globe swipe right and back left toggles split", globeStroke(outAndBackRight), "globeBackAndForth")
+expect("straight globe swipe left is not the split toggle", globeStroke((1...12).map { CGPoint(x: -CGFloat($0) * 4, y: 0) }), "globeSwipeLeft")
+
 print("\n\(passes) passed, \(failures) failed")
 exit(failures == 0 ? 0 : 1)

@@ -26,6 +26,7 @@ enum GestureResult {
         case globeSwipeUp          // increase size
         case globeSwipeDown        // decrease size
         case globeCircle           // move command bar
+        case globeBackAndForth     // swipe out and back: toggle the split keyboard
     }
 }
 
@@ -418,7 +419,7 @@ class GestureEngine {
             return nil
         }
 
-        return maxRight >= maxLeft ? .globeSwipeRight : .globeSwipeLeft
+        return .globeBackAndForth
     }
 
     // MARK: - Helper: Find key at point
