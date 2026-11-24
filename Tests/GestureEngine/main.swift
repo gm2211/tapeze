@@ -143,12 +143,16 @@ expect("o swipe up-left types q", typed(stroke(on: oKey, degrees: 135, length: c
 print("split keyboard on wide screens")
 // Default 294pt keyboard: 78pt keys with 2pt gaps (a 238pt grid), a 2pt gap,
 // and a one-key 78pt rail, so one half is 318pt wide.
-func split(width: CGFloat, railOnRight: Bool = true, enabled: Bool = true) -> SplitMirrorLayout? {
-    let gridWidth: CGFloat = 238
-    let rail: CGFloat = 78
+func sizing(_ mode: SplitKeyboardMode, width: CGFloat) -> SplitSizing {
+    SplitSizing.resolve(mode: mode, totalWidth: width, fullKeyWidth: keyWidth, fullRailWidth: 78, spacing: 2)
+}
+func split(width: CGFloat, railOnRight: Bool = true, mode splitMode: SplitKeyboardMode = .wideScreens) -> SplitMirrorLayout? {
+    let size = sizing(splitMode, width: width)
+    let gridWidth = size.keyWidth * 3 + 4
+    let rail = size.railWidth
     let gridX = railOnRight ? width - gridWidth - 2 - rail : rail + 2
     return SplitMirrorLayout.make(
-        enabled: enabled, totalWidth: width, keyWidth: keyWidth, spacing: 2,
+        enabled: size.isSplit, totalWidth: width, keyWidth: size.keyWidth, spacing: 2,
         primaryGridX: gridX, mainGridWidth: gridWidth, railWidth: rail,
         primaryRailOnRight: railOnRight
     )
@@ -157,7 +161,18 @@ func mode(_ layout: SplitMirrorLayout?) -> String { layout == nil ? "single" : "
 expect("iPhone portrait (393pt) stays single", mode(split(width: 393)), "single")
 expect("narrow landscape (700pt) stays single", mode(split(width: 700)), "single")
 expect("iPad / unfolded (1000pt) splits", mode(split(width: 1000)), "split")
-expect("setting off keeps one keyboard", mode(split(width: 1000, enabled: false)), "single")
+expect("setting off keeps one keyboard", mode(split(width: 1000, mode: .off)), "single")
+expect("Always splits iPhone portrait (393pt)", mode(split(width: 393, mode: .always)), "split")
+expect("Always splits unfolded portrait (700pt)", mode(split(width: 700, mode: .always)), "split")
+let squeezed = sizing(.always, width: 393)
+// (393 - 12 - 12) / 8 = 46.125pt keys, rail one key wide.
+expect("Always narrows keys to fit two halves", "\(squeezed.keyWidth),\(squeezed.railWidth)", "46.125,46.125")
+expect("Always keeps full keys where they fit", "\(sizing(.always, width: 1000).keyWidth)", "78.0")
+if let mirror = split(width: 393, mode: .always) {
+    // Halves are 4 x 46.125 + 6 = 190.5pt; the primary grid starts at 393 - 190.5.
+    expect("squeezed halves leave a 12pt middle gap", "\(393 - 2 * (mirror.maxX - mirror.minX))", "12.0")
+    expect("squeezed mirror grid touch maps onto the primary grid", "\(60 + mirror.offset(forX: 60))", "\(60 + 393 - 190.5 - 48.125)")
+}
 if let mirror = split(width: 1000) {
     // Primary: grid 682...920, rail 922...1000. Mirror: rail 0...78, grid 80...318.
     expect("mirror rail sits on the outer left edge", "\(mirror.railX),\(mirror.gridX)", "0.0,80.0")

@@ -78,7 +78,19 @@ struct KeyboardView: View {
                 (totalWidth - spacing * CGFloat(gridCols)) / CGFloat(gridCols + 1),
                 1
             )
-            let keyWidth = min(keyHeight * keyAspectRatio, maxKeyWidthByWidth)
+            let fullKeyWidth = min(keyHeight * keyAspectRatio, maxKeyWidthByWidth)
+            let fullMainGridWidth = fullKeyWidth * CGFloat(gridCols) + spacing * CGFloat(gridCols - 1)
+            let fullAvailableRailWidth = max(totalWidth - fullMainGridWidth - spacing, minimumControlExtent)
+            let fullRailWidth = min(fullAvailableRailWidth, max(fullKeyWidth, minimumControlExtent))
+            // Split mode may narrow keys so a half fits under each thumb.
+            let splitSizing = SplitSizing.resolve(
+                mode: state.splitMode,
+                totalWidth: totalWidth,
+                fullKeyWidth: fullKeyWidth,
+                fullRailWidth: fullRailWidth,
+                spacing: spacing
+            )
+            let keyWidth = splitSizing.keyWidth
             // Diamonds, label sizes and gesture thresholds key off the shorter side.
             let keySide = keyHeight
 
@@ -90,8 +102,7 @@ struct KeyboardView: View {
             let spaceBarHeight = max(totalHeight - mainGridHeight, minimumSpaceBarHeight)
             let topInset = max(totalHeight - mainGridHeight - spaceBarHeight, 0)
 
-            let availableRailWidth = max(totalWidth - mainGridWidth - spacing, minimumControlExtent)
-            let backspaceRailWidth = min(availableRailWidth, max(keyWidth, minimumControlExtent))
+            let backspaceRailWidth = splitSizing.railWidth
             let sidePadding = max(totalWidth - mainGridWidth - spacing - backspaceRailWidth, 0)
 
             let armWidth = keySide * 0.40
@@ -99,7 +110,7 @@ struct KeyboardView: View {
                 ? sidePadding
                 : backspaceRailWidth + spacing
             let splitMirror = SplitMirrorLayout.make(
-                enabled: state.splitOnWideScreens,
+                enabled: splitSizing.isSplit,
                 totalWidth: totalWidth,
                 keyWidth: keyWidth,
                 spacing: spacing,
