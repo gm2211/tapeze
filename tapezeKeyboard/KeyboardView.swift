@@ -34,8 +34,13 @@ struct KeyboardView: View {
     /// keyboard's mirror half, so it is read as the same spot on the primary
     /// half. Fixed at touchdown so a swipe keeps its direction and length.
     @State private var splitTouchOffsets: [ObjectIdentifier: CGFloat] = [:]
-    /// Draws the trail back under the finger when it is on the mirror half.
-    @State private var trailOffsetX: CGFloat = 0
+    /// Shift from hit-test space back to where the finger really is, for the
+    /// finger that just landed. The trail stores real positions, so a trail
+    /// already drawn on one half stays there when the next tap lands on the
+    /// other half (shifting the whole trail view moved it across).
+    @State private var pendingTrailOffsetX: CGFloat = 0
+    /// The same shift for the gesture currently drawing its trail.
+    @State private var activeTrailOffsetX: CGFloat = 0
     /// Whether the last layout pass drew two halves, for the globe toggle.
     @State private var isSplitShown = false
 
@@ -242,7 +247,6 @@ struct KeyboardView: View {
             .overlay {
                 if state.showGestureTrail {
                     GestureTrailView(model: state.gestureTrail, theme: state.theme)
-                        .offset(x: trailOffsetX)
                         .allowsHitTesting(false)
                 }
             }
@@ -666,7 +670,7 @@ struct KeyboardView: View {
         case .began:
             let dx = mirror?.offset(forX: point.x) ?? 0
             splitTouchOffsets[touch] = dx == 0 ? nil : dx
-            trailOffsetX = -dx
+            pendingTrailOffsetX = -dx
             // Light up only the half under the finger, not both copies.
             let onMirror = dx != 0
             if state.keyHighlight.isOnMirror != onMirror {
@@ -683,6 +687,9 @@ struct KeyboardView: View {
     }
 
     private func beginLogicalGesture(at point: CGPoint, ctx: GestureLayoutContext) {
+        // The previous gesture has been committed by now, so its trail kept
+        // its own shift; this one takes the shift of the finger that landed.
+        activeTrailOffsetX = pendingTrailOffsetX
         logicalGestureActive = true
         longPressTriggered = false
         activeBridge = bridgeAt(
@@ -1383,10 +1390,16 @@ struct KeyboardView: View {
     // MARK: - Gesture Trail
 
     private func resetGestureTrail(at point: CGPoint) {
-        state.gestureTrailPoints = state.showGestureTrail ? [point] : []
+        state.gestureTrailPoints = state.showGestureTrail ? [trailPoint(point)] : []
     }
 
-    private func appendGestureTrailPoint(_ point: CGPoint, force: Bool = false) {
+    /// Where the finger really is, for a point in hit-test space.
+    private func trailPoint(_ point: CGPoint) -> CGPoint {
+        CGPoint(x: point.x + activeTrailOffsetX, y: point.y)
+    }
+
+    private func appendGestureTrailPoint(_ hitPoint: CGPoint, force: Bool = false) {
+        let point = trailPoint(hitPoint)
         guard state.showGestureTrail else {
             state.gestureTrailPoints = []
             return
