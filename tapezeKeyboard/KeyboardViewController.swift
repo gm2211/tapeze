@@ -8,6 +8,13 @@ class KeyboardViewController: UIInputViewController {
     private var hostingController: UIHostingController<KeyboardView>?
     private var heightConstraint: NSLayoutConstraint?
     private var heightCancellable: AnyCancellable?
+    /// True between viewDidAppear and viewWillDisappear. Height corrections
+    /// only run while we are settled on screen, never while iOS is bringing
+    /// the keyboard in or switching it out.
+    private var isOnScreen = false
+    private var heightCorrectionScheduled = false
+    private var heightCorrectionsThisAppearance = 0
+    private static let maxHeightCorrectionsPerAppearance = 3
 
     override func viewDidLoad() {
         super.viewDidLoad()
@@ -103,8 +110,51 @@ class KeyboardViewController: UIInputViewController {
 
     override func viewDidAppear(_ animated: Bool) {
         super.viewDidAppear(animated)
+        isOnScreen = true
+        heightCorrectionsThisAppearance = 0
+        // The window, and with it the real screen, may only be known now.
+        updateDisplayHeightLimit()
         reassertKeyboardHeightIfNeeded()
         stopSystemGesturesDelayingTouches()
+        // The system can resize the input view once more after it appears.
+        scheduleHeightCorrectionIfNeeded()
+    }
+
+    override func viewWillDisappear(_ animated: Bool) {
+        isOnScreen = false
+        super.viewWillDisappear(animated)
+    }
+
+    override func viewDidLayoutSubviews() {
+        super.viewDidLayoutSubviews()
+        scheduleHeightCorrectionIfNeeded()
+    }
+
+    /// On the iPhone Duo's inner display the keyboard sometimes came up at a
+    /// much smaller height than asked for and stayed there until reopened:
+    /// the system laid the input view out at its own height after our one
+    /// check in viewDidAppear, and every later pass skipped the update
+    /// because our constraint and preferred size already held the right
+    /// value. Watch the height we actually got and push back, on the next
+    /// run loop turn so we never change layout from inside a layout pass, a
+    /// few times at most per appearance so we never fight the system.
+    private func scheduleHeightCorrectionIfNeeded() {
+        guard isOnScreen,
+              !heightCorrectionScheduled,
+              heightCorrectionsThisAppearance < Self.maxHeightCorrectionsPerAppearance,
+              view.window != nil,
+              abs(view.bounds.height - keyboardState.effectiveKeyboardHeight) > 0.5
+        else { return }
+
+        heightCorrectionScheduled = true
+        DispatchQueue.main.async { [weak self] in
+            guard let self else { return }
+            self.heightCorrectionScheduled = false
+            guard self.isOnScreen, self.view.window != nil else { return }
+            self.heightCorrectionsThisAppearance += 1
+            self.updateDisplayHeightLimit()
+            self.reassertKeyboardHeightIfNeeded()
+        }
     }
 
     /// The system's screen-edge gesture recognizers on the keyboard's window
