@@ -244,7 +244,6 @@ func held(on key: GridPosition, degrees: Double, length: CGFloat) -> String {
     let still = engine.hasActiveGesture ? "" : " (gesture was ended)"
     return peek + still
 }
-let oKey = GridPosition(row: 1, col: 1)
 expect("o held after swiping left is c", held(on: oKey, degrees: 180, length: committed), "c")
 expect("o held after swiping up is u", held(on: oKey, degrees: 90, length: committed), "u")
 expect("e held without moving is e", held(on: eKey, degrees: 0, length: 0), "e")
