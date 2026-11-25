@@ -890,7 +890,7 @@ struct DiamondCommandKeyView: View {
                 .commandLabelDepth(for: theme)
 
         case .enter:
-            Image(systemName: "return")
+            Image(systemName: "return.left")
                 .font(.system(size: size.height * 0.34))
                 .foregroundColor(theme.specialTextColor)
                 .commandLabelDepth(for: theme)
@@ -1014,7 +1014,7 @@ struct CommandKeyView: View {
                 .commandLabelDepth(for: theme)
 
         case .enter:
-            Image(systemName: "return")
+            Image(systemName: "return.left")
                 .font(.system(size: size.height * 0.4))
                 .foregroundColor(theme.specialTextColor)
                 .commandLabelDepth(for: theme)

@@ -458,7 +458,7 @@ struct KeyboardView: View {
                 .frame(width: railWidth, height: railHeight)
                 .position(x: railX + railWidth / 2, y: stripHeight + railHeight / 2)
 
-            Image(systemName: "return")
+            Image(systemName: "return.left")
                 // At cornerWidth ~61pt / spaceHeight ~90.8pt, 0.42 drew the arrow at
                 // ~25.6pt, visibly smaller than the ~30pt space-bar symbol next to it.
                 // 0.60 gives ~36.6pt, which still fits comfortably inside the corner block.
