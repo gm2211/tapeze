@@ -140,6 +140,17 @@ class GestureEngine {
         points.removeAll()
     }
 
+    /// What the stroke so far would type if the finger lifted at `point`,
+    /// without ending it. Used to tell which letter a held finger is on.
+    func provisionalResult(at point: CGPoint) -> GestureResult {
+        guard !points.isEmpty else { return .none }
+        let saved = points
+        points.append(point)
+        let result = analyzeGesture()
+        points = saved
+        return result
+    }
+
     // MARK: - Analysis
 
     private func analyzeGesture() -> GestureResult {

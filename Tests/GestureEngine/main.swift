@@ -208,5 +208,46 @@ let outAndBackRight = (1...12).map { CGPoint(x: CGFloat($0) * 4, y: 0) } + (0...
 expect("globe swipe right and back left toggles split", globeStroke(outAndBackRight), "globeBackAndForth")
 expect("straight globe swipe left is not the split toggle", globeStroke((1...12).map { CGPoint(x: -CGFloat($0) * 4, y: 0) }), "globeSwipeLeft")
 
+print("holding a letter offers its accents")
+expect("e hold: number first, then accents", HoldPicker.choicesForHeldKey(letter: "e", number: "8").joined(), "8éèêëēėę")
+expect("h has no accents, so only its number", HoldPicker.choicesForHeldKey(letter: "h", number: "4").joined(), "4")
+expect("capital A gets capital accents", Diacritics.variants(of: "A").joined(), "ÀÁÂÄÆÃÅĀ")
+expect("capital S drops ß, which has no one-letter capital", Diacritics.variants(of: "S").joined(), "ŚŠŞ")
+expect("every swiped letter with accents is on the default layout",
+       Diacritics.variants.keys.filter { letter in
+           !KeyboardLayoutData.letterGrid.flatMap { $0 }.contains { $0.tap == letter || $0.swipes.values.contains(letter) }
+       }.sorted().joined(), "")
+var picker = HoldPicker(choices: ["8", "é", "è", "ê"], anchor: CGPoint(x: 100, y: 50), cellWidth: 38)
+expect("strip opens on the number", picker.selected ?? "", "8")
+picker.track(CGPoint(x: 112, y: 50))
+expect("a small wobble keeps the number", picker.selected ?? "", "8")
+picker.track(CGPoint(x: 138, y: 30))
+expect("one cell right picks é", picker.selected ?? "", "é")
+picker.track(CGPoint(x: 400, y: 50))
+expect("sliding past the end stops on the last choice", picker.selected ?? "", "ê")
+picker.track(CGPoint(x: -200, y: 50))
+expect("sliding past the start stops on the first choice", picker.selected ?? "", "8")
+
+print("a held swipe knows its letter before lifting")
+func held(on key: GridPosition, degrees: Double, length: CGFloat) -> String {
+    let engine = makeEngine()
+    let centre = CGPoint(x: CGFloat(key.col) * keyWidth + keyWidth / 2, y: CGFloat(key.row) * keyHeight + keyHeight / 2)
+    let radians = degrees * .pi / 180
+    let end = CGPoint(x: centre.x + CGFloat(cos(radians)) * length, y: centre.y - CGFloat(sin(radians)) * length)
+    engine.touchBegan(at: centre)
+    var travelled: CGFloat = 4
+    while travelled < length {
+        engine.touchMoved(to: CGPoint(x: centre.x + CGFloat(cos(radians)) * travelled, y: centre.y - CGFloat(sin(radians)) * travelled))
+        travelled += 4
+    }
+    let peek = typed(engine.provisionalResult(at: end))
+    let still = engine.hasActiveGesture ? "" : " (gesture was ended)"
+    return peek + still
+}
+let oKey = GridPosition(row: 1, col: 1)
+expect("o held after swiping left is c", held(on: oKey, degrees: 180, length: committed), "c")
+expect("o held after swiping up is u", held(on: oKey, degrees: 90, length: committed), "u")
+expect("e held without moving is e", held(on: eKey, degrees: 0, length: 0), "e")
+
 print("\n\(passes) passed, \(failures) failed")
 exit(failures == 0 ? 0 : 1)

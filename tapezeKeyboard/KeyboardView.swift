@@ -25,6 +25,11 @@ struct KeyboardView: View {
     @State private var currentKeySide: CGFloat = 1
     @State private var longPressTask: DispatchWorkItem?
     @State private var longPressTriggered = false
+    /// The accent strip open under a held finger, if any.
+    @State private var holdPicker: HoldPicker?
+    /// Where the finger last settled. The hold timer restarts whenever the
+    /// finger moves away from it, so it only fires once the finger is still.
+    @State private var holdAnchor: CGPoint = .zero
     @State private var logicalGestureActive = false
     @State private var lastTrackedPoint: CGPoint?
     /// The finger driving the current logical gesture. Other fingers that are
@@ -51,6 +56,12 @@ struct KeyboardView: View {
     private let maxTrailDisplayPoints = 42
     private let minTrailPointDistance: CGFloat = 7
     private let numberHoldDuration: TimeInterval = 0.6
+    /// How long a finger must rest at the end of a swipe to open that
+    /// letter's accents. Shorter than the touchdown hold: the finger has
+    /// already committed to a letter, and a normal swipe lifts without a pause.
+    private let swipeHoldDuration: TimeInterval = 0.45
+    /// Movement that counts as the finger leaving where it settled.
+    private let holdStillnessRadius: CGFloat = 10
 
     var body: some View {
         GeometryReader { outerGeo in
@@ -63,11 +74,13 @@ struct KeyboardView: View {
             /// Space bar height as a multiple of one key row. MessagEase draws four equal
             /// 72pt rows, so the space row matches a key row.
             let spaceBarRowRatio: CGFloat = 1.0
-            /// MessagEase keys are a little wider than tall: 78x72pt measured on the
-            /// same device, with the command column exactly one key wide (four equal
-            /// columns). Square keys plus a 61pt rail made tapeze read as a
-            /// different, chunkier keyboard at the same height.
-            let keyAspectRatio: CGFloat = 78.0 / 72.0
+            /// Keys and the command column share the width in four equal columns.
+            /// Holding keys to MessagEase's 78:72 shape left 84pt empty on the
+            /// left of a 402pt iPhone (122pt on a Pro Max), which reviewers read
+            /// as wasted space. Keys now stretch to fill a phone's width; the cap
+            /// only stops them turning into slabs on very wide screens, where
+            /// the split keyboard is the better fit.
+            let maxKeyAspectRatio: CGFloat = 1.6
             // Solve for the row height so that `gridRows` key rows plus a space bar
             // sized at `spaceBarRowRatio` key rows, plus the inter-row spacing
             // (including the gap above the space row), exactly fill the available height.
@@ -85,18 +98,22 @@ struct KeyboardView: View {
                 (totalWidth - spacing * CGFloat(gridCols)) / CGFloat(gridCols + 1),
                 1
             )
-            let fullKeyWidth = min(keyHeight * keyAspectRatio, maxKeyWidthByWidth)
-            let fullMainGridWidth = fullKeyWidth * CGFloat(gridCols) + spacing * CGFloat(gridCols - 1)
-            let fullAvailableRailWidth = max(totalWidth - fullMainGridWidth - spacing, minimumControlExtent)
-            let fullRailWidth = min(fullAvailableRailWidth, max(fullKeyWidth, minimumControlExtent))
+            let fullKeyWidth = min(keyHeight * maxKeyAspectRatio, maxKeyWidthByWidth)
+            let fullRailWidth = railWidth(forKeyWidth: fullKeyWidth, totalWidth: totalWidth, minimum: minimumControlExtent)
+            /// Each split half keeps MessagEase's 78:72 keys, so whether both
+            /// halves fit is judged at that size, not at the stretched one.
+            let splitKeyWidth = min(keyHeight * 78.0 / 72.0, maxKeyWidthByWidth)
             // Split mode may narrow keys so a half fits under each thumb.
-            let splitSizing = SplitSizing.resolve(
+            let resolvedSplit = SplitSizing.resolve(
                 mode: state.splitMode,
                 totalWidth: totalWidth,
-                fullKeyWidth: fullKeyWidth,
-                fullRailWidth: fullRailWidth,
+                fullKeyWidth: splitKeyWidth,
+                fullRailWidth: railWidth(forKeyWidth: splitKeyWidth, totalWidth: totalWidth, minimum: minimumControlExtent),
                 spacing: spacing
             )
+            let splitSizing = resolvedSplit.isSplit
+                ? resolvedSplit
+                : SplitSizing(isSplit: false, keyWidth: fullKeyWidth, railWidth: fullRailWidth)
             let keyWidth = splitSizing.keyWidth
             // Diamonds, label sizes and gesture thresholds key off the shorter side.
             let keySide = keyHeight
@@ -250,6 +267,18 @@ struct KeyboardView: View {
                         .allowsHitTesting(false)
                 }
             }
+            .overlay(alignment: .topLeading) {
+                if let holdPicker {
+                    HoldPickerView(
+                        picker: holdPicker,
+                        fingerX: holdPicker.anchor.x + activeTrailOffsetX,
+                        totalWidth: totalWidth,
+                        totalHeight: totalHeight,
+                        theme: state.theme
+                    )
+                    .allowsHitTesting(false)
+                }
+            }
             .coordinateSpace(name: "keyboard")
         }
         // Fill whatever height the input view really got, up to the chosen
@@ -337,6 +366,14 @@ struct KeyboardView: View {
             )
         }
         .frame(width: layoutWidth, height: mainGridHeight, alignment: .topLeading)
+    }
+
+    /// The command column for keys of `keyWidth`: one key wide, never below a
+    /// usable target, and never wider than what the keys leave free.
+    private func railWidth(forKeyWidth keyWidth: CGFloat, totalWidth: CGFloat, minimum: CGFloat) -> CGFloat {
+        let gridWidth = keyWidth * CGFloat(gridCols) + spacing * CGFloat(gridCols - 1)
+        let available = max(totalWidth - gridWidth - spacing, minimum)
+        return min(available, max(keyWidth, minimum))
     }
 
     // MARK: - Bridge Views
@@ -713,7 +750,7 @@ struct KeyboardView: View {
         case .none:
             gestureEngine.touchBegan(at: point)
             resetGestureTrail(at: point)
-            scheduleNumberLongPress(at: point)
+            scheduleHold(at: point, delay: numberHoldDuration)
         case .enter, .zero:
             break
         }
@@ -729,10 +766,15 @@ struct KeyboardView: View {
                 onDeleteWord()
             }
         case .none:
-            guard !longPressTriggered else { return }
+            guard !longPressTriggered else {
+                if var picker = holdPicker, picker.track(point) {
+                    holdPicker = picker
+                }
+                return
+            }
             gestureEngine.touchMoved(to: point)
-            if let start = gestureEngine.points.first, distance(start, point) > 14 {
-                cancelNumberLongPress()
+            if distance(holdAnchor, point) > holdStillnessRadius {
+                scheduleHold(at: point, delay: swipeHoldDuration)
             }
             if state.showGestureTrail {
                 appendGestureTrailPoint(point)
@@ -799,6 +841,11 @@ struct KeyboardView: View {
         case .none:
             if longPressTriggered {
                 longPressTriggered = false
+                if let pick = holdPicker?.selected {
+                    onCharacter(pick)
+                    state.afterCharacterInserted()
+                }
+                holdPicker = nil
                 gestureEngine.touchCancelled()
                 state.gestureTrailPoints = []
                 return
@@ -819,6 +866,7 @@ struct KeyboardView: View {
         gestureEngine.touchCancelled()
         cancelNumberLongPress()
         longPressTriggered = false
+        holdPicker = nil
         activeBridge = .none
         backspacePath = []
         backspaceScrub.reset()
@@ -1361,25 +1409,80 @@ struct KeyboardView: View {
         }
     }
 
-    // MARK: - Number Long Press
+    // MARK: - Hold: numbers and accents
 
-    private func scheduleNumberLongPress(at point: CGPoint) {
+    /// Arms the hold timer for a finger resting at `point`. Holding a key's
+    /// own letter offers its number and accents; resting at the end of a swipe
+    /// offers the swiped letter's accents. A key with no accents keeps the old
+    /// behaviour and types its number as soon as the hold fires.
+    private func scheduleHold(at point: CGPoint, delay: TimeInterval) {
         cancelNumberLongPress()
+        holdAnchor = point
         guard state.currentLayer == .letters,
-              let position = gestureEngine.keyPosition(at: point),
-              (0..<gridRows).contains(position.row),
-              (0..<gridCols).contains(position.col) else {
+              let startPoint = gestureEngine.points.first,
+              let startKey = gestureEngine.keyPosition(at: startPoint),
+              (0..<gridRows).contains(startKey.row),
+              (0..<gridCols).contains(startKey.col) else {
             return
         }
 
         let task = DispatchWorkItem {
-            guard gestureEngine.hasActiveGesture, activeBridge == .none else { return }
-            longPressTriggered = true
-            onCharacter(String(position.row * gridCols + position.col + 1))
-            state.afterCharacterInserted()
+            guard gestureEngine.hasActiveGesture, activeBridge == .none, !longPressTriggered else { return }
+            openHold(at: lastTrackedPoint ?? point)
         }
         longPressTask = task
-        DispatchQueue.main.asyncAfter(deadline: .now() + numberHoldDuration, execute: task)
+        DispatchQueue.main.asyncAfter(deadline: .now() + delay, execute: task)
+    }
+
+    private func openHold(at point: CGPoint) {
+        let grid = state.currentGrid
+        func key(_ pos: GridPosition) -> KeyConfig? {
+            guard (0..<gridRows).contains(pos.row),
+                  (0..<gridCols).contains(pos.col),
+                  pos.row < grid.count, pos.col < grid[pos.row].count else { return nil }
+            let config = grid[pos.row][pos.col]
+            return config.specialAction == nil ? config : nil
+        }
+
+        switch gestureEngine.provisionalResult(at: point) {
+        case .tap(let pos):
+            guard let config = key(pos) else { return }
+            let number = String(pos.row * gridCols + pos.col + 1)
+            let choices = HoldPicker.choicesForHeldKey(letter: state.applyCase(config.tap), number: number)
+            longPressTriggered = true
+            if choices.count == 1 {
+                onCharacter(number)
+                state.afterCharacterInserted()
+            } else {
+                showHoldPicker(choices, at: point)
+            }
+
+        case .swipe(let pos, let direction, _):
+            openSwipeHold(key(pos)?.swipes[direction], uppercase: false, at: point)
+
+        case .swipeBack(let pos, let direction, _):
+            openSwipeHold(key(pos)?.swipes[direction], uppercase: true, at: point)
+
+        default:
+            return
+        }
+    }
+
+    /// Accents for a letter reached by a swipe; a swipe that came back is a
+    /// capital, as it is when it lifts.
+    private func openSwipeHold(_ letter: String?, uppercase: Bool, at point: CGPoint) {
+        guard let letter else { return }
+        let cased = uppercase ? letter.uppercased() : state.applyCase(letter)
+        let choices = Diacritics.variants(of: cased)
+        guard !choices.isEmpty else { return }
+        longPressTriggered = true
+        showHoldPicker(choices, at: point)
+    }
+
+    private func showHoldPicker(_ choices: [String], at point: CGPoint) {
+        holdPicker = HoldPicker(choices: choices, anchor: point, cellWidth: HoldPickerView.cellStride)
+        state.gestureTrailPoints = []
+        setActiveKey(nil)
     }
 
     private func cancelNumberLongPress() {
@@ -2049,5 +2152,61 @@ struct ExtendedBridgeShape: Shape {
             p.closeSubpath()
         }
         return p
+    }
+}
+
+// MARK: - Hold Picker
+
+/// The strip of a held letter's number and accents, drawn above the finger.
+/// The first choice opens under the finger; sliding sideways moves along it.
+struct HoldPickerView: View {
+    let picker: HoldPicker
+    let fingerX: CGFloat
+    let totalWidth: CGFloat
+    let totalHeight: CGFloat
+    let theme: KeyboardTheme
+
+    static let cellWidth: CGFloat = 36
+    static let cellGap: CGFloat = 2
+    static var cellStride: CGFloat { cellWidth + cellGap }
+    private let cellHeight: CGFloat = 46
+    private let padding: CGFloat = 4
+    /// Clearance between the strip and the finger's contact point, so the
+    /// thumb does not hide the choice it is on.
+    private let fingerClearance: CGFloat = 34
+
+    var body: some View {
+        let count = CGFloat(picker.choices.count)
+        let width = count * Self.cellWidth + (count - 1) * Self.cellGap + padding * 2
+        let height = cellHeight + padding * 2
+        let preferredX = fingerX - padding - CGFloat(picker.initialIndex) * Self.cellStride - Self.cellWidth / 2
+        let x = min(max(preferredX, 2), max(totalWidth - width - 2, 2))
+        let above = picker.anchor.y - fingerClearance - height
+        let y = above >= 2 ? above : min(picker.anchor.y + fingerClearance, totalHeight - height - 2)
+
+        HStack(spacing: Self.cellGap) {
+            ForEach(Array(picker.choices.enumerated()), id: \.offset) { index, choice in
+                let isSelected = index == picker.selectedIndex
+                Text(choice)
+                    .font(.system(size: 24, weight: .medium, design: .rounded))
+                    .foregroundColor(isSelected ? theme.keyboardBackground : theme.tapColor)
+                    .frame(width: Self.cellWidth, height: cellHeight)
+                    .background(
+                        RoundedRectangle(cornerRadius: 8, style: .continuous)
+                            .fill(isSelected ? theme.tapColor : Color.clear)
+                    )
+            }
+        }
+        .padding(padding)
+        .background(
+            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                .fill(theme.keyBackground)
+                .shadow(color: .black.opacity(0.45), radius: 8, y: 3)
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                .stroke(theme.keyBorder, lineWidth: 1)
+        )
+        .offset(x: x, y: y)
     }
 }

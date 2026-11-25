@@ -582,3 +582,78 @@ struct SplitMirrorLayout: Equatable {
         return inRailColumn ? railOffset : gridOffset
     }
 }
+
+// MARK: - Diacritics
+
+/// Accented forms offered when a letter is held. Ordered by how often they
+/// come up across the European languages that use them, most common first.
+enum Diacritics {
+    static let variants: [String: [String]] = [
+        "a": ["à", "á", "â", "ä", "æ", "ã", "å", "ā"],
+        "c": ["ç", "ć", "č"],
+        "d": ["ď", "đ"],
+        "e": ["é", "è", "ê", "ë", "ē", "ė", "ę"],
+        "g": ["ğ"],
+        "i": ["í", "ì", "î", "ï", "ī", "į"],
+        "l": ["ł", "ľ", "ĺ"],
+        "n": ["ñ", "ń", "ň"],
+        "o": ["ó", "ò", "ô", "ö", "õ", "ø", "œ", "ō"],
+        "r": ["ř", "ŕ"],
+        "s": ["ß", "ś", "š", "ş"],
+        "t": ["ť", "ţ", "þ"],
+        "u": ["ú", "ù", "û", "ü", "ū", "ů", "ű"],
+        "y": ["ý", "ÿ"],
+        "z": ["ž", "ź", "ż"],
+    ]
+
+    /// Accented forms of `letter`, in its case. Forms with no single-letter
+    /// capital (ß) are left out of the uppercase list.
+    static func variants(of letter: String) -> [String] {
+        let lower = letter.lowercased()
+        guard let forms = variants[lower] else { return [] }
+        guard letter != lower else { return forms }
+        return forms.map { $0.uppercased() }.filter { $0.count == 1 }
+    }
+}
+
+/// The strip of choices shown while a letter is held, and which one the
+/// finger is on. The finger picks by sliding sideways from where the strip
+/// opened; lifting types the picked choice.
+struct HoldPicker: Equatable {
+    let choices: [String]
+    /// Where the finger was when the strip opened, in keyboard coordinates.
+    let anchor: CGPoint
+    /// Choice under the finger when the strip opened.
+    let initialIndex: Int
+    let cellWidth: CGFloat
+    private(set) var selectedIndex: Int
+
+    init(choices: [String], anchor: CGPoint, initialIndex: Int = 0, cellWidth: CGFloat) {
+        self.choices = choices
+        self.anchor = anchor
+        self.initialIndex = min(max(initialIndex, 0), max(choices.count - 1, 0))
+        self.cellWidth = max(cellWidth, 1)
+        self.selectedIndex = self.initialIndex
+    }
+
+    var selected: String? {
+        choices.indices.contains(selectedIndex) ? choices[selectedIndex] : nil
+    }
+
+    /// Moves the selection with the finger. Returns true when it changed.
+    @discardableResult
+    mutating func track(_ point: CGPoint) -> Bool {
+        let steps = Int(((point.x - anchor.x) / cellWidth).rounded())
+        let index = min(max(initialIndex + steps, 0), choices.count - 1)
+        guard index != selectedIndex else { return false }
+        selectedIndex = index
+        return true
+    }
+
+    /// Choices for holding a key's own letter: its number first, so a hold
+    /// that lifts without sliding types the number as before, then the
+    /// letter's accents.
+    static func choicesForHeldKey(letter: String, number: String) -> [String] {
+        [number] + Diacritics.variants(of: letter)
+    }
+}
