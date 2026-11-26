@@ -1,0 +1,153 @@
+diff --git a/tapeze/ContentView.swift b/tapeze/ContentView.swift
+index 8fb45c1..76981a5 100644
+--- a/tapeze/ContentView.swift
++++ b/tapeze/ContentView.swift
+@@ -13,10 +13,13 @@ struct ContentView: View {
+     @StateObject private var previewState = KeyboardState(isPreview: true)
+ 
+     var body: some View {
++        ScrollViewReader { storeShotProxy in
+         ScrollView {
+             VStack(alignment: .leading, spacing: 16) {
+                 headerView
+-                settingsView
++                if !hidesSettingsForStoreShot {
++                    settingsView
++                }
+                 previewView
+                 setupInstructionsView
+             }
+@@ -31,6 +34,9 @@ struct ContentView: View {
+             previewState.showGestureTrail = showGestureTrail
+             previewState.keyCornerRadius = CGFloat(keyCornerRadius)
+             previewState.selectedThemeID = selectedThemeID
++            #if DEBUG
++            applyStoreShot(proxy: storeShotProxy)
++            #endif
+         }
+         .onChange(of: showGestureTrail) { newValue in
+             previewState.showGestureTrail = newValue
+@@ -54,7 +60,58 @@ struct ContentView: View {
+                 previewState.refreshLayout()
+             }
+         }
++        }
++    }
++
++    private var hidesSettingsForStoreShot: Bool {
++        #if DEBUG
++        let args = ProcessInfo.processInfo.arguments
++        guard let index = args.firstIndex(of: "--store-shot"), index + 1 < args.count else { return false }
++        return args[index + 1] != "split"
++        #else
++        return false
++        #endif
++    }
++
++    #if DEBUG
++    /// App Store screenshot harness: `--store-shot trail|split|numbers`.
++    private func applyStoreShot(proxy: ScrollViewProxy) {
++        let args = ProcessInfo.processInfo.arguments
++        guard let index = args.firstIndex(of: "--store-shot"), index + 1 < args.count else { return }
++        let shot = args[index + 1]
++        KeyboardState.settingsDefaults.set(true, forKey: KeyboardState.keyboardReadsSettingsDefaultsKey)
++        keyboardReadsSettings = true
++        showGestureTrail = true
++        previewState.showGestureTrail = true
++        switch shot {
++        case "trail":
++            selectedThemeID = KeyboardTheme.tapeze.id
++            testText = "Hello"
++        case "split":
++            selectedThemeID = KeyboardTheme.ember.id
++            splitMode = .always
++            previewState.splitMode = .always
++            previewState.keyboardHeight = 230
++            testText = "Hello"
++            if let scene = UIApplication.shared.connectedScenes.first as? UIWindowScene {
++                scene.requestGeometryUpdate(.iOS(interfaceOrientations: .landscapeRight)) { _ in }
++            }
++        case "numbers":
++            selectedThemeID = KeyboardTheme.graphite.id
++            DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) {
++                previewState.currentLayer = .numbers
++            }
++            testText = "Meet at 9:41"
++        default:
++            break
++        }
++        previewState.selectedThemeID = selectedThemeID
++        guard shot == "split" else { return }
++        DispatchQueue.main.asyncAfter(deadline: .now() + 1.2) {
++            proxy.scrollTo(shot == "split" ? "storeShotKeyboard" : "storeShotPreview", anchor: shot == "split" ? .center : .bottom)
++        }
+     }
++    #endif
+ 
+     private var headerView: some View {
+         VStack(alignment: .leading, spacing: 4) {
+@@ -97,12 +154,14 @@ struct ContentView: View {
+             }
+             .frame(height: previewState.keyboardHeight)
+             .clipShape(RoundedRectangle(cornerRadius: CGFloat(keyCornerRadius), style: .continuous))
++            .id("storeShotKeyboard")
+ 
+             TextField("Type here to test...", text: $testText)
+                 .textFieldStyle(.roundedBorder)
+         }
+         .padding(14)
+         .background(sectionBackground)
++        .id("storeShotPreview")
+     }
+ 
+     private var keyboardPreviewBackdrop: some View {
+diff --git a/tapezeKeyboard/KeyboardView.swift b/tapezeKeyboard/KeyboardView.swift
+index 0a21cb2..5f4bf8a 100644
+--- a/tapezeKeyboard/KeyboardView.swift
++++ b/tapezeKeyboard/KeyboardView.swift
+@@ -250,6 +250,18 @@ struct KeyboardView: View {
+                         .allowsHitTesting(false)
+                 }
+             }
++            #if DEBUG
++            .task {
++                let args = ProcessInfo.processInfo.arguments
++                guard let index = args.firstIndex(of: "--store-shot"), index + 1 < args.count,
++                      args[index + 1] == "trail" else { return }
++                await replayStoreShotLoop(ctx: GestureLayoutContext(
++                    totalWidth: totalWidth, totalHeight: totalHeight,
++                    stripHeight: topInset, armWidth: armWidth, keySide: keySide,
++                    layoutOriginX: layoutOriginX, mainGridWidth: mainGridWidth,
++                    backspaceRailWidth: backspaceRailWidth))
++            }
++            #endif
+             .coordinateSpace(name: "keyboard")
+         }
+         // Fill whatever height the input view really got, up to the chosen
+@@ -270,6 +282,26 @@ struct KeyboardView: View {
+         }
+     }
+ 
++    #if DEBUG
++    /// Draws a capital loop around "t" and never lifts, so the trail stays on screen.
++    @MainActor
++    private func replayStoreShotLoop(ctx: GestureLayoutContext) async {
++        try? await Task.sleep(nanoseconds: 3_000_000_000)
++        let t = CGPoint(x: ctx.layoutOriginX + 0.5 * ctx.keySide * 78 / 72,
++                        y: ctx.stripHeight + 2.5 * ctx.keySide + 2)
++        let radius = ctx.keySide * 0.26
++        let points = (0...40).map { i -> CGPoint in
++            let angle = -Double.pi / 2 + Double(i) / 36 * .pi * 2
++            return CGPoint(x: t.x + radius * cos(angle), y: t.y + radius * sin(angle))
++        }
++        beginLogicalGesture(at: points[0], ctx: ctx)
++        for point in points.dropFirst() {
++            try? await Task.sleep(nanoseconds: 25_000_000)
++            continueLogicalGesture(at: point, ctx: ctx)
++        }
++    }
++    #endif
++
+     // MARK: - Main 3x3 Grid
+ 
+     @ViewBuilder

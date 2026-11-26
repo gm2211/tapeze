@@ -195,7 +195,9 @@ class KeyboardViewController: UIInputViewController {
     override func viewWillLayoutSubviews() {
         super.viewWillLayoutSubviews()
         updateDisplayHeightLimit()
-        applyKeyboardHeight(keyboardState.effectiveKeyboardHeight, animated: false)
+        // Never force a layout of the system's container from inside a layout
+        // pass: the constraint change is picked up by this pass anyway.
+        applyKeyboardHeight(keyboardState.effectiveKeyboardHeight, animated: false, layoutNow: false)
     }
 
     // MARK: - Foldable displays
@@ -249,6 +251,15 @@ class KeyboardViewController: UIInputViewController {
         if keyboardState.displayHeightLimit != limit {
             keyboardState.displayHeightLimit = limit
         }
+
+        let configuration = ScreenConfiguration.classify(
+            screenSize: screen.bounds.size,
+            bothSizeClassesRegular: traitCollection.horizontalSizeClass == .regular
+                && traitCollection.verticalSizeClass == .regular
+        )
+        if keyboardState.screenConfiguration != configuration {
+            keyboardState.screenConfiguration = configuration
+        }
     }
 
     private func bindKeyboardHeight() {
@@ -264,7 +275,12 @@ class KeyboardViewController: UIInputViewController {
             }
     }
 
-    private func applyKeyboardHeight(_ height: CGFloat, animated: Bool, force: Bool = false) {
+    private func applyKeyboardHeight(
+        _ height: CGFloat,
+        animated: Bool,
+        force: Bool = false,
+        layoutNow: Bool = true
+    ) {
         // The constraint constant already matches on a fresh launch because it is
         // created from the persisted height, so it cannot be the only thing we
         // check: preferredContentSize is what actually sizes the input view, and
@@ -276,6 +292,18 @@ class KeyboardViewController: UIInputViewController {
 
         heightConstraint?.constant = height
         preferredContentSize = CGSize(width: 0, height: height)
+
+        // While iOS brings the keyboard in or switches it out, laying out or
+        // animating the system's input container can crash the host app.
+        // That happened mostly in landscape, where the fold cap changes the
+        // height right as the keyboard appears. Outside viewWillAppear's
+        // forced pass, only touch layout once we are settled on screen; the
+        // stored values above are applied on the next pass either way, and
+        // viewDidAppear re-asserts the height.
+        guard layoutNow, force || isOnScreen else {
+            if layoutNow { view.setNeedsLayout() }
+            return
+        }
 
         let updates = {
             self.view.superview?.layoutIfNeeded()

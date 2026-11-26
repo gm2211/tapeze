@@ -229,6 +229,7 @@ struct ContentView: View {
                         splitMode = newValue
                         previewState.splitMode = newValue
                         KeyboardState.settingsDefaults.set(newValue.rawValue, forKey: KeyboardState.splitModeDefaultsKey)
+                        KeyboardState.clearStoredSplitChoices()
                     }
                 )) {
                     ForEach(SplitKeyboardMode.allCases) { mode in
@@ -236,7 +237,7 @@ struct ContentView: View {
                     }
                 }
                 .pickerStyle(.segmented)
-                Text("A keyboard under each thumb. Wide screens splits only where both halves fit at full size; Always splits in every orientation, with narrower keys when needed. On the keyboard, swipe out and back on the globe key to switch.")
+                Text("A keyboard under each thumb. Wide screens splits on large screens like an iPad or an unfolded phone, and elsewhere only where both halves fit at full size; Always splits everywhere, with narrower keys when needed. On the keyboard, swipe out and back on the globe key to switch: the choice is remembered separately for small and large screens, upright and sideways. Changing this setting resets those choices.")
                     .font(.caption)
                     .foregroundColor(.secondary)
             }
