@@ -705,6 +705,8 @@ struct HoldPicker: Equatable {
     /// letter's accents.
     static func choicesForHeldKey(letter: String, number: String) -> [String] {
         [number] + Diacritics.variants(of: letter)
+    }
+}
 
 /// Turns a finger's position into the keyboard's layout space, the space the
 /// keys are drawn and hit-tested in.
