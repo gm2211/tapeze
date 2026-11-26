@@ -37,10 +37,12 @@ class KeyboardViewController: UIInputViewController {
         let keyboardView = KeyboardView(
             state: keyboardState,
             onCharacter: { [weak self] char in
+                self?.recordTypedForDebug(char)
                 self?.textDocumentProxy.insertText(char)
                 self?.scheduleInputContextUpdate()
             },
             onBackspace: { [weak self] in
+                self?.recordTypedForDebug("⌫")
                 self?.textDocumentProxy.deleteBackward()
                 self?.scheduleInputContextUpdate()
             },
@@ -315,6 +317,11 @@ class KeyboardViewController: UIInputViewController {
         } else {
             updates()
         }
+    }
+
+    private func recordTypedForDebug(_ text: String) {
+        guard keyboardState.showTouchDebug else { return }
+        keyboardState.touchDebug.recordTyped(text)
     }
 
     private func deletePreviousWord() {
