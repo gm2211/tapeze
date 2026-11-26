@@ -86,3 +86,14 @@ _Add a brief overview of your project architecture_
 ## Conventions & Patterns
 
 _Add your project-specific conventions here_
+
+## Remote Control on the Mac
+
+The Claude desktop app serves at most six folders for Remote Control, and
+`~/projects/tapeze` is often not one of them. A Remote Control request that
+names an unserved folder posts a card that fails with "Couldn't record your
+choice", however often it is stopped and restarted. Instead, call
+`list_devices`, pick any folder on the same Mac whose state is `served`, pass
+its `environment_id` to `start_remote_control`, and tell the session to leave
+that folder alone and work in `/Users/gmecocci/projects/tapeze` (in a git
+worktree, so the user's checkout stays untouched).
