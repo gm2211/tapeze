@@ -39,6 +39,8 @@ class KeyboardState: ObservableObject {
     static let keyboardHeightDefaultsKey = "keyboardHeight"
     static let themeDefaultsKey = "keyboardTheme"
     static let splitModeDefaultsKey = "splitKeyboardMode"
+    /// Split or single, saved per ScreenConfiguration by the globe toggle.
+    static let splitChoicesDefaultsKey = "splitChoiceByScreen"
     /// Earlier on/off switch for the split; read once so "off" carries over.
     static let legacySplitOnWideScreensDefaultsKey = "splitOnWideScreens"
     /// Written by the keyboard whenever it appears with Full Access. Without
@@ -90,6 +92,20 @@ class KeyboardState: ObservableObject {
             }
         }
     }
+    /// Choices saved by the globe toggle, keyed by ScreenConfiguration.
+    @Published private(set) var splitChoices: [String: Bool] = [:]
+    /// Set by the controller once it knows which screen it is on.
+    @Published var screenConfiguration: ScreenConfiguration? = nil
+
+    /// The split mode for the screen the keyboard is on right now.
+    var effectiveSplitMode: SplitKeyboardMode {
+        SplitPreference.effectiveMode(
+            base: splitMode,
+            configuration: screenConfiguration,
+            savedChoices: splitChoices
+        )
+    }
+
     @Published var showCenterLabels: Bool = true {
         didSet {
             if persistsSettings {
@@ -167,6 +183,9 @@ class KeyboardState: ObservableObject {
         }
 
         splitMode = Self.storedSplitMode()
+        if !isPreview {
+            splitChoices = Self.storedSplitChoices()
+        }
 
         if isPreview || Self.settingsDefaults.object(forKey: Self.showCenterLabelsDefaultsKey) == nil {
             showCenterLabels = true
@@ -212,8 +231,22 @@ class KeyboardState: ObservableObject {
         return .wideScreens
     }
 
+    static func storedSplitChoices() -> [String: Bool] {
+        settingsDefaults.dictionary(forKey: splitChoicesDefaultsKey) as? [String: Bool] ?? [:]
+    }
+
+    /// Changing the app's Split keyboard setting starts every screen over
+    /// from that setting.
+    static func clearStoredSplitChoices() {
+        settingsDefaults.removeObject(forKey: splitChoicesDefaultsKey)
+    }
+
     func reloadPersistedAppearanceSettings() {
         splitMode = Self.storedSplitMode()
+        let choices = Self.storedSplitChoices()
+        if choices != splitChoices {
+            splitChoices = choices
+        }
 
         if Self.settingsDefaults.object(forKey: Self.showGestureTrailDefaultsKey) == nil {
             showGestureTrail = true
@@ -402,9 +435,18 @@ class KeyboardState: ObservableObject {
     }
 
     /// The globe's out-and-back swipe. Splits on demand wherever two halves
-    /// fit (narrowing keys if needed), or goes back to one keyboard.
+    /// fit (narrowing keys if needed), or goes back to one keyboard. The
+    /// choice is remembered for this kind of screen only, so the outer and
+    /// inner screens of a foldable, upright or sideways, each keep their own.
     func toggleSplit(currentlySplit: Bool) {
-        splitMode = currentlySplit ? .off : .always
+        guard let screenConfiguration else {
+            splitMode = currentlySplit ? .off : .always
+            return
+        }
+        splitChoices[screenConfiguration.rawValue] = !currentlySplit
+        if persistsSettings {
+            Self.settingsDefaults.set(splitChoices, forKey: Self.splitChoicesDefaultsKey)
+        }
     }
 
     func toggleCommandBarSide() {

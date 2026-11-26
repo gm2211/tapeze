@@ -455,8 +455,8 @@ struct EditableKeyboardLayout: Codable, Equatable {
 enum SplitKeyboardMode: String, CaseIterable, Identifiable {
     /// One keyboard, always.
     case off
-    /// Split only where both halves fit at full key size (iPad, landscape,
-    /// unfolded foldables in landscape).
+    /// Split on large screens (iPad, unfolded foldables) in any orientation,
+    /// and elsewhere only where both halves fit at full key size.
     case wideScreens
     /// Split on every screen and orientation, narrowing keys when needed.
     case always
@@ -469,6 +469,56 @@ enum SplitKeyboardMode: String, CaseIterable, Identifiable {
         case .wideScreens: return "Wide screens"
         case .always: return "Always"
         }
+    }
+}
+
+/// The kind of screen the keyboard is on, so a split or single choice can be
+/// remembered separately for each: a closed foldable's outer screen, the
+/// unfolded inner screen upright, and the inner screen sideways each keep
+/// their own. Works the same for any device (iPhone, iPad, foldable).
+enum ScreenConfiguration: String, CaseIterable {
+    case smallPortrait
+    case smallLandscape
+    case largePortrait
+    case largeLandscape
+
+    /// Screens whose short side reaches this are "large": iPads and unfolded
+    /// foldables (669pt). Every other iPhone is under 450pt across.
+    static let largeScreenMinimumShortSide: CGFloat = 600
+
+    static func classify(screenSize: CGSize, bothSizeClassesRegular: Bool) -> ScreenConfiguration {
+        let isLarge = bothSizeClassesRegular
+            || min(screenSize.width, screenSize.height) >= largeScreenMinimumShortSide
+        let isLandscape = screenSize.width > screenSize.height
+        switch (isLarge, isLandscape) {
+        case (false, false): return .smallPortrait
+        case (false, true): return .smallLandscape
+        case (true, false): return .largePortrait
+        case (true, true): return .largeLandscape
+        }
+    }
+
+    var isLarge: Bool { self == .largePortrait || self == .largeLandscape }
+}
+
+enum SplitPreference {
+    /// The split mode to lay out with. A choice saved for this kind of screen
+    /// (from the globe's out-and-back swipe) wins. Otherwise the app setting
+    /// applies, and "Wide screens" splits every large screen, upright too,
+    /// since there is room for a half under each thumb.
+    static func effectiveMode(
+        base: SplitKeyboardMode,
+        configuration: ScreenConfiguration?,
+        savedChoices: [String: Bool]
+    ) -> SplitKeyboardMode {
+        guard let configuration else { return base }
+        if let split = savedChoices[configuration.rawValue] {
+            return split ? .always : .off
+        }
+        if base == .wideScreens, configuration.isLarge {
+            return .always
+        }
+        return base
     }
 }
 

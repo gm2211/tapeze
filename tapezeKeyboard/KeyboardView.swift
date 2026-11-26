@@ -94,7 +94,7 @@ struct KeyboardView: View {
             let fullRailWidth = min(fullAvailableRailWidth, max(fullKeyWidth, minimumControlExtent))
             // Split mode may narrow keys so a half fits under each thumb.
             let splitSizing = SplitSizing.resolve(
-                mode: state.splitMode,
+                mode: state.effectiveSplitMode,
                 totalWidth: totalWidth,
                 fullKeyWidth: fullKeyWidth,
                 fullRailWidth: fullRailWidth,
