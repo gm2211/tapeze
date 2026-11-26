@@ -17,6 +17,9 @@ SHOTS=(
   "01-gesture-keyboard|01-home-light.png|Nine keys.\nEvery letter.|Tap a center letter. Swipe toward the rest.|#e9f7f5|#c9e6e2|#10302d|#3c5b58"
   "02-themes|02-ember-dark.png|Make it yours|Color themes, edge softness and gesture trails.|#1d1a14|#0b0a08|#fbe3bd|#c7b393"
   "03-layout-editor|03-layout.png|Move any letter|Edit the letters, symbols and numbers on every key.|#203241|#121c25|#e6f4f2|#a6bcc4"
+  "04-gesture-trail|04-trail.png|Loop for\ncapitals.|Circle a key to type its capital. Trails show each stroke.|#eef1fb|#cfd8f0|#16213d|#47557a"
+  "05-split-keyboard|05-split-landscape.png|A keyboard under each thumb|Split on wide screens, or swipe out and back on the globe.|#1b2330|#0d1219|#e6eef8|#9fb0c4"
+  "06-numbers|06-numbers.png|Numbers and\nsymbols too.|Tap 123 for digits and punctuation on the same nine keys.|#f8f0e4|#ead8c0|#3a2614|#6b5440"
 )
 
 # output folder | canvas width | canvas height
@@ -24,6 +27,35 @@ SIZES=(
   "iphone-6.9|1320|2868"
   "iphone-6.5|1242|2688"
 )
+
+# Same look on a landscape canvas (width and height swapped), for captures
+# taken with the simulator rotated, such as the split keyboard.
+compose_landscape() {
+  local out_dir=$1 name=$2 raw=$3 title=$4 subtitle=$5 c1=$6 c2=$7 fg=$8 sub=$9
+  local W=${10} H=${11} tmp=${12}
+  local s; s=$(awk "BEGIN{print $H/1320}")
+  lpx() { awk "BEGIN{printf \"%d\", $1*$s}"; }
+  local raw_w raw_h shot_w shot_h radius left
+  raw_w=$(magick identify -format '%w' "$RAW/$raw")
+  raw_h=$(magick identify -format '%h' "$RAW/$raw")
+  shot_w=$(lpx 2040)
+  shot_h=$(awk "BEGIN{printf \"%d\", $shot_w*$raw_h/$raw_w}")
+  radius=$(lpx 80)
+  left=$(( (W - shot_w) / 2 ))
+  magick "$RAW/$raw" -resize "${shot_w}x${shot_h}!" \
+    \( +clone -alpha extract -fill black -colorize 100 -fill white \
+       -draw "roundrectangle 0,0,$((shot_w-1)),$((shot_h-1)),$radius,$radius" \) \
+    -alpha off -compose CopyOpacity -composite "$tmp/shot.png"
+  magick "$tmp/shot.png" \( +clone -background '#00000070' -shadow "60x$(lpx 30)+0+$(lpx 20)" \) \
+    +swap -background none -layers merge +repage "$tmp/shadowed.png"
+  magick -size "${W}x${H}" gradient:"$c1-$c2" \
+    -font "$FONT_TITLE" -fill "$fg" -pointsize "$(lpx 100)" \
+    -gravity northwest -annotate "+$left+$(lpx 70)" "$(printf '%b' "$title")" \
+    -font "$FONT_TEXT" -fill "$sub" -pointsize "$(lpx 46)" \
+    -annotate "+$((left + $(lpx 2)))+$(lpx 205)" "$subtitle" \
+    "$tmp/shadowed.png" -gravity north -geometry "+0+$(( $(lpx 330) - $(lpx 30) ))" -composite \
+    -alpha off -strip "$out_dir/$name.png"
+}
 
 for size in "${SIZES[@]}"; do
   IFS='|' read -r folder W H <<<"$size"
@@ -39,6 +71,14 @@ for size in "${SIZES[@]}"; do
   for spec in "${SHOTS[@]}"; do
     IFS='|' read -r name raw title subtitle c1 c2 fg sub <<<"$spec"
     tmp="$(mktemp -d "${TMPDIR:-/tmp}/tapeze-shot.XXXXXX")"
+    raw_w=$(magick identify -format '%w' "$RAW/$raw")
+    raw_h=$(magick identify -format '%h' "$RAW/$raw")
+    if (( raw_w > raw_h )); then
+      # Landscape capture: a landscape canvas, title on top, the whole screen below.
+      compose_landscape "$out_dir" "$name" "$raw" "$title" "$subtitle" "$c1" "$c2" "$fg" "$sub" "$H" "$W" "$tmp"
+      rm -rf "$tmp"
+      continue
+    fi
     # Rounded screenshot with a soft shadow.
     magick "$RAW/$raw" -resize "${shot_w}x${shot_h}!" \
       \( +clone -alpha extract -fill black -colorize 100 -fill white \
