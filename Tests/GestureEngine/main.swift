@@ -248,5 +248,30 @@ expect("o held after swiping left is c", held(on: oKey, degrees: 180, length: co
 expect("o held after swiping up is u", held(on: oKey, degrees: 90, length: committed), "u")
 expect("e held without moving is e", held(on: eKey, degrees: 0, length: 0), "e")
 
+print("touches are read in the layout the keys are drawn in")
+do {
+    let layout = CGSize(width: 393, height: 300)
+    // In step: the touch view's own coordinates are used as they are.
+    let inStep = TouchPointResolver.point(
+        local: CGPoint(x: 40, y: 50),
+        inWindow: CGPoint(x: 40, y: 600),
+        surfaceSize: layout,
+        layoutSize: layout,
+        layoutOriginInWindow: CGPoint(x: 0, y: 550)
+    )
+    expect("an up-to-date touch view keeps its own point", "\(inStep.x),\(inStep.y)", "40.0,50.0")
+    // iOS grew the keyboard from 250 to 300pt after it appeared. The keys
+    // were redrawn 50pt higher but the touch view kept its old 250pt frame,
+    // so its local point is 50pt off. The window point is not.
+    let stale = TouchPointResolver.point(
+        local: CGPoint(x: 40, y: 0),
+        inWindow: CGPoint(x: 40, y: 600),
+        surfaceSize: CGSize(width: 393, height: 250),
+        layoutSize: layout,
+        layoutOriginInWindow: CGPoint(x: 0, y: 550)
+    )
+    expect("a stale touch view is measured from the window", "\(stale.x),\(stale.y)", "40.0,50.0")
+}
+
 print("\n\(passes) passed, \(failures) failed")
 exit(failures == 0 ? 0 : 1)
