@@ -17,9 +17,9 @@ SHOTS=(
   "01-gesture-keyboard|01-home-light.png|Nine keys.\nEvery letter.|Tap a center letter. Swipe toward the rest.|#e9f7f5|#c9e6e2|#10302d|#3c5b58"
   "02-themes|02-ember-dark.png|Make it yours|Color themes, edge softness and gesture trails.|#1d1a14|#0b0a08|#fbe3bd|#c7b393"
   "03-layout-editor|03-layout.png|Move any letter|Edit the letters, symbols and numbers on every key.|#203241|#121c25|#e6f4f2|#a6bcc4"
-  "04-gesture-trail|04-trail.png|Loop for\ncapitals.|Circle a key to type its capital. Trails show each stroke.|#eef1fb|#cfd8f0|#16213d|#47557a"
+  "04-gesture-trail|04-trail.png|Loop for\ncapitals.|Circle a key to type its capital.\nTrails show each stroke.|#eef1fb|#cfd8f0|#16213d|#47557a"
   "05-split-keyboard|05-split-landscape.png|A keyboard under each thumb|Split on wide screens, or swipe out and back on the globe.|#1b2330|#0d1219|#e6eef8|#9fb0c4"
-  "06-numbers|06-numbers.png|Numbers and\nsymbols too.|Tap 123 for digits and punctuation on the same nine keys.|#f8f0e4|#ead8c0|#3a2614|#6b5440"
+  "06-numbers|06-numbers.png|Numbers and\nsymbols too.|Tap 123 for digits and punctuation\non the same nine keys.|#f8f0e4|#ead8c0|#3a2614|#6b5440"
 )
 
 # output folder | canvas width | canvas height
@@ -52,7 +52,7 @@ compose_landscape() {
     -font "$FONT_TITLE" -fill "$fg" -pointsize "$(lpx 100)" \
     -gravity northwest -annotate "+$left+$(lpx 70)" "$(printf '%b' "$title")" \
     -font "$FONT_TEXT" -fill "$sub" -pointsize "$(lpx 46)" \
-    -annotate "+$((left + $(lpx 2)))+$(lpx 205)" "$subtitle" \
+    -annotate "+$((left + $(lpx 2)))+$(lpx 205)" "$(printf '%b' "$subtitle")" \
     "$tmp/shadowed.png" -gravity north -geometry "+0+$(( $(lpx 330) - $(lpx 30) ))" -composite \
     -alpha off -strip "$out_dir/$name.png"
 }
@@ -90,7 +90,7 @@ for size in "${SIZES[@]}"; do
       -font "$FONT_TITLE" -fill "$fg" -pointsize "$(px 118)" -interline-spacing "$(px -6)" \
       -gravity northwest -annotate "+$(px 110)+$(px 150)" "$(printf '%b' "$title")" \
       -font "$FONT_TEXT" -fill "$sub" -pointsize "$(px 50)" \
-      -annotate "+$(px 112)+$(px 470)" "$subtitle" \
+      -annotate "+$(px 112)+$(px 470)" "$(printf '%b' "$subtitle")" \
       "$tmp/shadowed.png" -gravity north -geometry "+0+$((top - $(px 36)))" -composite \
       -alpha off -strip "$out_dir/$name.png"
     rm -rf "$tmp"
