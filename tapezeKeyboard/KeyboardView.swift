@@ -278,6 +278,25 @@ struct KeyboardView: View {
                             backspaceRailWidth: backspaceRailWidth
                         )
                     )
+                    // After handling, so "typed" includes what this touch typed.
+                    if state.showTouchDebug, phase == .began || phase == .ended {
+                        recordTouchDebug(
+                            phase: phase,
+                            sample: sample,
+                            resolved: point,
+                            dx: dx,
+                            layoutSize: CGSize(width: totalWidth, height: totalHeight),
+                            layoutOriginInWindow: layoutOriginInWindow,
+                            hitLayout: hitLayout,
+                            isSplit: splitMirror != nil
+                        )
+                    }
+                }
+            }
+            .overlay {
+                if state.showTouchDebug {
+                    TouchDebugOverlay(model: state.touchDebug)
+                        .allowsHitTesting(false)
                 }
             }
             .overlay {
@@ -888,6 +907,42 @@ struct KeyboardView: View {
         lastTrackedPoint = nil
         state.gestureTrailPoints = []
         setActiveKey(nil)
+    }
+
+    private func recordTouchDebug(
+        phase: MultiTouchSurface.Phase,
+        sample: MultiTouchSurface.Sample,
+        resolved: CGPoint,
+        dx: CGFloat,
+        layoutSize: CGSize,
+        layoutOriginInWindow: CGPoint,
+        hitLayout: LatticeHitLayout,
+        isSplit: Bool
+    ) {
+        func f(_ v: CGFloat) -> String { String(format: "%.1f", v) }
+        func p(_ pt: CGPoint) -> String { "(\(f(pt.x)),\(f(pt.y)))" }
+        func sz(_ s: CGSize) -> String { "\(f(s.width))x\(f(s.height))" }
+        let mapped = CGPoint(x: resolved.x + dx, y: resolved.y)
+        let key = gestureEngine.keyPosition(at: mapped).map { "r\($0.row)c\($0.col)" } ?? "none"
+        let usedWindow = resolved != sample.local
+        let engineMatches = registeredHitLayout.key?.layout == hitLayout
+        let lines = [
+            "\(phase == .began ? "DOWN" : "UP") key \(key) split \(isSplit) dx \(f(dx))",
+            "raw \(p(sample.local)) mapped \(p(mapped))",
+            "win \(p(sample.inWindow)) origin \(p(layoutOriginInWindow))",
+            "surface \(sz(sample.surfaceSize)) layout \(sz(layoutSize))\(usedWindow ? " WINDOW" : "")",
+            "grid x \(f(hitLayout.originX)) y \(f(hitLayout.originY)) key \(f(hitLayout.keySide))x\(f(hitLayout.rowHeight)) engine \(engineMatches ? "ok" : "STALE")",
+            "typed \(state.touchDebug.typed)",
+        ]
+        var regions = gestureEngine.debugKeyRegions
+            .filter { $0.key.col >= 0 && $0.key.col < gridCols && $0.key.row < gridRows }
+            .map(\.value)
+        regions.append(gestureEngine.debugSpaceBarRegion)
+        state.touchDebug.recordTouch(
+            TouchDebugModel.Mark(raw: sample.local, mapped: mapped),
+            lines: lines,
+            regions: regions
+        )
     }
 
     /// Re-registers the hit regions only when the engine holds a different
@@ -1878,6 +1933,46 @@ private struct GestureTrailView: View {
             style: StrokeStyle(lineWidth: 4, lineCap: .round, lineJoin: .round)
         )
         .shadow(color: .black.opacity(0.2), radius: 2)
+    }
+}
+
+/// Outlines what the gesture engine hit-tests against, and marks the last
+/// touches: yellow where UIKit put the finger, green where it was hit-tested
+/// (on the primary half when the touch was on the split mirror).
+private struct TouchDebugOverlay: View {
+    @ObservedObject var model: TouchDebugModel
+
+    var body: some View {
+        ZStack(alignment: .topLeading) {
+            ForEach(Array(model.regions.enumerated()), id: \.offset) { _, rect in
+                Rectangle()
+                    .stroke(Color.red, lineWidth: 1)
+                    .frame(width: rect.width, height: rect.height)
+                    .position(x: rect.midX, y: rect.midY)
+            }
+            ForEach(Array(model.marks.enumerated()), id: \.offset) { idx, mark in
+                let alpha = Double(idx + 1) / Double(max(model.marks.count, 1))
+                Circle().fill(Color.yellow.opacity(alpha))
+                    .frame(width: 10, height: 10)
+                    .position(mark.raw)
+                Circle().stroke(Color.green.opacity(alpha), lineWidth: 2)
+                    .frame(width: 14, height: 14)
+                    .position(mark.mapped)
+            }
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+        .overlay(alignment: .top) {
+            VStack(alignment: .leading, spacing: 0) {
+                ForEach(Array(model.lines.enumerated()), id: \.offset) { _, line in
+                    Text(line)
+                }
+            }
+            .font(.system(size: 9, design: .monospaced))
+            .foregroundColor(.white)
+            .padding(3)
+            .background(Color.black.opacity(0.7))
+            .fixedSize()
+        }
     }
 }
 
