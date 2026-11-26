@@ -233,5 +233,30 @@ do {
     expect("a stale touch view is measured from the window", "\(stale.x),\(stale.y)", "40.0,50.0")
 }
 
+print("split choice remembered per screen")
+do {
+    func kind(_ w: CGFloat, _ h: CGFloat, regular: Bool = false) -> String {
+        ScreenConfiguration.classify(screenSize: CGSize(width: w, height: h), bothSizeClassesRegular: regular).rawValue
+    }
+    expect("closed foldable / iPhone upright is small portrait", kind(393, 852), "smallPortrait")
+    expect("iPhone sideways is small landscape", kind(852, 393), "smallLandscape")
+    expect("unfolded inner screen upright is large portrait", kind(669, 900), "largePortrait")
+    expect("unfolded inner screen sideways is large landscape", kind(900, 669), "largeLandscape")
+    expect("regular size classes count as large", kind(500, 800, regular: true), "largePortrait")
+
+    func eff(_ base: SplitKeyboardMode, _ c: ScreenConfiguration?, _ saved: [String: Bool] = [:]) -> String {
+        SplitPreference.effectiveMode(base: base, configuration: c, savedChoices: saved).rawValue
+    }
+    expect("large screens split by default, upright too", eff(.wideScreens, .largePortrait), "always")
+    expect("large landscape splits by default", eff(.wideScreens, .largeLandscape), "always")
+    expect("small portrait keeps the wide-screen rule", eff(.wideScreens, .smallPortrait), "wideScreens")
+    expect("unknown screen keeps the app setting", eff(.wideScreens, nil), "wideScreens")
+    expect("app setting Off stays off on large screens", eff(.off, .largeLandscape), "off")
+    let saved = ["largePortrait": false, "smallPortrait": true]
+    expect("a saved single wins on its screen", eff(.wideScreens, .largePortrait, saved), "off")
+    expect("a saved split wins on its screen", eff(.off, .smallPortrait, saved), "always")
+    expect("other screens ignore that choice", eff(.wideScreens, .largeLandscape, saved), "always")
+}
+
 print("\n\(passes) passed, \(failures) failed")
 exit(failures == 0 ? 0 : 1)
