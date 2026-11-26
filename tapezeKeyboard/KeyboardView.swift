@@ -19,6 +19,9 @@ struct KeyboardView: View {
     @State private var spaceBarGutterRegion: CGRect = .zero
     @State private var globeRegion: CGRect = .zero
     @State private var gestureEngine = GestureEngine()
+    /// The layout the engine's hit regions were last built from. A reference
+    /// so checking it on every touch never re-renders the keyboard.
+    @State private var registeredHitLayout = RegisteredHitLayout()
     @State private var activeBridge: ActiveBridge = .none
     @State private var backspacePath: [CGPoint] = []
     @State private var backspaceScrub = BackspaceScrubTracker()
@@ -139,6 +142,8 @@ struct KeyboardView: View {
                 commandBarOnRight: state.commandBarOnRight
             )
 
+            let layoutOriginInWindow = outerGeo.frame(in: .global).origin
+
             ZStack(alignment: .topLeading) {
                 bridgeBackground(
                     totalWidth: totalWidth,
@@ -225,7 +230,21 @@ struct KeyboardView: View {
                 // landed before the first lifted (normal when typing fast) the
                 // second tap was either lost or read as a swipe from the first
                 // key, which dropped letters.
-                MultiTouchSurface { touch, phase, point in
+                MultiTouchSurface { touch, phase, sample in
+                    let point = TouchPointResolver.point(
+                        local: sample.local,
+                        inWindow: sample.inWindow,
+                        surfaceSize: sample.surfaceSize,
+                        layoutSize: CGSize(width: totalWidth, height: totalHeight),
+                        layoutOriginInWindow: layoutOriginInWindow
+                    )
+                    // Hit regions must come from the same layout as this
+                    // touch. They are normally pushed on a layout change, but
+                    // if that update was missed after a resize the keys would
+                    // be hit-tested against the old grid until reopening.
+                    if phase == .began {
+                        syncHitLayout(hitLayout)
+                    }
                     let dx = splitTouchOffset(touch, phase: phase, at: point, mirror: splitMirror)
                     handleTouch(
                         touch,
@@ -260,11 +279,6 @@ struct KeyboardView: View {
         .frame(maxWidth: .infinity, maxHeight: state.effectiveKeyboardHeight)
         .frame(maxHeight: .infinity, alignment: .bottom)
         .ignoresSafeArea(edges: .vertical)
-        .onAppear {
-            gestureEngine.updateKeyRegions(keyRegions)
-            gestureEngine.updateSpaceBarRegion(spaceBarRegion, gutterRegion: spaceBarGutterRegion)
-            gestureEngine.updateGlobeRegion(globeRegion)
-        }
         .onDisappear {
             cancelNumberLongPress()
         }
@@ -828,7 +842,16 @@ struct KeyboardView: View {
         setActiveKey(nil)
     }
 
+    /// Re-registers the hit regions only when the engine holds a different
+    /// layout or layer than the one this touch was drawn with.
+    private func syncHitLayout(_ layout: LatticeHitLayout) {
+        let key = RegisteredHitLayout.Key(layout: layout, layer: state.currentLayer)
+        guard registeredHitLayout.key != key else { return }
+        registerHitLayout(layout)
+    }
+
     private func registerHitLayout(_ layout: LatticeHitLayout) {
+        registeredHitLayout.key = RegisteredHitLayout.Key(layout: layout, layer: state.currentLayer)
         let commandCol = layout.commandBarOnRight ? 3 : -1
         let mainX = layout.originX
         let originY = layout.originY
@@ -1755,6 +1778,15 @@ private struct GestureTrailView: View {
     }
 }
 
+private final class RegisteredHitLayout {
+    struct Key: Equatable {
+        let layout: LatticeHitLayout
+        let layer: KeyboardLayer
+    }
+
+    var key: Key?
+}
+
 private struct LatticeHitLayout: Equatable {
     let originX: CGFloat
     let originY: CGFloat
@@ -1816,7 +1848,15 @@ struct MultiTouchSurface: UIViewRepresentable {
         case began, moved, ended, cancelled
     }
 
-    let onTouch: (ObjectIdentifier, Phase, CGPoint) -> Void
+    /// A finger's position, read both locally and in window coordinates,
+    /// with the size this view had when it was read.
+    struct Sample {
+        let local: CGPoint
+        let inWindow: CGPoint
+        let surfaceSize: CGSize
+    }
+
+    let onTouch: (ObjectIdentifier, Phase, Sample) -> Void
 
     func makeUIView(context: Context) -> TouchView {
         let view = TouchView()
@@ -1829,7 +1869,7 @@ struct MultiTouchSurface: UIViewRepresentable {
     }
 
     final class TouchView: UIView {
-        var onTouch: ((ObjectIdentifier, Phase, CGPoint) -> Void)?
+        var onTouch: ((ObjectIdentifier, Phase, Sample) -> Void)?
 
         override init(frame: CGRect) {
             super.init(frame: frame)
@@ -1862,7 +1902,12 @@ struct MultiTouchSurface: UIViewRepresentable {
         private func report(_ touches: Set<UITouch>, _ phase: Phase) {
             // Fingers that change in the same frame are replayed oldest first.
             for touch in touches.sorted(by: { $0.timestamp < $1.timestamp }) {
-                onTouch?(ObjectIdentifier(touch), phase, touch.location(in: self))
+                let sample = Sample(
+                    local: touch.location(in: self),
+                    inWindow: touch.location(in: nil),
+                    surfaceSize: bounds.size
+                )
+                onTouch?(ObjectIdentifier(touch), phase, sample)
             }
         }
     }

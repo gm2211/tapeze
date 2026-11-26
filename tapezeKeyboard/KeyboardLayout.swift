@@ -582,3 +582,34 @@ struct SplitMirrorLayout: Equatable {
         return inRailColumn ? railOffset : gridOffset
     }
 }
+
+/// Turns a finger's position into the keyboard's layout space, the space the
+/// keys are drawn and hit-tested in.
+///
+/// Touches are read by a UIKit view that SwiftUI places over the keyboard.
+/// When iOS resized the keyboard after it appeared, SwiftUI could redraw the
+/// keys at the new size while that view kept its old frame, so every finger
+/// was measured from the old origin and taps landed a row off until the
+/// keyboard was reopened. When the view's size no longer matches the layout
+/// it is out of date, so the finger is measured from the window instead,
+/// against where SwiftUI says the keyboard really is.
+enum TouchPointResolver {
+    static func point(
+        local: CGPoint,
+        inWindow: CGPoint,
+        surfaceSize: CGSize,
+        layoutSize: CGSize,
+        layoutOriginInWindow: CGPoint
+    ) -> CGPoint {
+        let tolerance: CGFloat = 0.5
+        let surfaceMatchesLayout = abs(surfaceSize.width - layoutSize.width) <= tolerance
+            && abs(surfaceSize.height - layoutSize.height) <= tolerance
+        if surfaceMatchesLayout {
+            return local
+        }
+        return CGPoint(
+            x: inWindow.x - layoutOriginInWindow.x,
+            y: inWindow.y - layoutOriginInWindow.y
+        )
+    }
+}
