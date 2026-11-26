@@ -14,6 +14,32 @@ enum AutocapitalizationMode {
 
 // MARK: - Gesture Trail
 
+/// The last few touches and what they hit, shown by the touch debug overlay.
+final class TouchDebugModel: ObservableObject {
+    struct Mark {
+        /// Where UIKit says the finger is, in the touch view.
+        let raw: CGPoint
+        /// Where it was hit-tested, after stale-view and split corrections.
+        let mapped: CGPoint
+    }
+
+    @Published var lines: [String] = []
+    @Published var marks: [Mark] = []
+    @Published var regions: [CGRect] = []
+    @Published var typed: String = ""
+
+    func recordTouch(_ mark: Mark, lines: [String], regions: [CGRect]) {
+        marks = Array((marks + [mark]).suffix(6))
+        self.lines = lines
+        self.regions = regions
+    }
+
+    func recordTyped(_ text: String) {
+        let shown = text == "\n" ? "⏎" : (text == " " ? "␣" : text)
+        typed = String((typed + shown).suffix(24))
+    }
+}
+
 final class GestureTrailModel: ObservableObject {
     @Published var points: [CGPoint] = []
 }
@@ -33,6 +59,9 @@ class KeyboardState: ObservableObject {
     static let appGroupSuiteName = "group.com.gm2211.tapeze"
     static let settingsDefaults = UserDefaults(suiteName: appGroupSuiteName) ?? .standard
     static let showGestureTrailDefaultsKey = "showGestureTrail"
+    /// Draws the hit regions and each touch over the keyboard, for chasing
+    /// taps that land on the wrong key.
+    static let showTouchDebugDefaultsKey = "showTouchDebug"
     static let keyCornerRadiusDefaultsKey = "keyCornerRadius"
     static let commandBarOnRightDefaultsKey = "commandBarOnRight"
     static let showCenterLabelsDefaultsKey = "showCenterLabels"
@@ -116,6 +145,8 @@ class KeyboardState: ObservableObject {
     @Published var isSymbolOverlayActive: Bool = false
     @Published var showSymbolLabels: Bool = true
     @Published var isURLField: Bool = false
+    @Published var showTouchDebug: Bool = false
+    let touchDebug = TouchDebugModel()
     @Published var showGestureTrail: Bool {
         didSet {
             if persistsSettings {
@@ -242,6 +273,11 @@ class KeyboardState: ObservableObject {
     }
 
     func reloadPersistedAppearanceSettings() {
+        let debug = !persistsSettings ? false : Self.settingsDefaults.bool(forKey: Self.showTouchDebugDefaultsKey)
+        if showTouchDebug != debug {
+            showTouchDebug = debug
+        }
+
         splitMode = Self.storedSplitMode()
         let choices = Self.storedSplitChoices()
         if choices != splitChoices {

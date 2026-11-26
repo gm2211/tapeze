@@ -4,6 +4,7 @@ import UniformTypeIdentifiers
 struct ContentView: View {
     @Environment(\.scenePhase) private var scenePhase
     @AppStorage(KeyboardState.showGestureTrailDefaultsKey, store: KeyboardState.settingsDefaults) private var showGestureTrail = true
+    @AppStorage(KeyboardState.showTouchDebugDefaultsKey, store: KeyboardState.settingsDefaults) private var showTouchDebug = false
     @AppStorage(KeyboardState.keyCornerRadiusDefaultsKey, store: KeyboardState.settingsDefaults) private var keyCornerRadius = Double(KeyboardState.defaultKeyCornerRadius)
     @AppStorage(KeyboardState.themeDefaultsKey, store: KeyboardState.settingsDefaults) private var selectedThemeID = KeyboardTheme.tapeze.id
     @State private var splitMode = KeyboardState.storedSplitMode()
@@ -219,6 +220,14 @@ struct ContentView: View {
 
             Toggle("Show gesture trail", isOn: $showGestureTrail)
                 .font(.subheadline)
+
+            VStack(alignment: .leading, spacing: 2) {
+                Toggle("Show touch debug overlay", isOn: $showTouchDebug)
+                    .font(.subheadline)
+                Text("Outlines the tap targets and marks each touch, to diagnose taps landing on the wrong key.")
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+            }
 
             VStack(alignment: .leading, spacing: 2) {
                 Text("Split keyboard")

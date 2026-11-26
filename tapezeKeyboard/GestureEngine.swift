@@ -43,6 +43,10 @@ class GestureEngine {
 
     var hasActiveGesture: Bool { !points.isEmpty }
 
+    /// What the engine hit-tests against right now, for the touch debug overlay.
+    var debugKeyRegions: [GridPosition: CGRect] { keyRegions }
+    var debugSpaceBarRegion: CGRect { spaceBarRegion }
+
     /// Directions that carry a visible label on a key. A stroke that lands
     /// just outside a labeled direction's 45° sector, in a neighbouring sector
     /// with nothing drawn in it, is a slightly crooked swipe for the label,
