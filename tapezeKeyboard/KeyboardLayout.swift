@@ -715,6 +715,8 @@ struct HoldPicker: Equatable {
 enum ToolColumnItem: Equatable, Hashable {
     case undo, redo, paste, copy
     case emoji(String)
+    /// Opens the full emoji picker. Always the last cell.
+    case allEmoji
 
     var symbol: String? {
         switch self {
@@ -722,6 +724,7 @@ enum ToolColumnItem: Equatable, Hashable {
         case .redo: return "arrow.uturn.forward"
         case .paste: return "doc.on.clipboard"
         case .copy: return "doc.on.doc"
+        case .allEmoji: return "face.smiling"
         case .emoji: return nil
         }
     }
@@ -732,12 +735,189 @@ enum ToolColumnItem: Equatable, Hashable {
         case .redo: return "redo"
         case .paste: return "paste"
         case .copy: return "copy"
+        case .allEmoji: return "all emoji"
         case .emoji: return nil
         }
     }
 
     static func items(emoji: [String]) -> [ToolColumnItem] {
-        [.undo, .redo, .paste, .copy] + emoji.map { .emoji($0) }
+        ToolColumnConfig.default.items(recents: emoji)
+    }
+}
+
+/// What the tool column shows, in what order, and what it does with spare
+/// width. Chosen in the app's Left column screen and stored in the app group
+/// so the keyboard can read it.
+struct ToolColumnConfig: Codable, Equatable {
+    enum Entry: String, Codable, CaseIterable, Identifiable {
+        case undo, redo, paste, copy, pinnedEmoji, recentEmoji
+        var id: String { rawValue }
+
+        var title: String {
+            switch self {
+            case .undo: return "Undo"
+            case .redo: return "Redo"
+            case .paste: return "Paste"
+            case .copy: return "Copy"
+            case .pinnedEmoji: return "Pinned emoji"
+            case .recentEmoji: return "Most-used emoji"
+            }
+        }
+
+        var symbol: String {
+            switch self {
+            case .undo: return "arrow.uturn.backward"
+            case .redo: return "arrow.uturn.forward"
+            case .paste: return "doc.on.clipboard"
+            case .copy: return "doc.on.doc"
+            case .pinnedEmoji: return "star"
+            case .recentEmoji: return "clock"
+            }
+        }
+    }
+
+    struct Slot: Codable, Equatable, Identifiable {
+        var entry: Entry
+        var isOn: Bool
+        var id: String { entry.rawValue }
+    }
+
+    /// What the column does with width the keys leave over.
+    enum SpareWidth: String, Codable, CaseIterable, Identifiable {
+        case twoColumns, oneColumn, widen
+        var id: String { rawValue }
+
+        var title: String {
+            switch self {
+            case .twoColumns: return "Two columns when they fit"
+            case .oneColumn: return "Always one column"
+            case .widen: return "Widen the one column"
+            }
+        }
+    }
+
+    var slots: [Slot]
+    var pinnedEmoji: [String]
+    var recentCount: Int
+    var spareWidth: SpareWidth
+
+    static let defaultsKey = "toolColumnConfig"
+    /// Opens the app's Left column screen.
+    static let settingsURL = URL(string: "tapeze://left-column")!
+    static let recentCountRange = 0...24
+
+    static let `default` = ToolColumnConfig(
+        slots: Entry.allCases.map { Slot(entry: $0, isOn: true) },
+        pinnedEmoji: [],
+        recentCount: 12,
+        spareWidth: .twoColumns
+    )
+
+    /// Every entry exactly once, in the stored order, with any entry a newer
+    /// version added appended at the end; counts kept in range.
+    func normalized() -> ToolColumnConfig {
+        var seen = Set<Entry>()
+        var slots = self.slots.filter { seen.insert($0.entry).inserted }
+        for entry in Entry.allCases where !seen.contains(entry) {
+            slots.append(Slot(entry: entry, isOn: true))
+        }
+        var pinnedSeen = Set<String>()
+        let pinned = pinnedEmoji.filter { !$0.isEmpty && pinnedSeen.insert($0).inserted }
+        let count = min(max(recentCount, Self.recentCountRange.lowerBound), Self.recentCountRange.upperBound)
+        return ToolColumnConfig(slots: slots, pinnedEmoji: pinned, recentCount: count, spareWidth: spareWidth)
+    }
+
+    static func load(from defaults: UserDefaults) -> ToolColumnConfig {
+        guard let data = defaults.data(forKey: defaultsKey),
+              let config = try? JSONDecoder().decode(ToolColumnConfig.self, from: data) else {
+            return .default
+        }
+        return config.normalized()
+    }
+
+    func save(to defaults: UserDefaults) {
+        if let data = try? JSONEncoder().encode(normalized()) {
+            defaults.set(data, forKey: Self.defaultsKey)
+        }
+    }
+
+    func isOn(_ entry: Entry) -> Bool {
+        slots.first { $0.entry == entry }?.isOn ?? false
+    }
+
+    /// The column's cells: the chosen entries in order, recents without the
+    /// pinned ones, and the All emoji button last.
+    func items(recents: [String]) -> [ToolColumnItem] {
+        var items: [ToolColumnItem] = []
+        for slot in slots where slot.isOn {
+            switch slot.entry {
+            case .undo: items.append(.undo)
+            case .redo: items.append(.redo)
+            case .paste: items.append(.paste)
+            case .copy: items.append(.copy)
+            case .pinnedEmoji:
+                items += pinnedEmoji.map { .emoji($0) }
+            case .recentEmoji:
+                let pinned = isOn(.pinnedEmoji) ? Set(pinnedEmoji) : []
+                items += recents.filter { !pinned.contains($0) }.prefix(recentCount).map { .emoji($0) }
+            }
+        }
+        items.append(.allEmoji)
+        return items
+    }
+}
+
+/// How wide the tool column is and how many cells sit side by side, given the
+/// width the keys and the backspace rail leave over. Width the column can't
+/// use becomes an empty stripe on its outer edge, never next to the rail.
+enum ToolColumnLayout {
+    /// Narrowest cell worth splitting into two columns for.
+    static let minimumCellWidth: CGFloat = 60
+
+    struct Resolved: Equatable {
+        var columns: Int
+        var width: CGFloat
+        var stripe: CGFloat
+    }
+
+    static func resolve(available: CGFloat, mode: ToolColumnConfig.SpareWidth, gap: CGFloat) -> Resolved {
+        let one = ToolColumnMetrics.width
+        guard available > one else {
+            return Resolved(columns: 1, width: max(available, 0), stripe: 0)
+        }
+        switch mode {
+        case .widen:
+            return Resolved(columns: 1, width: available, stripe: 0)
+        case .oneColumn:
+            return Resolved(columns: 1, width: one, stripe: available - one)
+        case .twoColumns:
+            let twoMinimum = minimumCellWidth * 2 + gap
+            guard available >= twoMinimum else {
+                return Resolved(columns: 1, width: one, stripe: available - one)
+            }
+            let width = min(available, one * 2 + gap)
+            return Resolved(columns: 2, width: width, stripe: available - width)
+        }
+    }
+
+    static func rowCount(itemCount: Int, columns: Int) -> Int {
+        let columns = max(columns, 1)
+        return (itemCount + columns - 1) / columns
+    }
+
+    /// Cell under a point in column coordinates, or nil past the last item.
+    static func index(
+        at point: CGPoint, offset: CGFloat, rowHeight: CGFloat,
+        width: CGFloat, columns: Int, itemCount: Int
+    ) -> Int? {
+        let columns = max(columns, 1)
+        guard let row = ToolColumnMetrics.index(
+            atY: point.y, offset: offset, rowHeight: rowHeight,
+            itemCount: rowCount(itemCount: itemCount, columns: columns)
+        ) else { return nil }
+        let column = min(max(Int(point.x / max(width / CGFloat(columns), 1)), 0), columns - 1)
+        let index = row * columns + column
+        return index < itemCount ? index : nil
     }
 }
 
@@ -796,7 +976,7 @@ enum EmojiUsage {
     static let countsKey = "toolColumnEmojiCounts"
     static let visibleCount = 12
 
-    static func ranked(counts: [String: Int]) -> [String] {
+    static func ranked(counts: [String: Int], limit: Int = visibleCount) -> [String] {
         let pool = defaults + counts.keys.filter { !defaults.contains($0) }.sorted()
         let order = Dictionary(uniqueKeysWithValues: pool.enumerated().map { ($1, $0) })
         return pool
@@ -804,8 +984,154 @@ enum EmojiUsage {
                 let l = counts[lhs] ?? 0, r = counts[rhs] ?? 0
                 return l != r ? l > r : order[lhs]! < order[rhs]!
             }
-            .prefix(visibleCount)
+            .prefix(max(limit, 0))
             .map { $0 }
+    }
+}
+
+// MARK: - Emoji picker
+
+/// The emoji the full picker offers, by category. Built from Unicode ranges
+/// and kept to code points the system draws as emoji, so the list follows the
+/// iOS version without a hand-kept table.
+enum EmojiCatalog {
+    struct Category: Identifiable, Equatable {
+        let id: String
+        let icon: String
+        let emoji: [String]
+    }
+
+    static let recentID = "recent"
+
+    private static func build(_ ranges: [ClosedRange<UInt32>], extra: [String] = []) -> [String] {
+        var seen = Set<String>()
+        var result: [String] = []
+        for string in extra where seen.insert(string).inserted { result.append(string) }
+        for range in ranges {
+            for value in range {
+                guard let scalar = Unicode.Scalar(value),
+                      scalar.properties.isEmojiPresentation else { continue }
+                let string = String(Character(scalar))
+                if seen.insert(string).inserted { result.append(string) }
+            }
+        }
+        return result
+    }
+
+    static let categories: [Category] = [
+        Category(id: "smileys", icon: "😀", emoji: build([
+            0x1F600...0x1F637, 0x1F641...0x1F644, 0x1F910...0x1F915, 0x1F917...0x1F92F,
+            0x1F970...0x1F97A, 0x1F9D0...0x1F9D0, 0x1FAE0...0x1FAE8,
+            0x1F44B...0x1F450, 0x1F64C...0x1F64F, 0x1F590...0x1F596, 0x1F918...0x1F91F,
+            0x1F932...0x1F933, 0x1FAF0...0x1FAF8, 0x1F4AA...0x1F4AA,
+            0x1F466...0x1F469, 0x1F474...0x1F478, 0x1F47C...0x1F47C, 0x1F9D1...0x1F9D3,
+            0x1F648...0x1F64A, 0x1F638...0x1F640, 0x1F47B...0x1F47F, 0x1F480...0x1F480,
+            0x1F4A9...0x1F4A9, 0x1F916...0x1F916,
+        ])),
+        Category(id: "nature", icon: "🐻", emoji: build([
+            0x1F400...0x1F43F, 0x1F980...0x1F9AE, 0x1F330...0x1F344, 0x1F490...0x1F490,
+            0x1F33F...0x1F33F, 0x1FAB0...0x1FABD, 0x1F30D...0x1F31F, 0x1F308...0x1F308,
+            0x2B50...0x2B50, 0x26A1...0x26A1, 0x2744...0x2744, 0x1F30A...0x1F30A,
+        ])),
+        Category(id: "food", icon: "🍔", emoji: build([
+            0x1F345...0x1F37F, 0x1F950...0x1F96F, 0x1F9C0...0x1F9CB, 0x2615...0x2615,
+            0x1FAD0...0x1FADB,
+        ])),
+        Category(id: "activity", icon: "⚽️", emoji: build([
+            0x26BD...0x26BE, 0x1F3C0...0x1F3CA, 0x1F3A3...0x1F3BD, 0x1F94A...0x1F94F,
+            0x1F3AF...0x1F3AF, 0x1F396...0x1F39F, 0x1F947...0x1F949, 0x1F3CF...0x1F3D3,
+        ])),
+        Category(id: "travel", icon: "🚗", emoji: build([
+            0x1F680...0x1F6C5, 0x1F6EB...0x1F6FC, 0x1F3E0...0x1F3F0, 0x1F5FB...0x1F5FF,
+            0x26F0...0x26FD,
+        ])),
+        Category(id: "objects", icon: "💡", emoji: build([
+            0x1F4A1...0x1F4A1, 0x1F4BB...0x1F4FC, 0x1F50B...0x1F52E, 0x231A...0x231B,
+            0x23F0...0x23F3, 0x1F380...0x1F393, 0x1F9F0...0x1F9FF, 0x1FA70...0x1FA7C,
+        ])),
+        Category(id: "symbols", icon: "❤️", emoji: build([
+            0x1F493...0x1F49F, 0x1F9E1...0x1F9E1, 0x1F90D...0x1F90E, 0x1F5A4...0x1F5A4,
+            0x1FA75...0x1FA77, 0x1F4AF...0x1F4AF, 0x1F4A2...0x1F4A8, 0x1F4AB...0x1F4AB,
+            0x2705...0x2705, 0x274C...0x274C, 0x2728...0x2728, 0x2753...0x2757,
+            0x1F534...0x1F539, 0x1F7E0...0x1F7EB, 0x2795...0x2797,
+        ], extra: ["❤️"])),
+    ]
+}
+
+/// Where everything in the emoji picker sits: a scrolling grid with each
+/// category starting on a new row, and a bar along the bottom with ABC, the
+/// category tabs and backspace.
+struct EmojiPickerLayout: Equatable {
+    static let preferredCellSize: CGFloat = 42
+    static let barHeight: CGFloat = 40
+    static let abcWidth: CGFloat = 52
+    static let backspaceWidth: CGFloat = 48
+
+    enum BarTarget: Equatable {
+        case abc, backspace, category(Int)
+    }
+
+    let size: CGSize
+    let sections: [[String]]
+    let columns: Int
+    let cellWidth: CGFloat
+    let cellHeight: CGFloat
+    /// First row of each section.
+    let sectionStartRows: [Int]
+    let rowCount: Int
+
+    init(size: CGSize, sections: [[String]]) {
+        self.size = size
+        self.sections = sections
+        let columns = max(Int(size.width / Self.preferredCellSize), 1)
+        self.columns = columns
+        cellWidth = size.width / CGFloat(columns)
+        cellHeight = Self.preferredCellSize
+        var starts: [Int] = []
+        var row = 0
+        for section in sections {
+            starts.append(row)
+            row += max((section.count + columns - 1) / columns, 1)
+        }
+        sectionStartRows = starts
+        rowCount = row
+    }
+
+    var gridHeight: CGFloat { max(size.height - Self.barHeight, 0) }
+
+    var maxOffset: CGFloat {
+        max(CGFloat(rowCount) * cellHeight - gridHeight, 0)
+    }
+
+    func offset(forSection index: Int) -> CGFloat {
+        guard sectionStartRows.indices.contains(index) else { return 0 }
+        return min(CGFloat(sectionStartRows[index]) * cellHeight, maxOffset)
+    }
+
+    /// The section showing at the top of the grid.
+    func section(atOffset offset: CGFloat) -> Int {
+        let row = Int((offset + cellHeight / 2) / cellHeight)
+        return sectionStartRows.lastIndex { $0 <= row } ?? 0
+    }
+
+    /// Emoji under a point in picker coordinates, if the point is on the grid.
+    func emoji(at point: CGPoint, offset: CGFloat) -> String? {
+        guard point.y >= 0, point.y < gridHeight, point.x >= 0, point.x < size.width else { return nil }
+        let row = Int((point.y + offset) / cellHeight)
+        let column = min(Int(point.x / cellWidth), columns - 1)
+        guard let section = sectionStartRows.lastIndex(where: { $0 <= row }) else { return nil }
+        let index = (row - sectionStartRows[section]) * columns + column
+        return sections[section].indices.contains(index) ? sections[section][index] : nil
+    }
+
+    func barTarget(at point: CGPoint) -> BarTarget? {
+        guard point.y >= gridHeight else { return nil }
+        if point.x < Self.abcWidth { return .abc }
+        if point.x >= size.width - Self.backspaceWidth { return .backspace }
+        let tabsWidth = size.width - Self.abcWidth - Self.backspaceWidth
+        guard !sections.isEmpty, tabsWidth > 0 else { return nil }
+        let index = Int((point.x - Self.abcWidth) / (tabsWidth / CGFloat(sections.count)))
+        return .category(min(max(index, 0), sections.count - 1))
     }
 }
 
