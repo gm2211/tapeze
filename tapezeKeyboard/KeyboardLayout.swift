@@ -738,3 +738,184 @@ enum TouchPointResolver {
         )
     }
 }
+
+// MARK: - Tool Column
+
+/// What the scrolling column beside the keys holds, top to bottom.
+enum ToolColumnItem: Equatable, Hashable {
+    case undo, redo, paste, copy
+    case emoji(String)
+
+    var symbol: String? {
+        switch self {
+        case .undo: return "arrow.uturn.backward"
+        case .redo: return "arrow.uturn.forward"
+        case .paste: return "doc.on.clipboard"
+        case .copy: return "doc.on.doc"
+        case .emoji: return nil
+        }
+    }
+
+    var caption: String? {
+        switch self {
+        case .undo: return "undo"
+        case .redo: return "redo"
+        case .paste: return "paste"
+        case .copy: return "copy"
+        case .emoji: return nil
+        }
+    }
+
+    static func items(emoji: [String]) -> [ToolColumnItem] {
+        [.undo, .redo, .paste, .copy] + emoji.map { .emoji($0) }
+    }
+}
+
+/// Geometry of the tool column's wheel: fixed rows that scroll vertically and
+/// come to rest on whole rows.
+enum ToolColumnMetrics {
+    static let width: CGFloat = 66
+    static let rowHeight: CGFloat = 60
+    /// Space above the first row and below the last.
+    static let edgeInset: CGFloat = 3
+    /// Movement under which a touch on the column is a tap, not a scroll.
+    static let tapSlop: CGFloat = 10
+    /// How far a flick carries on, in seconds of its release speed.
+    static let momentum: CGFloat = 0.22
+
+    static func contentHeight(itemCount: Int) -> CGFloat {
+        CGFloat(itemCount) * rowHeight + edgeInset * 2
+    }
+
+    static func maxOffset(itemCount: Int, height: CGFloat) -> CGFloat {
+        max(contentHeight(itemCount: itemCount) - height, 0)
+    }
+
+    /// Row under `y` (column coordinates) when the wheel is scrolled by `offset`.
+    static func index(atY y: CGFloat, offset: CGFloat, itemCount: Int) -> Int? {
+        let raw = (y + offset - edgeInset) / rowHeight
+        guard raw >= 0 else { return nil }
+        let index = Int(raw)
+        return index < itemCount ? index : nil
+    }
+
+    /// Offset while dragging: past either end the wheel gives way slowly.
+    static func dragged(_ offset: CGFloat, itemCount: Int, height: CGFloat) -> CGFloat {
+        let maxOffset = maxOffset(itemCount: itemCount, height: height)
+        if offset < 0 { return offset / 3 }
+        if offset > maxOffset { return maxOffset + (offset - maxOffset) / 3 }
+        return offset
+    }
+
+    /// Where a released wheel comes to rest: carried on by its speed (points
+    /// per second, positive scrolls further down the list), snapped to a whole
+    /// row, and kept inside the content.
+    static func resting(offset: CGFloat, velocity: CGFloat, itemCount: Int, height: CGFloat) -> CGFloat {
+        let projected = offset + velocity * momentum
+        let snapped = (projected / rowHeight).rounded() * rowHeight
+        return min(max(snapped, 0), maxOffset(itemCount: itemCount, height: height))
+    }
+}
+
+/// The emoji the tool column offers, most-picked first. The order is worked
+/// out when the keyboard appears, never while it is up, so an emoji does not
+/// move while a thumb is reaching for it.
+enum EmojiUsage {
+    static let defaults = ["😂", "❤️", "👍", "🙏", "😭", "🔥", "😊", "🎉", "👀", "✨", "😅", "💯"]
+    static let countsKey = "toolColumnEmojiCounts"
+    static let visibleCount = 12
+
+    static func ranked(counts: [String: Int]) -> [String] {
+        let pool = defaults + counts.keys.filter { !defaults.contains($0) }.sorted()
+        let order = Dictionary(uniqueKeysWithValues: pool.enumerated().map { ($1, $0) })
+        return pool
+            .sorted { lhs, rhs in
+                let l = counts[lhs] ?? 0, r = counts[rhs] ?? 0
+                return l != r ? l > r : order[lhs]! < order[rhs]!
+            }
+            .prefix(visibleCount)
+            .map { $0 }
+    }
+}
+
+// MARK: - Edit History
+
+/// Undo and redo for what this keyboard typed or deleted. iOS gives keyboards
+/// no access to the app's own undo, so the keyboard keeps its own record and
+/// replays it through the text proxy. Typing a word and the space after it is
+/// one step, like the system keyboard; a backspace run within a word is one.
+struct EditHistory: Equatable {
+    enum Edit: Equatable {
+        case inserted(String)
+        case deleted(String)
+    }
+
+    static let limit = 50
+
+    private(set) var undoStack: [Edit] = []
+    private(set) var redoStack: [Edit] = []
+
+    var canUndo: Bool { !undoStack.isEmpty }
+    var canRedo: Bool { !redoStack.isEmpty }
+
+    /// Whether the last step is still being typed or deleted one character
+    /// at a time, so the next character can join it. A paste or a word
+    /// delete is a step of its own.
+    private var stepIsOpen = false
+
+    mutating func recordInsert(_ text: String) {
+        guard !text.isEmpty else { return }
+        redoStack.removeAll()
+        if text.count == 1, stepIsOpen,
+           case .inserted(let previous)? = undoStack.last,
+           let last = previous.last, !last.isWhitespace {
+            undoStack[undoStack.count - 1] = .inserted(previous + text)
+        } else {
+            push(.inserted(text))
+        }
+        stepIsOpen = text.count == 1
+    }
+
+    mutating func recordDelete(_ text: String) {
+        guard !text.isEmpty else { return }
+        redoStack.removeAll()
+        if text.count == 1, stepIsOpen,
+           case .deleted(let previous)? = undoStack.last,
+           let first = previous.first,
+           !(text.first!.isWhitespace && !first.isWhitespace) {
+            undoStack[undoStack.count - 1] = .deleted(text + previous)
+        } else {
+            push(.deleted(text))
+        }
+        stepIsOpen = text.count == 1
+    }
+
+    /// The step to reverse, moved onto the redo stack.
+    mutating func takeUndo() -> Edit? {
+        stepIsOpen = false
+        guard let edit = undoStack.popLast() else { return nil }
+        redoStack.append(edit)
+        return edit
+    }
+
+    /// The step to repeat, moved back onto the undo stack.
+    mutating func takeRedo() -> Edit? {
+        stepIsOpen = false
+        guard let edit = redoStack.popLast() else { return nil }
+        undoStack.append(edit)
+        return edit
+    }
+
+    mutating func reset() {
+        stepIsOpen = false
+        undoStack.removeAll()
+        redoStack.removeAll()
+    }
+
+    private mutating func push(_ edit: Edit) {
+        undoStack.append(edit)
+        if undoStack.count > Self.limit {
+            undoStack.removeFirst(undoStack.count - Self.limit)
+        }
+    }
+}
