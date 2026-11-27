@@ -20,9 +20,9 @@ class KeyboardViewController: UIInputViewController {
 
     override func viewDidLoad() {
         super.viewDidLoad()
-        // Tapeze has its own mic key, so iOS hides its dictation button in
-        // the strip under the keyboard.
-        hasDictationKey = true
+        // Tapeze has its own mic key, but iOS's dictation button in the strip
+        // under the keyboard (portrait only) stays too: hasDictationKey is
+        // left false so both are offered.
         configureTransparentBackgrounds()
 
         let heightConstraint = view.heightAnchor.constraint(equalToConstant: keyboardState.effectiveKeyboardHeight)
