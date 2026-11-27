@@ -992,3 +992,187 @@ class GestureEngine {
         points.map { distance(start, $0) }.max() ?? 0
     }
 }
+
+// MARK: - Space Bar Cursor Control
+
+/// Follows a finger on the space bar while it is still down and turns its
+/// motion into cursor moves, in one of three ways:
+///
+/// - A quick flick left or right is left alone here: `GestureEngine` reads it
+///   on lift as a one-character move, as before.
+/// - A quick back-and-forth, or a small circle, moves one word for every
+///   out-and-back. A back-and-forth moves the way its first leg went; a
+///   circle moves right when it turns clockwise and left when it turns
+///   counter-clockwise.
+/// - A slow drag, or a hold followed by a drag, works like a trackpad: once
+///   the finger has been down for `trackpadDelay`, the cursor follows it one
+///   character per `trackpadStep` points.
+///
+/// A stroke that heads mostly upward is vetoed and left to `GestureEngine`,
+/// so swipe up (symbols) and swipe up and back (key labels) keep working.
+struct SpaceCursorTracker {
+    enum Mode: Equatable {
+        case undecided, trackpad, word, vetoed
+    }
+
+    enum Move: Equatable {
+        case characters(Int)
+        case words(Int)
+    }
+
+    /// How long the finger must be down before horizontal motion drives the
+    /// cursor directly. Flicks and quick scrubs finish their first leg well
+    /// inside this; someone sliding the cursor into place is still going.
+    static let trackpadDelay: TimeInterval = 0.30
+    /// Points of finger travel per character in trackpad mode.
+    static let trackpadStep: CGFloat = 10
+    /// Travel before trackpad mode moves the cursor at all, so a held space
+    /// press whose thumb rolls a little still types a space.
+    static let trackpadDeadZone: CGFloat = 14
+    /// Horizontal travel that counts as one leg of a back-and-forth. Above
+    /// the one-way roll of a thumb pressing the bar, below a short wiggle.
+    static let scrubLeg: CGFloat = 22
+    /// Travel that sets which way the first leg goes. Lower than `scrubLeg`
+    /// so a small circle, which strays only its radius from where it began,
+    /// still has a first leg; the reversal must still cover `scrubLeg`.
+    static let scrubStart: CGFloat = 14
+    /// Upward travel that marks a stroke as a swipe up, not cursor control,
+    /// when it is also well over twice the stroke's width. A circle drawn
+    /// from its bottom rises at most twice its width before it reverses.
+    static let upwardVeto: CGFloat = 30
+
+    private(set) var mode: Mode = .undecided
+    /// True once this stroke has moved the cursor, so lifting must not also
+    /// type a space or a one-character flick.
+    private(set) var didMoveCursor = false
+
+    private var start: CGPoint = .zero
+    private var startTime: TimeInterval = 0
+    private var points: [CGPoint] = []
+    private var minX: CGFloat = 0
+    private var maxX: CGFloat = 0
+    private var minY: CGFloat = 0
+
+    // Back-and-forth state.
+    private var legDirection: CGFloat = 0
+    private var legExtremeX: CGFloat = 0
+    private var reversals = 0
+    private var wordDirection: Int = 0
+
+    // Trackpad state.
+    private var trackpadAnchorX: CGFloat?
+    private var trackpadMoved = 0
+
+    var isActive: Bool { mode == .trackpad || mode == .word }
+
+    mutating func begin(at point: CGPoint, time: TimeInterval) {
+        self = SpaceCursorTracker()
+        start = point
+        startTime = time
+        points = [point]
+        minX = point.x
+        maxX = point.x
+        minY = point.y
+    }
+
+    /// Feeds one finger sample and returns the cursor move it causes, if any.
+    mutating func observe(_ point: CGPoint, time: TimeInterval) -> Move? {
+        guard !points.isEmpty, mode != .vetoed else { return nil }
+        points.append(point)
+        minX = min(minX, point.x)
+        maxX = max(maxX, point.x)
+        minY = min(minY, point.y)
+
+        if !didMoveCursor, mode != .word {
+            let upward = start.y - minY
+            if upward >= Self.upwardVeto, upward > (maxX - minX) * 2.5 {
+                mode = .vetoed
+                return nil
+            }
+        }
+
+        switch mode {
+        case .vetoed:
+            return nil
+        case .word:
+            return trackScrub(point)
+        case .trackpad:
+            return trackpad(point)
+        case .undecided:
+            if let move = trackScrub(point) {
+                return move
+            }
+            if time - startTime >= Self.trackpadDelay {
+                mode = .trackpad
+                return trackpad(point)
+            }
+            return nil
+        }
+    }
+
+    private mutating func trackpad(_ point: CGPoint) -> Move? {
+        let dx = point.x - start.x
+        if trackpadAnchorX == nil {
+            // Horizontal must lead, or a slow swipe up would drag the cursor.
+            guard abs(dx) >= Self.trackpadDeadZone, abs(dx) > start.y - minY else { return nil }
+            // Start one step back so crossing the dead zone moves at once.
+            trackpadAnchorX = point.x - (dx > 0 ? 1 : -1) * Self.trackpadStep
+        }
+        guard let anchor = trackpadAnchorX else { return nil }
+        let target = Int((point.x - anchor) / Self.trackpadStep)
+        let delta = target - trackpadMoved
+        guard delta != 0 else { return nil }
+        trackpadMoved = target
+        didMoveCursor = true
+        return .characters(delta)
+    }
+
+    /// Counts horizontal reversals; every out-and-back is one word.
+    private mutating func trackScrub(_ point: CGPoint) -> Move? {
+        if legDirection == 0 {
+            let dx = point.x - start.x
+            guard abs(dx) >= Self.scrubStart else { return nil }
+            legDirection = dx > 0 ? 1 : -1
+            legExtremeX = point.x
+            return nil
+        }
+        if (point.x - legExtremeX) * legDirection > 0 {
+            legExtremeX = point.x
+            return nil
+        }
+        guard (legExtremeX - point.x) * legDirection >= Self.scrubLeg else { return nil }
+
+        reversals += 1
+        if reversals == 1 {
+            wordDirection = firstScrubDirection()
+        }
+        legDirection = -legDirection
+        legExtremeX = point.x
+        guard reversals % 2 == 1 else { return nil }
+        mode = .word
+        didMoveCursor = true
+        return .words(wordDirection)
+    }
+
+    /// A round path moves by its turning sense (clockwise is right); a
+    /// straight back-and-forth moves the way its first leg went.
+    private func firstScrubDirection() -> Int {
+        var area: CGFloat = 0
+        var maxY = points[0].y
+        for i in points.indices {
+            let a = points[i]
+            let b = points[(i + 1) % points.count]
+            area += a.x * b.y - b.x * a.y
+            maxY = max(maxY, a.y)
+        }
+        area /= 2
+        let width = maxX - minX
+        let height = maxY - minY
+        // In screen coordinates (y down) a positive area turns clockwise.
+        if height >= width * 0.4, abs(area) >= width * height * 0.35 {
+            return area > 0 ? 1 : -1
+        }
+        // Called before `legDirection` flips, so it is still the first leg's.
+        return legDirection > 0 ? 1 : -1
+    }
+}
