@@ -20,6 +20,9 @@ class KeyboardViewController: UIInputViewController {
 
     override func viewDidLoad() {
         super.viewDidLoad()
+        // Tapeze has its own mic key, but iOS's dictation button in the strip
+        // under the keyboard (portrait only) stays too: hasDictationKey is
+        // left false so both are offered.
         configureTransparentBackgrounds()
 
         let heightConstraint = view.heightAnchor.constraint(equalToConstant: keyboardState.effectiveKeyboardHeight)
@@ -78,7 +81,11 @@ class KeyboardViewController: UIInputViewController {
             },
             onToolAction: { [weak self] action in
                 self?.performToolAction(action)
-            }
+            },
+            onDictation: { [weak self] in
+                self?.startDictation()
+            },
+            usesHostTouchSurface: true
         )
 
         let hc = UIHostingController(rootView: keyboardView)
@@ -105,8 +112,65 @@ class KeyboardViewController: UIInputViewController {
         ])
 
         hostingController = hc
+        installTouchSurface()
         bindKeyboardHeight()
         updateInputContext()
+
+        // Coming back from the app after dictating: the host app becomes
+        // active again, but the keyboard may never disappear and reappear.
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(hostDidBecomeActive),
+            name: .NSExtensionHostDidBecomeActive,
+            object: nil
+        )
+    }
+
+    deinit {
+        NotificationCenter.default.removeObserver(self)
+    }
+
+    // MARK: - Dictation
+
+    /// Keyboards can't record audio, so open the Tapeze app, which listens and
+    /// leaves the text for us. Apple's DTS confirms a keyboard may open its
+    /// own app; it needs Full Access on iOS 26.
+    private func startDictation() {
+        DictationBridge.clear()
+        openContainingApp(DictationBridge.dictateURL)
+    }
+
+    /// `UIApplication.open` is marked unavailable to extensions at compile
+    /// time, so find the extension's UIApplication on the responder chain and
+    /// call it through the runtime, the way Apple's DTS sample does.
+    private func openContainingApp(_ url: URL) {
+        let selector = NSSelectorFromString("openURL:options:completionHandler:")
+        var responder: UIResponder? = self
+        while let current = responder {
+            if let application = current as? UIApplication, application.responds(to: selector) {
+                typealias OpenURL = @convention(c) (
+                    NSObject, Selector, NSURL, NSDictionary, (@convention(block) (Bool) -> Void)?
+                ) -> Void
+                let open = unsafeBitCast(application.method(for: selector), to: OpenURL.self)
+                open(application, selector, url as NSURL, NSDictionary(), nil)
+                return
+            }
+            responder = current.next
+        }
+    }
+
+    @objc private func hostDidBecomeActive() {
+        insertPendingDictation()
+    }
+
+    private func insertPendingDictation() {
+        guard let text = DictationBridge.takePendingText() else { return }
+        let insertion = DictationBridge.textToInsert(
+            text,
+            after: textDocumentProxy.documentContextBeforeInput
+        )
+        textDocumentProxy.insertText(insertion)
+        scheduleInputContextUpdate()
     }
 
     override func viewWillAppear(_ animated: Bool) {
@@ -125,6 +189,7 @@ class KeyboardViewController: UIInputViewController {
         updateDisplayHeightLimit()
         applyKeyboardHeight(keyboardState.effectiveKeyboardHeight, animated: false, force: true)
         updateInputContext()
+        insertPendingDictation()
     }
 
     override func viewDidAppear(_ animated: Bool) {
@@ -146,7 +211,41 @@ class KeyboardViewController: UIInputViewController {
 
     override func viewDidLayoutSubviews() {
         super.viewDidLayoutSubviews()
+        publishMeasuredHeight()
         scheduleHeightCorrectionIfNeeded()
+    }
+
+    /// Touches are read by a plain UIKit view pinned over the whole input
+    /// view, so its frame always matches what is on screen. A view placed by
+    /// SwiftUI could keep an old frame and touch handler after a resize while
+    /// the keys were redrawn at the new size.
+    private func installTouchSurface() {
+        let surface = MultiTouchSurface.TouchView()
+        surface.translatesAutoresizingMaskIntoConstraints = false
+        surface.onTouch = { [weak self] touch, phase, sample in
+            self?.keyboardState.touchHandler?(touch, phase, sample)
+        }
+        view.addSubview(surface)
+        NSLayoutConstraint.activate([
+            surface.leadingAnchor.constraint(equalTo: view.leadingAnchor),
+            surface.trailingAnchor.constraint(equalTo: view.trailingAnchor),
+            surface.topAnchor.constraint(equalTo: view.topAnchor),
+            surface.bottomAnchor.constraint(equalTo: view.bottomAnchor),
+        ])
+    }
+
+    /// Hands the height UIKit really gave us to SwiftUI. Published on the next
+    /// run loop turn so no SwiftUI update starts inside this layout pass.
+    private func publishMeasuredHeight() {
+        let height = view.bounds.height
+        guard height > 1 else { return }
+        DispatchQueue.main.async { [weak self] in
+            guard let self else { return }
+            let current = self.keyboardState.measuredHostHeight ?? -1
+            if abs(current - height) > 0.5 {
+                self.keyboardState.measuredHostHeight = height
+            }
+        }
     }
 
     /// On the iPhone Duo's inner display the keyboard sometimes came up at a

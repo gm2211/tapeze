@@ -20,6 +20,21 @@
 	<string>$(MARKETING_VERSION)</string>
 	<key>CFBundleVersion</key>
 	<string>$(CURRENT_PROJECT_VERSION)</string>
+	<key>CFBundleURLTypes</key>
+	<array>
+		<dict>
+			<key>CFBundleURLName</key>
+			<string>com.gm2211.tapeze</string>
+			<key>CFBundleURLSchemes</key>
+			<array>
+				<string>tapeze</string>
+			</array>
+		</dict>
+	</array>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>Tapeze listens while you dictate with the keyboard's mic key, then types what you said.</string>
+	<key>NSSpeechRecognitionUsageDescription</key>
+	<string>Tapeze turns your speech into text when you use the keyboard's mic key.</string>
 	<key>ITSAppUsesNonExemptEncryption</key>
 	<false/>
 	<key>LSRequiresIPhoneOS</key>
