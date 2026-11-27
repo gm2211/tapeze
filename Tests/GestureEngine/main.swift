@@ -298,6 +298,51 @@ do {
     expect("other screens ignore that choice", eff(.wideScreens, .largeLandscape, saved), "always")
 }
 
+print("tool column wheel")
+do {
+    let count = ToolColumnItem.items(emoji: EmojiUsage.defaults).count
+    expect("4 tools + 12 emoji", "\(count)", "16")
+    let h: CGFloat = 294
+    let maxOffset = ToolColumnMetrics.maxOffset(itemCount: count, height: h)
+    expect("content runs past one screen", "\(maxOffset)", "672.0") // 16*60+6-294
+    expect("top row at rest is undo", "\(ToolColumnMetrics.index(atY: 20, offset: 0, itemCount: count) ?? -1)", "0")
+    expect("fourth row at rest is copy", "\(ToolColumnMetrics.index(atY: 200, offset: 0, itemCount: count) ?? -1)", "3")
+    expect("scrolled one row, the top is redo", "\(ToolColumnMetrics.index(atY: 20, offset: 60, itemCount: count) ?? -1)", "1")
+    expect("slow release snaps to the nearest row", "\(ToolColumnMetrics.resting(offset: 95, velocity: 0, itemCount: count, height: h))", "120.0")
+    expect("a flick carries on", "\(ToolColumnMetrics.resting(offset: 60, velocity: 1000, itemCount: count, height: h))", "300.0")
+    expect("a flick never passes the end", "\(ToolColumnMetrics.resting(offset: 600, velocity: 5000, itemCount: count, height: h))", "672.0")
+    expect("pulling above the top gives way slowly", "\(ToolColumnMetrics.dragged(-30, itemCount: count, height: h))", "-10.0")
+}
+
+print("emoji ranking")
+expect("unused: the default order", EmojiUsage.ranked(counts: [:]).joined(), EmojiUsage.defaults.joined())
+expect("most-picked first, ties keep the default order",
+       EmojiUsage.ranked(counts: ["🔥": 3, "🙏": 3, "😂": 1]).prefix(4).joined(), "🙏🔥😂❤️")
+
+print("undo history")
+func steps(_ h: EditHistory) -> String {
+    h.undoStack.map { edit -> String in
+        switch edit { case .inserted(let t): return "+" + t; case .deleted(let t): return "-" + t }
+    }.joined(separator: "|")
+}
+do {
+    var h = EditHistory()
+    for c in "hello " { h.recordInsert(String(c)) }
+    for c in "wor" { h.recordInsert(String(c)) }
+    expect("a word and its space are one step", steps(h), "+hello |+wor")
+    h.recordInsert("PASTED TEXT")
+    h.recordInsert("x")
+    expect("a paste is its own step", steps(h), "+hello |+wor|+PASTED TEXT|+x")
+    var d = EditHistory()
+    for c in "dlrow olleh" { d.recordDelete(String(c)) } // backspacing "hello world" from the end
+    expect("backspace runs group by word", steps(d), "-world|-hello ")
+    let undone = d.takeUndo()
+    expect("undo takes the last step", "\(undone.map { "\($0)" } ?? "nil")", "deleted(\"hello \")")
+    expect("and offers it to redo", "\(d.canRedo)", "true")
+    d.recordInsert("a")
+    expect("new typing clears redo", "\(d.canRedo)", "false")
+}
+
 print("space bar cursor control")
 do {
     /// Plays `points` at `dt` seconds apart and returns the moves it caused.

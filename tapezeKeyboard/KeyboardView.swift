@@ -15,6 +15,8 @@ struct KeyboardView: View {
     /// Moves the cursor by whole words: negative is left, positive right.
     var onMoveCursorByWord: (Int) -> Void = { _ in }
     let onNextKeyboard: (() -> Void)?
+    /// Undo, redo and copy from the tool column.
+    var onToolAction: (ToolColumnAction) -> Void = { _ in }
     var onDictation: (() -> Void)? = nil
 
     @State private var keyRegions: [GridPosition: CGRect] = [:]
@@ -37,6 +39,16 @@ struct KeyboardView: View {
     /// Where the finger last settled. The hold timer restarts whenever the
     /// finger moves away from it, so it only fires once the finger is still.
     @State private var holdAnchor: CGPoint = .zero
+    /// How far the tool column's wheel is scrolled, in points.
+    @State private var toolOffset: CGFloat = 0
+    @State private var toolOffsetLoaded = false
+    /// Wheel offset and finger height when the current column touch began.
+    @State private var toolDragStart: (offset: CGFloat, y: CGFloat)?
+    /// Recent finger heights on the column, for the release speed.
+    @State private var toolSamples: [(y: CGFloat, time: TimeInterval)] = []
+    @State private var toolDidScroll = false
+    /// Row the finger is on, drawn pressed while it stays a tap.
+    @State private var toolPressedIndex: Int?
     @State private var logicalGestureActive = false
     @State private var lastTrackedPoint: CGPoint?
     /// The finger driving the current logical gesture. Other fingers that are
@@ -105,8 +117,6 @@ struct KeyboardView: View {
                 (totalWidth - spacing * CGFloat(gridCols)) / CGFloat(gridCols + 1),
                 1
             )
-            let fullKeyWidth = min(keyHeight * maxKeyAspectRatio, maxKeyWidthByWidth)
-            let fullRailWidth = railWidth(forKeyWidth: fullKeyWidth, totalWidth: totalWidth, minimum: minimumControlExtent)
             /// Each split half keeps MessagEase's 78:72 keys, so whether both
             /// halves fit is judged at that size, not at the stretched one.
             let splitKeyWidth = min(keyHeight * 78.0 / 72.0, maxKeyWidthByWidth)
@@ -118,6 +128,15 @@ struct KeyboardView: View {
                 fullRailWidth: railWidth(forKeyWidth: splitKeyWidth, totalWidth: totalWidth, minimum: minimumControlExtent),
                 spacing: spacing
             )
+            /// One keyboard gets the tool column on the side away from the
+            /// backspace rail; the keys share what is left. A split keyboard
+            /// has no room for it.
+            let showsToolColumn = !resolvedSplit.isSplit
+            let toolColumnWidth: CGFloat = showsToolColumn ? ToolColumnMetrics.width : 0
+            let keysWidth = totalWidth - (showsToolColumn ? toolColumnWidth + spacing : 0)
+            let maxKeyWidthBySingle = max((keysWidth - spacing * CGFloat(gridCols)) / CGFloat(gridCols + 1), 1)
+            let fullKeyWidth = min(keyHeight * maxKeyAspectRatio, maxKeyWidthBySingle)
+            let fullRailWidth = railWidth(forKeyWidth: fullKeyWidth, totalWidth: keysWidth, minimum: minimumControlExtent)
             let splitSizing = resolvedSplit.isSplit
                 ? resolvedSplit
                 : SplitSizing(isSplit: false, keyWidth: fullKeyWidth, railWidth: fullRailWidth)
@@ -164,6 +183,14 @@ struct KeyboardView: View {
             )
 
             let layoutOriginInWindow = outerGeo.frame(in: .global).origin
+            let toolColumnFrame = showsToolColumn
+                ? CGRect(
+                    x: state.commandBarOnRight ? 0 : totalWidth - toolColumnWidth,
+                    y: 0,
+                    width: toolColumnWidth,
+                    height: totalHeight
+                )
+                : .zero
 
             ZStack(alignment: .topLeading) {
                 bridgeBackground(
@@ -190,6 +217,26 @@ struct KeyboardView: View {
                 )
                 .frame(width: mainGridWidth, height: mainGridHeight)
                 .position(x: layoutOriginX + mainGridWidth / 2, y: topInset + mainGridHeight / 2)
+
+                if showsToolColumn {
+                    ToolColumnView(
+                        items: toolItems,
+                        offset: toolOffset,
+                        pressedIndex: toolPressedIndex,
+                        theme: state.theme
+                    )
+                    .frame(width: toolColumnFrame.width, height: toolColumnFrame.height)
+                    .position(x: toolColumnFrame.midX, y: toolColumnFrame.midY)
+                    .allowsHitTesting(false)
+                    .onAppear {
+                        guard !toolOffsetLoaded else { return }
+                        toolOffsetLoaded = true
+                        toolOffset = min(
+                            max(state.toolColumnOffset, 0),
+                            ToolColumnMetrics.maxOffset(itemCount: toolItems.count, height: toolColumnFrame.height)
+                        )
+                    }
+                }
 
                 // Wide screens: a second, draw-only copy on the far side with its
                 // backspace rail on the outer edge. Its touches are shifted onto
@@ -279,7 +326,8 @@ struct KeyboardView: View {
                             keySide: keySide,
                             layoutOriginX: layoutOriginX,
                             mainGridWidth: mainGridWidth,
-                            backspaceRailWidth: backspaceRailWidth
+                            backspaceRailWidth: backspaceRailWidth,
+                            toolColumnFrame: toolColumnFrame
                         )
                     )
                     // After handling, so "typed" includes what this touch typed.
@@ -628,8 +676,13 @@ struct KeyboardView: View {
         rowHeight: CGFloat,
         layoutOriginX: CGFloat,
         mainGridWidth: CGFloat,
-        backspaceRailWidth: CGFloat
+        backspaceRailWidth: CGFloat,
+        toolColumnFrame: CGRect = .zero
     ) -> ActiveBridge {
+        if toolColumnFrame.contains(point) {
+            return .toolColumn
+        }
+
         let keySide = rowHeight
         let mainGridHeight = keySide * CGFloat(gridRows) + spacing * CGFloat(gridRows - 1)
         let gridBottom = stripHeight + mainGridHeight
@@ -775,7 +828,8 @@ struct KeyboardView: View {
             rowHeight: ctx.keySide,
             layoutOriginX: ctx.layoutOriginX,
             mainGridWidth: ctx.mainGridWidth,
-            backspaceRailWidth: ctx.backspaceRailWidth
+            backspaceRailWidth: ctx.backspaceRailWidth,
+            toolColumnFrame: ctx.toolColumnFrame
         )
 
         switch activeBridge {
@@ -789,6 +843,8 @@ struct KeyboardView: View {
             gestureEngine.touchBegan(at: point)
             resetGestureTrail(at: point)
             scheduleHold(at: point, delay: numberHoldDuration)
+        case .toolColumn:
+            beginToolTouch(at: point, frame: ctx.toolColumnFrame)
         case .enter, .zero:
             break
         }
@@ -821,6 +877,8 @@ struct KeyboardView: View {
                 state.gestureTrailPoints = []
             }
             updateActiveKey(at: point)
+        case .toolColumn:
+            moveToolTouch(to: point, frame: ctx.toolColumnFrame)
         case .enter, .zero:
             break
         }
@@ -834,6 +892,9 @@ struct KeyboardView: View {
         setActiveKey(nil)
 
         switch bridge {
+        case .toolColumn:
+            endToolTouch(at: point, frame: ctx.toolColumnFrame)
+
         case .enter:
             onEnter()
             state.gestureTrailPoints = []
@@ -923,6 +984,8 @@ struct KeyboardView: View {
     }
 
     private func abandonStaleGesture() {
+        toolDragStart = nil
+        toolPressedIndex = nil
         gestureEngine.touchCancelled()
         cancelNumberLongPress()
         longPressTriggered = false
@@ -1512,6 +1575,89 @@ struct KeyboardView: View {
         }
         if pos == nil, state.swipeDirection != nil {
             state.swipeDirection = nil
+        }
+    }
+
+    // MARK: - Tool column
+
+    private var toolItems: [ToolColumnItem] {
+        ToolColumnItem.items(emoji: state.toolEmoji)
+    }
+
+    private func beginToolTouch(at point: CGPoint, frame: CGRect) {
+        let now = ProcessInfo.processInfo.systemUptime
+        toolDragStart = (toolOffset, point.y)
+        toolSamples = [(point.y, now)]
+        toolDidScroll = false
+        toolPressedIndex = ToolColumnMetrics.index(
+            atY: point.y - frame.minY, offset: toolOffset, itemCount: toolItems.count
+        )
+    }
+
+    private func moveToolTouch(to point: CGPoint, frame: CGRect) {
+        guard let start = toolDragStart else { return }
+        let dy = point.y - start.y
+        if !toolDidScroll, abs(dy) > ToolColumnMetrics.tapSlop {
+            toolDidScroll = true
+            toolPressedIndex = nil
+        }
+        guard toolDidScroll else { return }
+        // Dragging the finger up moves the list up: further down it.
+        toolOffset = ToolColumnMetrics.dragged(
+            start.offset - dy, itemCount: toolItems.count, height: frame.height
+        )
+        let now = ProcessInfo.processInfo.systemUptime
+        toolSamples.append((point.y, now))
+        toolSamples.removeAll { now - $0.time > 0.1 }
+    }
+
+    private func endToolTouch(at point: CGPoint, frame: CGRect) {
+        defer {
+            toolDragStart = nil
+            toolPressedIndex = nil
+            toolSamples = []
+        }
+        guard toolDragStart != nil else { return }
+        let items = toolItems
+
+        if !toolDidScroll {
+            if let index = ToolColumnMetrics.index(atY: point.y - frame.minY, offset: toolOffset, itemCount: items.count) {
+                performToolItem(items[index])
+            }
+            return
+        }
+
+        var velocity: CGFloat = 0
+        if let first = toolSamples.first, let last = toolSamples.last, last.time - first.time > 0.008 {
+            // Finger moving up (negative dy) scrolls further down the list.
+            velocity = -(last.y - first.y) / CGFloat(last.time - first.time)
+        }
+        let resting = ToolColumnMetrics.resting(
+            offset: toolOffset, velocity: velocity, itemCount: items.count, height: frame.height
+        )
+        withAnimation(.interpolatingSpring(stiffness: 170, damping: 24)) {
+            toolOffset = resting
+        }
+        state.toolColumnOffset = resting
+    }
+
+    private func performToolItem(_ item: ToolColumnItem) {
+        switch item {
+        case .undo:
+            onToolAction(.undo)
+        case .redo:
+            onToolAction(.redo)
+        case .copy:
+            onToolAction(.copy)
+        case .paste:
+            if let content = UIPasteboard.general.string, !content.isEmpty {
+                onCharacter(content)
+                state.afterCharacterInserted()
+            }
+        case .emoji(let emoji):
+            onCharacter(emoji)
+            state.recordEmojiUse(emoji)
+            state.afterCharacterInserted()
         }
     }
 
@@ -2152,6 +2298,7 @@ private struct GestureLayoutContext {
     let layoutOriginX: CGFloat
     let mainGridWidth: CGFloat
     let backspaceRailWidth: CGFloat
+    var toolColumnFrame: CGRect = .zero
 }
 
 private struct BottomControlMetrics {
@@ -2196,7 +2343,13 @@ private struct BackspaceScrubTracker {
 }
 
 enum ActiveBridge: Equatable {
-    case none, backspace, space, zero, enter
+    case none, backspace, space, zero, enter, toolColumn
+}
+
+/// What a tap on the tool column asks the controller to do. Paste and emoji
+/// go through `onCharacter` like any other typing.
+enum ToolColumnAction: Equatable {
+    case undo, redo, copy
 }
 
 /// Extended bridge shape: covers the full keyboard width.
@@ -2380,5 +2533,92 @@ struct HoldPickerView: View {
                 .stroke(theme.keyBorder, lineWidth: 1)
         )
         .offset(x: x, y: y)
+    }
+}
+
+// MARK: - Tool Column View
+
+/// The scrolling wheel beside the keys. Rows shrink and fade toward the top
+/// and bottom edges so it reads as a wheel and the next row always peeks in.
+/// Touches are handled by the keyboard's touch surface, not here.
+private struct ToolColumnView: View {
+    let items: [ToolColumnItem]
+    let offset: CGFloat
+    let pressedIndex: Int?
+    let theme: KeyboardTheme
+
+    var body: some View {
+        GeometryReader { geo in
+            let height = geo.size.height
+            let width = geo.size.width
+            let cell = min(width - 10, ToolColumnMetrics.rowHeight - 4)
+            let maxOffset = ToolColumnMetrics.maxOffset(itemCount: items.count, height: height)
+
+            ZStack(alignment: .topLeading) {
+                theme.emptyColumnBackground
+
+                ForEach(Array(items.enumerated()), id: \.offset) { index, item in
+                    let centerY = ToolColumnMetrics.edgeInset
+                        + CGFloat(index) * ToolColumnMetrics.rowHeight
+                        + ToolColumnMetrics.rowHeight / 2
+                        - offset
+                    let distance = min(abs(centerY - height / 2) / max(height / 2, 1), 1)
+                    toolCell(item, size: cell, pressed: index == pressedIndex)
+                        .scaleEffect(1 - 0.22 * distance * distance)
+                        .opacity(1 - 0.55 * distance * distance)
+                        .position(x: width / 2, y: centerY)
+                }
+
+                // Fade the rows into the edges like a wheel.
+                VStack(spacing: 0) {
+                    LinearGradient(colors: [theme.emptyColumnBackground, theme.emptyColumnBackground.opacity(0)],
+                                   startPoint: .top, endPoint: .bottom)
+                        .frame(height: 22)
+                    Spacer(minLength: 0)
+                    LinearGradient(colors: [theme.emptyColumnBackground.opacity(0), theme.emptyColumnBackground],
+                                   startPoint: .top, endPoint: .bottom)
+                        .frame(height: 22)
+                }
+
+                if maxOffset > 0 {
+                    let track = height - 20
+                    let content = ToolColumnMetrics.contentHeight(itemCount: items.count)
+                    let thumb = max(track * height / content, 16)
+                    let progress = min(max(offset / maxOffset, 0), 1)
+                    Capsule()
+                        .fill(theme.tapColor.opacity(0.55))
+                        .frame(width: 3, height: thumb)
+                        .position(x: width - 3, y: 10 + thumb / 2 + (track - thumb) * progress)
+                }
+            }
+            .clipped()
+        }
+    }
+
+    @ViewBuilder
+    private func toolCell(_ item: ToolColumnItem, size: CGFloat, pressed: Bool) -> some View {
+        VStack(spacing: 2) {
+            if case .emoji(let emoji) = item {
+                Text(emoji).font(.system(size: size * 0.5))
+            } else if let symbol = item.symbol {
+                Image(systemName: symbol)
+                    .font(.system(size: size * 0.32, weight: .medium))
+                    .foregroundColor(theme.specialTextColor)
+                if let caption = item.caption {
+                    Text(caption)
+                        .font(.system(size: 9.5, weight: .medium, design: .rounded))
+                        .foregroundColor(theme.swipeColor)
+                }
+            }
+        }
+        .frame(width: size, height: size)
+        .background(
+            RoundedRectangle(cornerRadius: 10, style: .continuous)
+                .fill(pressed ? theme.activeKeyBackground : theme.keyBackground)
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 10, style: .continuous)
+                .stroke(theme.keyBorder, lineWidth: 1)
+        )
     }
 }

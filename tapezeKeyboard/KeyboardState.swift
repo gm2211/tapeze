@@ -347,6 +347,31 @@ class KeyboardState: ObservableObject {
         isShiftAutomatic = false
     }
 
+    // MARK: - Tool column
+
+    /// Emoji the tool column shows, most-picked first. Re-ranked only when
+    /// the keyboard appears, so nothing moves while it is in use.
+    @Published var toolEmoji: [String] = EmojiUsage.defaults
+
+    /// Where the tool column's wheel was left, restored next time.
+    var toolColumnOffset: CGFloat {
+        get { CGFloat(UserDefaults.standard.double(forKey: Self.toolColumnOffsetKey)) }
+        set { UserDefaults.standard.set(Double(newValue), forKey: Self.toolColumnOffsetKey) }
+    }
+    private static let toolColumnOffsetKey = "toolColumnOffset"
+
+    func reloadToolEmoji() {
+        let counts = UserDefaults.standard.dictionary(forKey: EmojiUsage.countsKey) as? [String: Int] ?? [:]
+        let ranked = EmojiUsage.ranked(counts: counts)
+        if ranked != toolEmoji { toolEmoji = ranked }
+    }
+
+    func recordEmojiUse(_ emoji: String) {
+        var counts = UserDefaults.standard.dictionary(forKey: EmojiUsage.countsKey) as? [String: Int] ?? [:]
+        counts[emoji, default: 0] += 1
+        UserDefaults.standard.set(counts, forKey: EmojiUsage.countsKey)
+    }
+
     func afterCharacterInserted() {
         // Auto-unshift after typing (unless caps locked). The controller
         // re-evaluates autocapitalization right after this, so a capital that

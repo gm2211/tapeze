@@ -15,6 +15,8 @@ class KeyboardViewController: UIInputViewController {
     private var heightCorrectionScheduled = false
     private var heightCorrectionsThisAppearance = 0
     private static let maxHeightCorrectionsPerAppearance = 3
+    /// What this keyboard typed and deleted, for the tool column's undo/redo.
+    private var editHistory = EditHistory()
 
     override func viewDidLoad() {
         super.viewDidLoad()
@@ -39,10 +41,12 @@ class KeyboardViewController: UIInputViewController {
             onCharacter: { [weak self] char in
                 self?.recordTypedForDebug(char)
                 self?.textDocumentProxy.insertText(char)
+                self?.editHistory.recordInsert(char)
                 self?.scheduleInputContextUpdate()
             },
             onBackspace: { [weak self] in
                 self?.recordTypedForDebug("⌫")
+                self?.recordBackspace()
                 self?.textDocumentProxy.deleteBackward()
                 self?.scheduleInputContextUpdate()
             },
@@ -56,10 +60,13 @@ class KeyboardViewController: UIInputViewController {
             },
             onEnter: { [weak self] in
                 self?.textDocumentProxy.insertText("\n")
+                self?.editHistory.recordInsert("\n")
                 self?.scheduleInputContextUpdate()
             },
             onMoveCursor: { [weak self] offset in
                 self?.textDocumentProxy.adjustTextPosition(byCharacterOffset: offset)
+                // Steps are replayed at the cursor, so they no longer line up.
+                self?.editHistory.reset()
                 self?.scheduleInputContextUpdate()
             },
             onMoveCursorByWord: { [weak self] words in
@@ -68,6 +75,9 @@ class KeyboardViewController: UIInputViewController {
             },
             onNextKeyboard: { [weak self] in
                 self?.advanceToNextInputMode()
+            },
+            onToolAction: { [weak self] action in
+                self?.performToolAction(action)
             },
             onDictation: { [weak self] in
                 self?.startDictation()
@@ -162,6 +172,9 @@ class KeyboardViewController: UIInputViewController {
         super.viewWillAppear(animated)
         configureTransparentBackgrounds()
         keyboardState.reloadPersistedAppearanceSettings()
+        keyboardState.reloadToolEmoji()
+        // A new field, or the same one edited elsewhere: old steps no longer apply.
+        editHistory.reset()
         if hasFullAccess {
             KeyboardState.settingsDefaults.set(true, forKey: KeyboardState.keyboardReadsSettingsDefaultsKey)
         }
@@ -421,6 +434,7 @@ class KeyboardViewController: UIInputViewController {
             : Self.wordSpan(Array(textDocumentProxy.documentContextAfterInput ?? ""))
         guard offset != 0 else { return }
         textDocumentProxy.adjustTextPosition(byCharacterOffset: offset)
+        editHistory.reset()
     }
 
     /// UTF-16 length of the whitespace, then the word, at the front of
@@ -457,9 +471,75 @@ class KeyboardViewController: UIInputViewController {
     }
 
     private func deleteBackward(times count: Int) {
+        if let context = textDocumentProxy.documentContextBeforeInput, context.count >= count {
+            editHistory.recordDelete(String(context.suffix(count)))
+        } else {
+            editHistory.reset()
+        }
         for _ in 0..<count {
             textDocumentProxy.deleteBackward()
         }
+    }
+
+    /// Records what a single backspace is about to remove: the selection if
+    /// there is one, otherwise the character before the cursor.
+    private func recordBackspace() {
+        if let selected = textDocumentProxy.selectedText, !selected.isEmpty {
+            editHistory.recordDelete(selected)
+        } else if let last = textDocumentProxy.documentContextBeforeInput?.last {
+            editHistory.recordDelete(String(last))
+        } else {
+            editHistory.reset()
+        }
+    }
+
+    // MARK: - Tool column
+
+    private func performToolAction(_ action: ToolColumnAction) {
+        switch action {
+        case .undo:
+            guard let edit = editHistory.takeUndo() else { return }
+            if !reverse(edit) { editHistory.reset() }
+        case .redo:
+            guard let edit = editHistory.takeRedo() else { return }
+            if !replay(edit) { editHistory.reset() }
+        case .copy:
+            guard let selected = textDocumentProxy.selectedText, !selected.isEmpty else { return }
+            UIPasteboard.general.string = selected
+        }
+        scheduleInputContextUpdate()
+    }
+
+    /// Undoes `edit` at the cursor. Returns false when the text before the
+    /// cursor is no longer what the step left there (the user tapped
+    /// elsewhere or the app changed it), so nothing is touched.
+    private func reverse(_ edit: EditHistory.Edit) -> Bool {
+        switch edit {
+        case .inserted(let text):
+            return removeBeforeCursor(text)
+        case .deleted(let text):
+            textDocumentProxy.insertText(text)
+            return true
+        }
+    }
+
+    private func replay(_ edit: EditHistory.Edit) -> Bool {
+        switch edit {
+        case .inserted(let text):
+            textDocumentProxy.insertText(text)
+            return true
+        case .deleted(let text):
+            return removeBeforeCursor(text)
+        }
+    }
+
+    private func removeBeforeCursor(_ text: String) -> Bool {
+        guard let context = textDocumentProxy.documentContextBeforeInput,
+              context.hasSuffix(text) else { return false }
+        for _ in 0..<text.count {
+            textDocumentProxy.deleteBackward()
+        }
+        return true
     }
 
     override func textWillChange(_ textInput: UITextInput?) {
