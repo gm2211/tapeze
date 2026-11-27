@@ -106,6 +106,9 @@ class KeyboardState: ObservableObject {
     /// The input view's height as UIKit last laid it out. SwiftUI is driven
     /// from this, so its layout can never lag behind a resize.
     @Published var measuredHostHeight: CGFloat? = nil
+    /// Set by the keyboard view; the extension's controller sends every touch
+    /// from its own touch view here.
+    var touchHandler: ((ObjectIdentifier, MultiTouchSurface.Phase, MultiTouchSurface.Sample) -> Void)?
 
     /// The height the keys are laid out in: the chosen height, or less when
     /// the system gave the keyboard less room.

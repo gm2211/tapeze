@@ -78,7 +78,8 @@ class KeyboardViewController: UIInputViewController {
             },
             onToolAction: { [weak self] action in
                 self?.performToolAction(action)
-            }
+            },
+            usesHostTouchSurface: true
         )
 
         let hc = UIHostingController(rootView: keyboardView)
@@ -105,6 +106,7 @@ class KeyboardViewController: UIInputViewController {
         ])
 
         hostingController = hc
+        installTouchSurface()
         bindKeyboardHeight()
         updateInputContext()
     }
@@ -148,6 +150,25 @@ class KeyboardViewController: UIInputViewController {
         super.viewDidLayoutSubviews()
         publishMeasuredHeight()
         scheduleHeightCorrectionIfNeeded()
+    }
+
+    /// Touches are read by a plain UIKit view pinned over the whole input
+    /// view, so its frame always matches what is on screen. A view placed by
+    /// SwiftUI could keep an old frame and touch handler after a resize while
+    /// the keys were redrawn at the new size.
+    private func installTouchSurface() {
+        let surface = MultiTouchSurface.TouchView()
+        surface.translatesAutoresizingMaskIntoConstraints = false
+        surface.onTouch = { [weak self] touch, phase, sample in
+            self?.keyboardState.touchHandler?(touch, phase, sample)
+        }
+        view.addSubview(surface)
+        NSLayoutConstraint.activate([
+            surface.leadingAnchor.constraint(equalTo: view.leadingAnchor),
+            surface.trailingAnchor.constraint(equalTo: view.trailingAnchor),
+            surface.topAnchor.constraint(equalTo: view.topAnchor),
+            surface.bottomAnchor.constraint(equalTo: view.bottomAnchor),
+        ])
     }
 
     /// Hands the height UIKit really gave us to SwiftUI. Published on the next

@@ -17,6 +17,9 @@ struct KeyboardView: View {
     let onNextKeyboard: (() -> Void)?
     /// Undo, redo and copy from the tool column.
     var onToolAction: (ToolColumnAction) -> Void = { _ in }
+    /// True in the keyboard extension, whose controller delivers touches
+    /// through `KeyboardState.touchHandler` instead of a SwiftUI overlay.
+    var usesHostTouchSurface: Bool = false
 
     @State private var keyRegions: [GridPosition: CGRect] = [:]
     @State private var spaceBarRegion: CGRect = .zero
@@ -86,124 +89,202 @@ struct KeyboardView: View {
     /// Movement that counts as the finger leaving where it settled.
     private let holdStillnessRadius: CGFloat = 10
 
+    private func layoutGeometry(size: CGSize) -> KeyboardGeometry {
+        let totalWidth = max(size.width, 1)
+        let totalHeight = max(size.height, 1)
+
+        let minimumControlExtent: CGFloat = 60
+        /// Floor for very short keyboards so the bar stays a usable target.
+        let minimumSpaceBarHeight: CGFloat = 56
+        /// Space bar height as a multiple of one key row. MessagEase draws four equal
+        /// 72pt rows, so the space row matches a key row.
+        let spaceBarRowRatio: CGFloat = 1.0
+        /// Keys and the command column share the width in four equal columns.
+        /// Holding keys to MessagEase's 78:72 shape left 84pt empty on the
+        /// left of a 402pt iPhone (122pt on a Pro Max), which reviewers read
+        /// as wasted space. Keys now stretch to fill a phone's width; the cap
+        /// only stops them turning into slabs on very wide screens, where
+        /// the split keyboard is the better fit.
+        /// 1.6 made keys look like wide slabs once the tool column took
+        /// its share; 1.3 keeps them close to square, and any width left
+        /// over goes to the tool column instead.
+        let maxKeyAspectRatio: CGFloat = 1.3
+        // Solve for the row height so that `gridRows` key rows plus a space bar
+        // sized at `spaceBarRowRatio` key rows, plus the inter-row spacing
+        // (including the gap above the space row), exactly fill the available height.
+        let keyHeightByRowRatio = max(
+            (totalHeight - spacing * CGFloat(gridRows)) / (CGFloat(gridRows) + spaceBarRowRatio),
+            1
+        )
+        let keyHeightBySpaceFloor = max(
+            (totalHeight - spacing * CGFloat(gridRows) - minimumSpaceBarHeight) / CGFloat(gridRows),
+            1
+        )
+        let keyHeight = min(keyHeightByRowRatio, keyHeightBySpaceFloor)
+        // Three key columns plus a command column of the same width.
+        let maxKeyWidthByWidth = max(
+            (totalWidth - spacing * CGFloat(gridCols)) / CGFloat(gridCols + 1),
+            1
+        )
+        /// Each split half keeps MessagEase's 78:72 keys, so whether both
+        /// halves fit is judged at that size, not at the stretched one.
+        let splitKeyWidth = min(keyHeight * 78.0 / 72.0, maxKeyWidthByWidth)
+        // Split mode may narrow keys so a half fits under each thumb.
+        let resolvedSplit = SplitSizing.resolve(
+            mode: state.effectiveSplitMode,
+            totalWidth: totalWidth,
+            fullKeyWidth: splitKeyWidth,
+            fullRailWidth: railWidth(forKeyWidth: splitKeyWidth, totalWidth: totalWidth, minimum: minimumControlExtent),
+            spacing: spacing
+        )
+        /// One keyboard gets the tool column on the side away from the
+        /// backspace rail; the keys share what is left. A split keyboard
+        /// has no room for it.
+        let showsToolColumn = !resolvedSplit.isSplit
+        let minimumToolColumnWidth: CGFloat = showsToolColumn ? ToolColumnMetrics.width : 0
+        let roomForKeys = totalWidth - (showsToolColumn ? minimumToolColumnWidth + spacing : 0)
+        let maxKeyWidthBySingle = max((roomForKeys - spacing * CGFloat(gridCols)) / CGFloat(gridCols + 1), 1)
+        let fullKeyWidth = min(keyHeight * maxKeyAspectRatio, maxKeyWidthBySingle)
+        let fullRailWidth = railWidth(forKeyWidth: fullKeyWidth, totalWidth: roomForKeys, minimum: minimumControlExtent)
+        // Keys, their gaps and the backspace rail; the tool column takes
+        // the rest, so capped keys never leave an empty strip.
+        let keysBlockWidth = fullKeyWidth * CGFloat(gridCols) + spacing * CGFloat(gridCols) + fullRailWidth
+        let toolColumnWidth: CGFloat = showsToolColumn
+            ? max(minimumToolColumnWidth, totalWidth - keysBlockWidth - spacing)
+            : 0
+        let splitSizing = resolvedSplit.isSplit
+            ? resolvedSplit
+            : SplitSizing(isSplit: false, keyWidth: fullKeyWidth, railWidth: fullRailWidth)
+        let keyWidth = splitSizing.keyWidth
+        // Diamonds, label sizes and gesture thresholds key off the shorter side.
+        let keySide = keyHeight
+
+        let shouldDisableCompact = false
+        let commandColWidth: CGFloat = 0
+        let mainGridWidth = keyWidth * CGFloat(gridCols) + spacing * CGFloat(gridCols - 1)
+        let mainGridHeight = keyHeight * CGFloat(gridRows) + spacing * CGFloat(gridRows - 1)
+
+        let spaceBarHeight = max(totalHeight - mainGridHeight, minimumSpaceBarHeight)
+        let topInset = max(totalHeight - mainGridHeight - spaceBarHeight, 0)
+
+        let backspaceRailWidth = splitSizing.railWidth
+        let sidePadding = max(totalWidth - mainGridWidth - spacing - backspaceRailWidth, 0)
+
+        let armWidth = keySide * 0.40
+        let layoutOriginX = state.commandBarOnRight
+            ? sidePadding
+            : backspaceRailWidth + spacing
+        let splitMirror = SplitMirrorLayout.make(
+            enabled: splitSizing.isSplit,
+            totalWidth: totalWidth,
+            keyWidth: keyWidth,
+            spacing: spacing,
+            primaryGridX: layoutOriginX,
+            mainGridWidth: mainGridWidth,
+            railWidth: backspaceRailWidth,
+            primaryRailOnRight: state.commandBarOnRight
+        )
+        let hitLayout = LatticeHitLayout(
+            originX: layoutOriginX,
+            originY: topInset,
+            layoutWidth: totalWidth,
+            mainGridWidth: mainGridWidth,
+            mainGridHeight: mainGridHeight,
+            commandColWidth: commandColWidth,
+            keySide: keyWidth,
+            rowHeight: keyHeight,
+            bottomRowHeight: spaceBarHeight,
+            commandBarOnRight: state.commandBarOnRight
+        )
+
+        let toolColumnFrame = showsToolColumn
+            ? CGRect(
+                x: state.commandBarOnRight ? 0 : totalWidth - toolColumnWidth,
+                y: 0,
+                width: toolColumnWidth,
+                height: totalHeight
+            )
+            : .zero
+
+        return KeyboardGeometry(
+            totalWidth: totalWidth,
+            totalHeight: totalHeight,
+            minimumControlExtent: minimumControlExtent,
+            minimumSpaceBarHeight: minimumSpaceBarHeight,
+            spaceBarRowRatio: spaceBarRowRatio,
+            maxKeyAspectRatio: maxKeyAspectRatio,
+            keyHeightByRowRatio: keyHeightByRowRatio,
+            keyHeightBySpaceFloor: keyHeightBySpaceFloor,
+            keyHeight: keyHeight,
+            maxKeyWidthByWidth: maxKeyWidthByWidth,
+            splitKeyWidth: splitKeyWidth,
+            resolvedSplit: resolvedSplit,
+            showsToolColumn: showsToolColumn,
+            minimumToolColumnWidth: minimumToolColumnWidth,
+            roomForKeys: roomForKeys,
+            maxKeyWidthBySingle: maxKeyWidthBySingle,
+            fullKeyWidth: fullKeyWidth,
+            fullRailWidth: fullRailWidth,
+            keysBlockWidth: keysBlockWidth,
+            toolColumnWidth: toolColumnWidth,
+            splitSizing: splitSizing,
+            keyWidth: keyWidth,
+            keySide: keySide,
+            shouldDisableCompact: shouldDisableCompact,
+            commandColWidth: commandColWidth,
+            mainGridWidth: mainGridWidth,
+            mainGridHeight: mainGridHeight,
+            spaceBarHeight: spaceBarHeight,
+            topInset: topInset,
+            backspaceRailWidth: backspaceRailWidth,
+            sidePadding: sidePadding,
+            armWidth: armWidth,
+            layoutOriginX: layoutOriginX,
+            splitMirror: splitMirror,
+            hitLayout: hitLayout,
+            toolColumnFrame: toolColumnFrame
+        )
+    }
+
     var body: some View {
         GeometryReader { outerGeo in
-            let totalWidth = max(outerGeo.size.width, 1)
-            let totalHeight = max(outerGeo.size.height, 1)
-
-            let minimumControlExtent: CGFloat = 60
-            /// Floor for very short keyboards so the bar stays a usable target.
-            let minimumSpaceBarHeight: CGFloat = 56
-            /// Space bar height as a multiple of one key row. MessagEase draws four equal
-            /// 72pt rows, so the space row matches a key row.
-            let spaceBarRowRatio: CGFloat = 1.0
-            /// Keys and the command column share the width in four equal columns.
-            /// Holding keys to MessagEase's 78:72 shape left 84pt empty on the
-            /// left of a 402pt iPhone (122pt on a Pro Max), which reviewers read
-            /// as wasted space. Keys now stretch to fill a phone's width; the cap
-            /// only stops them turning into slabs on very wide screens, where
-            /// the split keyboard is the better fit.
-            /// 1.6 made keys look like wide slabs once the tool column took
-            /// its share; 1.3 keeps them close to square, and any width left
-            /// over goes to the tool column instead.
-            let maxKeyAspectRatio: CGFloat = 1.3
-            // Solve for the row height so that `gridRows` key rows plus a space bar
-            // sized at `spaceBarRowRatio` key rows, plus the inter-row spacing
-            // (including the gap above the space row), exactly fill the available height.
-            let keyHeightByRowRatio = max(
-                (totalHeight - spacing * CGFloat(gridRows)) / (CGFloat(gridRows) + spaceBarRowRatio),
-                1
-            )
-            let keyHeightBySpaceFloor = max(
-                (totalHeight - spacing * CGFloat(gridRows) - minimumSpaceBarHeight) / CGFloat(gridRows),
-                1
-            )
-            let keyHeight = min(keyHeightByRowRatio, keyHeightBySpaceFloor)
-            // Three key columns plus a command column of the same width.
-            let maxKeyWidthByWidth = max(
-                (totalWidth - spacing * CGFloat(gridCols)) / CGFloat(gridCols + 1),
-                1
-            )
-            /// Each split half keeps MessagEase's 78:72 keys, so whether both
-            /// halves fit is judged at that size, not at the stretched one.
-            let splitKeyWidth = min(keyHeight * 78.0 / 72.0, maxKeyWidthByWidth)
-            // Split mode may narrow keys so a half fits under each thumb.
-            let resolvedSplit = SplitSizing.resolve(
-                mode: state.effectiveSplitMode,
-                totalWidth: totalWidth,
-                fullKeyWidth: splitKeyWidth,
-                fullRailWidth: railWidth(forKeyWidth: splitKeyWidth, totalWidth: totalWidth, minimum: minimumControlExtent),
-                spacing: spacing
-            )
-            /// One keyboard gets the tool column on the side away from the
-            /// backspace rail; the keys share what is left. A split keyboard
-            /// has no room for it.
-            let showsToolColumn = !resolvedSplit.isSplit
-            let minimumToolColumnWidth: CGFloat = showsToolColumn ? ToolColumnMetrics.width : 0
-            let roomForKeys = totalWidth - (showsToolColumn ? minimumToolColumnWidth + spacing : 0)
-            let maxKeyWidthBySingle = max((roomForKeys - spacing * CGFloat(gridCols)) / CGFloat(gridCols + 1), 1)
-            let fullKeyWidth = min(keyHeight * maxKeyAspectRatio, maxKeyWidthBySingle)
-            let fullRailWidth = railWidth(forKeyWidth: fullKeyWidth, totalWidth: roomForKeys, minimum: minimumControlExtent)
-            // Keys, their gaps and the backspace rail; the tool column takes
-            // the rest, so capped keys never leave an empty strip.
-            let keysBlockWidth = fullKeyWidth * CGFloat(gridCols) + spacing * CGFloat(gridCols) + fullRailWidth
-            let toolColumnWidth: CGFloat = showsToolColumn
-                ? max(minimumToolColumnWidth, totalWidth - keysBlockWidth - spacing)
-                : 0
-            let splitSizing = resolvedSplit.isSplit
-                ? resolvedSplit
-                : SplitSizing(isSplit: false, keyWidth: fullKeyWidth, railWidth: fullRailWidth)
-            let keyWidth = splitSizing.keyWidth
-            // Diamonds, label sizes and gesture thresholds key off the shorter side.
-            let keySide = keyHeight
-
-            let shouldDisableCompact = false
-            let commandColWidth: CGFloat = 0
-            let mainGridWidth = keyWidth * CGFloat(gridCols) + spacing * CGFloat(gridCols - 1)
-            let mainGridHeight = keyHeight * CGFloat(gridRows) + spacing * CGFloat(gridRows - 1)
-
-            let spaceBarHeight = max(totalHeight - mainGridHeight, minimumSpaceBarHeight)
-            let topInset = max(totalHeight - mainGridHeight - spaceBarHeight, 0)
-
-            let backspaceRailWidth = splitSizing.railWidth
-            let sidePadding = max(totalWidth - mainGridWidth - spacing - backspaceRailWidth, 0)
-
-            let armWidth = keySide * 0.40
-            let layoutOriginX = state.commandBarOnRight
-                ? sidePadding
-                : backspaceRailWidth + spacing
-            let splitMirror = SplitMirrorLayout.make(
-                enabled: splitSizing.isSplit,
-                totalWidth: totalWidth,
-                keyWidth: keyWidth,
-                spacing: spacing,
-                primaryGridX: layoutOriginX,
-                mainGridWidth: mainGridWidth,
-                railWidth: backspaceRailWidth,
-                primaryRailOnRight: state.commandBarOnRight
-            )
-            let hitLayout = LatticeHitLayout(
-                originX: layoutOriginX,
-                originY: topInset,
-                layoutWidth: totalWidth,
-                mainGridWidth: mainGridWidth,
-                mainGridHeight: mainGridHeight,
-                commandColWidth: commandColWidth,
-                keySide: keyWidth,
-                rowHeight: keyHeight,
-                bottomRowHeight: spaceBarHeight,
-                commandBarOnRight: state.commandBarOnRight
-            )
-
-            let layoutOriginInWindow = outerGeo.frame(in: .global).origin
-            let toolColumnFrame = showsToolColumn
-                ? CGRect(
-                    x: state.commandBarOnRight ? 0 : totalWidth - toolColumnWidth,
-                    y: 0,
-                    width: toolColumnWidth,
-                    height: totalHeight
-                )
-                : .zero
+            let g = layoutGeometry(size: outerGeo.size)
+            let totalWidth = g.totalWidth
+            let totalHeight = g.totalHeight
+            let minimumControlExtent = g.minimumControlExtent
+            let minimumSpaceBarHeight = g.minimumSpaceBarHeight
+            let spaceBarRowRatio = g.spaceBarRowRatio
+            let maxKeyAspectRatio = g.maxKeyAspectRatio
+            let keyHeightByRowRatio = g.keyHeightByRowRatio
+            let keyHeightBySpaceFloor = g.keyHeightBySpaceFloor
+            let keyHeight = g.keyHeight
+            let maxKeyWidthByWidth = g.maxKeyWidthByWidth
+            let splitKeyWidth = g.splitKeyWidth
+            let resolvedSplit = g.resolvedSplit
+            let showsToolColumn = g.showsToolColumn
+            let minimumToolColumnWidth = g.minimumToolColumnWidth
+            let roomForKeys = g.roomForKeys
+            let maxKeyWidthBySingle = g.maxKeyWidthBySingle
+            let fullKeyWidth = g.fullKeyWidth
+            let fullRailWidth = g.fullRailWidth
+            let keysBlockWidth = g.keysBlockWidth
+            let toolColumnWidth = g.toolColumnWidth
+            let splitSizing = g.splitSizing
+            let keyWidth = g.keyWidth
+            let keySide = g.keySide
+            let shouldDisableCompact = g.shouldDisableCompact
+            let commandColWidth = g.commandColWidth
+            let mainGridWidth = g.mainGridWidth
+            let mainGridHeight = g.mainGridHeight
+            let spaceBarHeight = g.spaceBarHeight
+            let topInset = g.topInset
+            let backspaceRailWidth = g.backspaceRailWidth
+            let sidePadding = g.sidePadding
+            let armWidth = g.armWidth
+            let layoutOriginX = g.layoutOriginX
+            let splitMirror = g.splitMirror
+            let hitLayout = g.hitLayout
+            let toolColumnFrame = g.toolColumnFrame
 
             ZStack(alignment: .topLeading) {
                 bridgeBackground(
@@ -312,56 +393,13 @@ struct KeyboardView: View {
                 registerHitLayout(hitLayout)
             }
             .overlay {
-                // One UIKit view sees every finger separately. SwiftUI's
-                // DragGesture follows a single touch, so when a second thumb
-                // landed before the first lifted (normal when typing fast) the
-                // second tap was either lost or read as a swipe from the first
-                // key, which dropped letters.
-                MultiTouchSurface { touch, phase, sample in
-                    let point = TouchPointResolver.point(
-                        local: sample.local,
-                        inWindow: sample.inWindow,
-                        surfaceSize: sample.surfaceSize,
-                        layoutSize: CGSize(width: totalWidth, height: totalHeight),
-                        layoutOriginInWindow: layoutOriginInWindow
-                    )
-                    // Hit regions must come from the same layout as this
-                    // touch. They are normally pushed on a layout change, but
-                    // if that update was missed after a resize the keys would
-                    // be hit-tested against the old grid until reopening.
-                    if phase == .began {
-                        syncHitLayout(hitLayout)
-                    }
-                    let dx = splitTouchOffset(touch, phase: phase, at: point, mirror: splitMirror)
-                    handleTouch(
-                        touch,
-                        phase: phase,
-                        at: CGPoint(x: point.x + dx, y: point.y),
-                        ctx: GestureLayoutContext(
-                            totalWidth: totalWidth,
-                            totalHeight: totalHeight,
-                            stripHeight: topInset,
-                            armWidth: armWidth,
-                            keySide: keySide,
-                            layoutOriginX: layoutOriginX,
-                            mainGridWidth: mainGridWidth,
-                            backspaceRailWidth: backspaceRailWidth,
-                            toolColumnFrame: toolColumnFrame,
-                            toolRowHeight: keyHeight + spacing
-                        )
-                    )
-                    // After handling, so "typed" includes what this touch typed.
-                    if state.showTouchDebug, phase == .began || phase == .ended {
-                        recordTouchDebug(
-                            phase: phase,
-                            sample: sample,
-                            resolved: point,
-                            dx: dx,
-                            layoutSize: CGSize(width: totalWidth, height: totalHeight),
-                            layoutOriginInWindow: layoutOriginInWindow,
-                            hitLayout: hitLayout,
-                            isSplit: splitMirror != nil
-                        )
+                // In the keyboard extension the controller owns the touch
+                // view (pinned to the input view by Auto Layout, so its frame
+                // can never go stale) and routes touches to `routeTouch`. The
+                // app's preview has no controller, so it keeps its own.
+                if !usesHostTouchSurface {
+                    MultiTouchSurface { touch, phase, sample in
+                        routeTouch(touch, phase: phase, sample: sample)
                     }
                 }
             }
@@ -401,7 +439,12 @@ struct KeyboardView: View {
         // keys down; with the measured height the two edges coincide anyway.
         .frame(maxWidth: .infinity, maxHeight: state.layoutHeight, alignment: .top)
         .frame(maxHeight: .infinity, alignment: .top)
-        .ignoresSafeArea(edges: .vertical)
+        .ignoresSafeArea()
+        .onAppear {
+            state.touchHandler = { touch, phase, sample in
+                routeTouch(touch, phase: phase, sample: sample)
+            }
+        }
         .onDisappear {
             cancelNumberLongPress()
         }
@@ -1023,29 +1066,67 @@ struct KeyboardView: View {
         setActiveKey(nil)
     }
 
+    /// Handles one finger. The layout is rebuilt here from the size of the
+    /// view that received the touch, not taken from the last SwiftUI pass:
+    /// after iOS resized the keyboard (or the resize gesture did), SwiftUI
+    /// could redraw the keys at the new size while the touch handler it had
+    /// handed out kept the old layout, so taps were tested against a grid
+    /// that was no longer on screen until the keyboard was reopened.
+    private func routeTouch(
+        _ touch: ObjectIdentifier,
+        phase: MultiTouchSurface.Phase,
+        sample: MultiTouchSurface.Sample
+    ) {
+        let size = CGSize(
+            width: sample.surfaceSize.width,
+            height: min(state.effectiveKeyboardHeight, sample.surfaceSize.height)
+        )
+        let g = layoutGeometry(size: size)
+        let point = sample.local
+        if phase == .began {
+            syncHitLayout(g.hitLayout)
+        }
+        let dx = splitTouchOffset(touch, phase: phase, at: point, mirror: g.splitMirror)
+        handleTouch(
+            touch,
+            phase: phase,
+            at: CGPoint(x: point.x + dx, y: point.y),
+            ctx: GestureLayoutContext(
+                totalWidth: g.totalWidth,
+                totalHeight: g.totalHeight,
+                stripHeight: g.topInset,
+                armWidth: g.armWidth,
+                keySide: g.keySide,
+                layoutOriginX: g.layoutOriginX,
+                mainGridWidth: g.mainGridWidth,
+                backspaceRailWidth: g.backspaceRailWidth,
+                toolColumnFrame: g.toolColumnFrame,
+                toolRowHeight: g.keyHeight + spacing
+            )
+        )
+        // After handling, so "typed" includes what this touch typed.
+        if state.showTouchDebug, phase == .began || phase == .ended {
+            recordTouchDebug(phase: phase, sample: sample, dx: dx, geometry: g)
+        }
+    }
+
     private func recordTouchDebug(
         phase: MultiTouchSurface.Phase,
         sample: MultiTouchSurface.Sample,
-        resolved: CGPoint,
         dx: CGFloat,
-        layoutSize: CGSize,
-        layoutOriginInWindow: CGPoint,
-        hitLayout: LatticeHitLayout,
-        isSplit: Bool
+        geometry g: KeyboardGeometry
     ) {
         func f(_ v: CGFloat) -> String { String(format: "%.1f", v) }
         func p(_ pt: CGPoint) -> String { "(\(f(pt.x)),\(f(pt.y)))" }
         func sz(_ s: CGSize) -> String { "\(f(s.width))x\(f(s.height))" }
-        let mapped = CGPoint(x: resolved.x + dx, y: resolved.y)
+        let mapped = CGPoint(x: sample.local.x + dx, y: sample.local.y)
         let key = gestureEngine.keyPosition(at: mapped).map { "r\($0.row)c\($0.col)" } ?? "none"
-        let usedWindow = resolved != sample.local
-        let engineMatches = registeredHitLayout.key?.layout == hitLayout
+        let engineMatches = registeredHitLayout.key?.layout == g.hitLayout
         let lines = [
-            "\(phase == .began ? "DOWN" : "UP") key \(key) split \(isSplit) dx \(f(dx))",
+            "\(phase == .began ? "DOWN" : "UP") key \(key) split \(g.splitMirror != nil) dx \(f(dx))",
             "raw \(p(sample.local)) mapped \(p(mapped))",
-            "win \(p(sample.inWindow)) origin \(p(layoutOriginInWindow))",
-            "surface \(sz(sample.surfaceSize)) layout \(sz(layoutSize))\(usedWindow ? " WINDOW" : "") host h \(state.measuredHostHeight.map(f) ?? "?")",
-            "grid x \(f(hitLayout.originX)) y \(f(hitLayout.originY)) key \(f(hitLayout.keySide))x\(f(hitLayout.rowHeight)) engine \(engineMatches ? "ok" : "STALE")",
+            "surface \(sz(sample.surfaceSize)) layout \(f(g.totalWidth))x\(f(g.totalHeight)) drawn h \(f(state.layoutHeight))",
+            "grid x \(f(g.hitLayout.originX)) y \(f(g.hitLayout.originY)) key \(f(g.hitLayout.keySide))x\(f(g.hitLayout.rowHeight)) engine \(engineMatches ? "ok" : "STALE")",
             "typed \(state.touchDebug.typed)",
         ]
         var regions = gestureEngine.debugKeyRegions
@@ -2205,6 +2286,48 @@ private final class RegisteredHitLayout {
     var key: Key?
 }
 
+/// Every size and position the keyboard is drawn and hit-tested with, for
+/// one keyboard size. Body and touch handling both build it, so taps are
+/// always tested against the layout for the size the keyboard really has.
+private struct KeyboardGeometry {
+    let totalWidth: CGFloat
+    let totalHeight: CGFloat
+    let minimumControlExtent: CGFloat
+    let minimumSpaceBarHeight: CGFloat
+    let spaceBarRowRatio: CGFloat
+    let maxKeyAspectRatio: CGFloat
+    let keyHeightByRowRatio: CGFloat
+    let keyHeightBySpaceFloor: CGFloat
+    let keyHeight: CGFloat
+    let maxKeyWidthByWidth: CGFloat
+    let splitKeyWidth: CGFloat
+    let resolvedSplit: SplitSizing
+    let showsToolColumn: Bool
+    let minimumToolColumnWidth: CGFloat
+    let roomForKeys: CGFloat
+    let maxKeyWidthBySingle: CGFloat
+    let fullKeyWidth: CGFloat
+    let fullRailWidth: CGFloat
+    let keysBlockWidth: CGFloat
+    let toolColumnWidth: CGFloat
+    let splitSizing: SplitSizing
+    let keyWidth: CGFloat
+    let keySide: CGFloat
+    let shouldDisableCompact: Bool
+    let commandColWidth: CGFloat
+    let mainGridWidth: CGFloat
+    let mainGridHeight: CGFloat
+    let spaceBarHeight: CGFloat
+    let topInset: CGFloat
+    let backspaceRailWidth: CGFloat
+    let sidePadding: CGFloat
+    let armWidth: CGFloat
+    let layoutOriginX: CGFloat
+    let splitMirror: SplitMirrorLayout?
+    let hitLayout: LatticeHitLayout
+    let toolColumnFrame: CGRect
+}
+
 private struct LatticeHitLayout: Equatable {
     let originX: CGFloat
     let originY: CGFloat
@@ -2266,11 +2389,10 @@ struct MultiTouchSurface: UIViewRepresentable {
         case began, moved, ended, cancelled
     }
 
-    /// A finger's position, read both locally and in window coordinates,
-    /// with the size this view had when it was read.
+    /// A finger's position in the touch view, with that view's size when it
+    /// was read.
     struct Sample {
         let local: CGPoint
-        let inWindow: CGPoint
         let surfaceSize: CGSize
     }
 
@@ -2322,7 +2444,6 @@ struct MultiTouchSurface: UIViewRepresentable {
             for touch in touches.sorted(by: { $0.timestamp < $1.timestamp }) {
                 let sample = Sample(
                     local: touch.location(in: self),
-                    inWindow: touch.location(in: nil),
                     surfaceSize: bounds.size
                 )
                 onTouch?(ObjectIdentifier(touch), phase, sample)
