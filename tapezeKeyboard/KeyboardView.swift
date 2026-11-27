@@ -2166,16 +2166,20 @@ private struct TouchDebugOverlay: View {
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         .overlay(alignment: .top) {
-            VStack(alignment: .leading, spacing: 0) {
-                ForEach(Array(model.lines.enumerated()), id: \.offset) { _, line in
-                    Text(line)
+            // With no lines yet this drew an empty 6pt black box at the top
+            // centre of the keyboard, which read as a stray notch.
+            if !model.lines.isEmpty {
+                VStack(alignment: .leading, spacing: 0) {
+                    ForEach(Array(model.lines.enumerated()), id: \.offset) { _, line in
+                        Text(line)
+                    }
                 }
+                .font(.system(size: 9, design: .monospaced))
+                .foregroundColor(.white)
+                .padding(3)
+                .background(Color.black.opacity(0.7))
+                .fixedSize()
             }
-            .font(.system(size: 9, design: .monospaced))
-            .foregroundColor(.white)
-            .padding(3)
-            .background(Color.black.opacity(0.7))
-            .fixedSize()
         }
     }
 }
