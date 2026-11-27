@@ -48,9 +48,8 @@ struct KeyboardView: View {
     @State private var toolDidScroll = false
     /// Row the finger is on, drawn pressed while it stays a tap.
     @State private var toolPressedIndex: Int?
-    /// True while the wheel is being dragged or is settling; only then do
-    /// its edge rows shrink and fade. At rest every cell is full size and
-    /// lines up with a key row.
+    /// True while the column is being dragged or is settling; its scroll
+    /// bar brightens then.
     @State private var toolIsScrolling = false
     @State private var toolSettleToken = 0
     @State private var logicalGestureActive = false
@@ -2591,32 +2590,16 @@ private struct ToolColumnView: View {
             let maxOffset = ToolColumnMetrics.maxOffset(
                 itemCount: items.count, rowHeight: rowHeight, gap: gap, height: height
             )
-            let wheel: CGFloat = isScrolling ? 1 : 0
 
             ZStack(alignment: .topLeading) {
                 theme.emptyColumnBackground
 
                 ForEach(Array(items.enumerated()), id: \.offset) { index, item in
                     let centerY = CGFloat(index) * rowHeight + cellHeight / 2 - offset
-                    let distance = min(abs(centerY - height / 2) / max(height / 2, 1), 1)
+                    // Every cell the same size and strength, wherever it is:
+                    // shrinking the edge rows made undo, at the top, harder to hit.
                     toolCell(item, width: cellWidth, height: cellHeight, pressed: index == pressedIndex)
-                        .scaleEffect(1 - 0.18 * distance * distance * wheel)
-                        .opacity(1 - 0.5 * distance * distance * wheel)
                         .position(x: width / 2, y: centerY)
-                }
-
-                if isScrolling {
-                    // Fade the rows into the edges like a wheel while it turns.
-                    VStack(spacing: 0) {
-                        LinearGradient(colors: [theme.emptyColumnBackground, theme.emptyColumnBackground.opacity(0)],
-                                       startPoint: .top, endPoint: .bottom)
-                            .frame(height: 18)
-                        Spacer(minLength: 0)
-                        LinearGradient(colors: [theme.emptyColumnBackground.opacity(0), theme.emptyColumnBackground],
-                                       startPoint: .top, endPoint: .bottom)
-                            .frame(height: 18)
-                    }
-                    .transition(.opacity)
                 }
 
                 // Always shown, faintly at rest, so it is clear there is more.
