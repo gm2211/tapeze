@@ -397,6 +397,26 @@ struct KeyboardView: View {
                         .allowsHitTesting(false)
                 }
             }
+            .overlay(alignment: .top) {
+                if let notice = state.notice {
+                    Text(notice)
+                        .font(.system(size: 14, weight: .medium, design: .rounded))
+                        .foregroundColor(state.theme.specialTextColor)
+                        .multilineTextAlignment(.center)
+                        .padding(.horizontal, 14)
+                        .padding(.vertical, 9)
+                        .background(
+                            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                                .fill(state.theme.activeKeyBackground)
+                                .shadow(color: .black.opacity(0.25), radius: 6, y: 2)
+                        )
+                        .padding(.horizontal, 16)
+                        .padding(.top, 6)
+                        .transition(.opacity.combined(with: .move(edge: .top)))
+                        .allowsHitTesting(false)
+                }
+            }
+            .animation(.easeOut(duration: 0.2), value: state.notice)
             .overlay(alignment: .topLeading) {
                 if let holdPicker {
                     HoldPickerView(
@@ -1747,6 +1767,20 @@ struct KeyboardView: View {
         }
     }
 
+    /// Types the clipboard's text, or explains why there is none to type.
+    @discardableResult
+    private func pasteFromClipboard() -> Bool {
+        switch ClipboardPaste.resolveGeneral(hasFullAccess: state.hasFullAccess) {
+        case .text(let content):
+            onCharacter(content)
+            return true
+        case .notice(let message):
+            UINotificationFeedbackGenerator().notificationOccurred(.warning)
+            withAnimation(.easeOut(duration: 0.2)) { state.showNotice(message) }
+            return false
+        }
+    }
+
     private func performToolItem(_ item: ToolColumnItem) {
         switch item {
         case .undo:
@@ -1756,8 +1790,7 @@ struct KeyboardView: View {
         case .copy:
             onToolAction(.copy)
         case .paste:
-            if let content = UIPasteboard.general.string, !content.isEmpty {
-                onCharacter(content)
+            if pasteFromClipboard() {
                 state.afterCharacterInserted()
             }
         case .emoji(let emoji):
@@ -2161,10 +2194,7 @@ struct KeyboardView: View {
         case .tab:
             onCharacter("\t")
         case .clipboard:
-            // Paste from clipboard
-            if let content = UIPasteboard.general.string {
-                onCharacter(content)
-            }
+            pasteFromClipboard()
         case .dictation:
             onDictation?()
         }
@@ -2778,6 +2808,21 @@ private struct ToolColumnView: View {
         .overlay(
             RoundedRectangle(cornerRadius: 10, style: .continuous)
                 .stroke(theme.keyBorder, lineWidth: 1)
+        )
+    }
+}
+
+extension ClipboardPaste {
+    static func resolveGeneral(hasFullAccess: Bool) -> ClipboardPaste {
+        let board = UIPasteboard.general
+        // Only read what the board says it holds, so we don't ask iOS for
+        // text that isn't there.
+        return resolve(
+            hasFullAccess: hasFullAccess,
+            string: board.hasStrings ? board.string : nil,
+            url: board.hasURLs ? board.url : nil,
+            hasImages: board.hasImages,
+            itemCount: board.numberOfItems
         )
     }
 }

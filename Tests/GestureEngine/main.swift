@@ -403,5 +403,19 @@ do {
     expect("swipe up and back moves nothing", upBack.moves.joined(separator: ","), "")
 }
 
+print("\nClipboard paste")
+do {
+    func r(_ access: Bool = true, s: String? = nil, u: URL? = nil, img: Bool = false, n: Int = 0) -> String {
+        "\(ClipboardPaste.resolve(hasFullAccess: access, string: s, url: u, hasImages: img, itemCount: n))"
+    }
+    expect("text is typed", r(s: "hi", n: 1), "\(ClipboardPaste.text("hi"))")
+    expect("a copied link is typed as its address", r(u: URL(string: "https://a.b/c"), n: 1), "\(ClipboardPaste.text("https://a.b/c"))")
+    expect("an image explains the system Paste", r(img: true, n: 1), "\(ClipboardPaste.notice(ClipboardPaste.imageNotice))")
+    expect("an image with a caption types the caption", r(s: "cap", img: true, n: 1), "\(ClipboardPaste.text("cap"))")
+    expect("an empty clipboard says so", r(), "\(ClipboardPaste.notice(ClipboardPaste.emptyNotice))")
+    expect("other content explains the system Paste", r(n: 1), "\(ClipboardPaste.notice(ClipboardPaste.otherNotice))")
+    expect("no Full Access asks for it", r(false), "\(ClipboardPaste.notice(ClipboardPaste.noAccessNotice))")
+}
+
 print("\n\(passes) passed, \(failures) failed")
 exit(failures == 0 ? 0 : 1)
