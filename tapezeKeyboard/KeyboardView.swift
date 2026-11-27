@@ -106,9 +106,9 @@ struct KeyboardView: View {
         /// only stops them turning into slabs on very wide screens, where
         /// the split keyboard is the better fit.
         /// 1.6 made keys look like wide slabs once the tool column took
-        /// its share; 1.3 keeps them close to square, and any width left
-        /// over goes to the tool column instead.
-        let maxKeyAspectRatio: CGFloat = 1.3
+        /// its share; 1.15 keeps them close to MessagEase's 78:72, and the
+        /// width left over widens the tool column.
+        let maxKeyAspectRatio: CGFloat = 1.15
         // Solve for the row height so that `gridRows` key rows plus a space bar
         // sized at `spaceBarRowRatio` key rows, plus the inter-row spacing
         // (including the gap above the space row), exactly fill the available height.
@@ -146,16 +146,16 @@ struct KeyboardView: View {
         let maxKeyWidthBySingle = max((roomForKeys - spacing * CGFloat(gridCols)) / CGFloat(gridCols + 1), 1)
         let fullKeyWidth = min(keyHeight * maxKeyAspectRatio, maxKeyWidthBySingle)
         let baseRailWidth = railWidth(forKeyWidth: fullKeyWidth, totalWidth: roomForKeys, minimum: minimumControlExtent)
-        // Width the capped keys leave over is shared by the tool column and
-        // the backspace rail, so no empty strip appears and neither side
-        // turns into a slab.
+        // Width the capped keys leave over goes mostly to the tool column
+        // (three quarters), the rest to the backspace rail, so no empty
+        // strip appears.
         let keysBlockWidth = fullKeyWidth * CGFloat(gridCols) + spacing * CGFloat(gridCols) + baseRailWidth
         let leftover = showsToolColumn
             ? max(totalWidth - keysBlockWidth - spacing - minimumToolColumnWidth, 0)
             : 0
-        let fullRailWidth = baseRailWidth + leftover / 2
+        let fullRailWidth = baseRailWidth + leftover * 0.25
         let toolColumnWidth: CGFloat = showsToolColumn
-            ? minimumToolColumnWidth + leftover / 2
+            ? minimumToolColumnWidth + leftover * 0.75
             : 0
         let splitSizing = resolvedSplit.isSplit
             ? resolvedSplit
