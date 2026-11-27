@@ -895,6 +895,12 @@ struct DiamondCommandKeyView: View {
                 .foregroundColor(theme.specialTextColor)
                 .commandLabelDepth(for: theme)
 
+        case .dictation:
+            Image(systemName: "mic")
+                .font(.system(size: size.height * 0.34))
+                .foregroundColor(theme.specialTextColor)
+                .commandLabelDepth(for: theme)
+
         case .shift:
             Image(systemName: isCapsLocked ? "capslock.fill" : (isShifted ? "shift.fill" : "shift"))
                 .font(.system(size: size.height * 0.34))
@@ -1015,6 +1021,12 @@ struct CommandKeyView: View {
 
         case .enter:
             Image(systemName: "return.left")
+                .font(.system(size: size.height * 0.4))
+                .foregroundColor(theme.specialTextColor)
+                .commandLabelDepth(for: theme)
+
+        case .dictation:
+            Image(systemName: "mic")
                 .font(.system(size: size.height * 0.4))
                 .foregroundColor(theme.specialTextColor)
                 .commandLabelDepth(for: theme)

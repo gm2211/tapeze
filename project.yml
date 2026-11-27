@@ -23,6 +23,7 @@ targets:
       - path: tapezeKeyboard/KeyboardLayout.swift
       - path: tapezeKeyboard/KeyboardState.swift
       - path: tapezeKeyboard/GestureEngine.swift
+      - path: tapezeKeyboard/DictationBridge.swift
     resources:
       - path: tapeze/PrivacyInfo.xcprivacy
     settings:
