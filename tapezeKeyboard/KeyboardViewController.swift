@@ -69,6 +69,10 @@ class KeyboardViewController: UIInputViewController {
                 self?.editHistory.reset()
                 self?.scheduleInputContextUpdate()
             },
+            onMoveCursorByWord: { [weak self] words in
+                self?.moveCursor(byWords: words)
+                self?.scheduleInputContextUpdate()
+            },
             onNextKeyboard: { [weak self] in
                 self?.advanceToNextInputMode()
             },
@@ -359,6 +363,35 @@ class KeyboardViewController: UIInputViewController {
         }
 
         deleteBackward(times: max(deleteCount, 1))
+    }
+
+    /// Moves the insertion point to the start of the previous word (left) or
+    /// the end of the next one (right), skipping the spaces in between.
+    private func moveCursor(byWords words: Int) {
+        guard words != 0 else { return }
+        let offset = words < 0
+            ? -Self.wordSpan(Array((textDocumentProxy.documentContextBeforeInput ?? "").reversed()))
+            : Self.wordSpan(Array(textDocumentProxy.documentContextAfterInput ?? ""))
+        guard offset != 0 else { return }
+        textDocumentProxy.adjustTextPosition(byCharacterOffset: offset)
+        editHistory.reset()
+    }
+
+    /// UTF-16 length of the whitespace, then the word, at the front of
+    /// `characters`. The text proxy counts its offsets in UTF-16 units, so an
+    /// emoji in the word must count twice.
+    private static func wordSpan(_ characters: [Character]) -> Int {
+        var index = 0
+        var length = 0
+        while index < characters.count, characters[index].isWhitespace {
+            length += characters[index].utf16.count
+            index += 1
+        }
+        while index < characters.count, !characters[index].isWhitespace {
+            length += characters[index].utf16.count
+            index += 1
+        }
+        return length
     }
 
     private func deleteCurrentLineBeforeCursor() {

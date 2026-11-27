@@ -12,6 +12,8 @@ struct KeyboardView: View {
     let onDeleteLine: () -> Void
     let onEnter: () -> Void
     let onMoveCursor: (Int) -> Void
+    /// Moves the cursor by whole words: negative is left, positive right.
+    var onMoveCursorByWord: (Int) -> Void = { _ in }
     let onNextKeyboard: (() -> Void)?
     /// Undo, redo and copy from the tool column.
     var onToolAction: (ToolColumnAction) -> Void = { _ in }
@@ -27,6 +29,7 @@ struct KeyboardView: View {
     @State private var activeBridge: ActiveBridge = .none
     @State private var backspacePath: [CGPoint] = []
     @State private var backspaceScrub = BackspaceScrubTracker()
+    @State private var spaceCursor = SpaceCursorTracker()
     @State private var currentKeySide: CGFloat = 1
     @State private var longPressTask: DispatchWorkItem?
     @State private var longPressTriggered = false
@@ -831,6 +834,7 @@ struct KeyboardView: View {
         switch activeBridge {
         case .space:
             gestureEngine.touchBegan(at: point)
+            spaceCursor.begin(at: point, time: ProcessInfo.processInfo.systemUptime)
         case .backspace:
             backspacePath = [point]
             backspaceScrub.reset(start: point)
@@ -849,6 +853,7 @@ struct KeyboardView: View {
         switch activeBridge {
         case .space:
             gestureEngine.touchMoved(to: point)
+            trackSpaceCursor(at: point)
         case .backspace:
             backspacePath.append(point)
             if backspaceScrub.observe(point, keySide: ctx.keySide) {
@@ -918,6 +923,16 @@ struct KeyboardView: View {
             state.gestureTrailPoints = []
 
         case .space:
+            trackSpaceCursor(at: point)
+            if spaceCursor.didMoveCursor {
+                // The finger already moved the cursor while it was down (a
+                // trackpad drag or a word scrub), so lifting adds nothing.
+                gestureEngine.touchCancelled()
+                spaceCursor = SpaceCursorTracker()
+                state.gestureTrailPoints = []
+                break
+            }
+            spaceCursor = SpaceCursorTracker()
             // Let gestureEngine evaluate first — it may recognize a space-swipe gesture.
             let result = gestureEngine.touchEnded(at: point)
             switch result {
@@ -956,6 +971,17 @@ struct KeyboardView: View {
         longPressTriggered = false
     }
 
+    /// Moves the cursor live while a finger drags or scrubs on the space bar.
+    private func trackSpaceCursor(at point: CGPoint) {
+        guard let move = spaceCursor.observe(point, time: ProcessInfo.processInfo.systemUptime) else { return }
+        switch move {
+        case .characters(let offset):
+            onMoveCursor(offset)
+        case .words(let offset):
+            onMoveCursorByWord(offset)
+        }
+    }
+
     private func abandonStaleGesture() {
         toolDragStart = nil
         toolPressedIndex = nil
@@ -966,6 +992,7 @@ struct KeyboardView: View {
         activeBridge = .none
         backspacePath = []
         backspaceScrub.reset()
+        spaceCursor = SpaceCursorTracker()
         logicalGestureActive = false
         lastTrackedPoint = nil
         state.gestureTrailPoints = []
