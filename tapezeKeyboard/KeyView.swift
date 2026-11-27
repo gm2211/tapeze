@@ -921,28 +921,19 @@ struct DiamondCommandKeyView: View {
     }
 }
 
-/// The mic key's face: a thin outlined mic inside a soft round badge, like the
-/// system dictation button.
+/// The mic key's face: a thin mic, sized like the other diamond icons.
 private struct DictationMicBadge: View {
     let size: CGSize
-    /// Badge diameter as a fraction of the key's shorter side.
+    /// Kept for call sites; the icon follows the same 0.34 ratio as globe/shift.
     let scale: CGFloat
     let isActive: Bool
     let theme: KeyboardTheme
 
     var body: some View {
-        let diameter = min(size.width, size.height) * scale
-        ZStack {
-            Circle()
-                .fill(theme.specialTextColor.opacity(isActive ? 0.28 : 0.13))
-            Circle()
-                .strokeBorder(theme.specialTextColor.opacity(0.10), lineWidth: 0.5)
-            Image(systemName: "mic")
-                .font(.system(size: diameter * 0.5, weight: .light))
-                .foregroundColor(theme.specialTextColor)
-        }
-        .frame(width: diameter, height: diameter)
-        .commandLabelDepth(for: theme)
+        Image(systemName: "mic")
+            .font(.system(size: size.height * (scale > 0.7 ? 0.4 : 0.34), weight: .regular))
+            .foregroundColor(theme.specialTextColor)
+            .commandLabelDepth(for: theme)
     }
 }
 

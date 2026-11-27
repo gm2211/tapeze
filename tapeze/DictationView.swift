@@ -2,111 +2,225 @@ import AVFoundation
 import Speech
 import SwiftUI
 
-/// Listens for the keyboard's mic key. The keyboard can't record, so it opens
-/// the app here; whatever the user says is handed back through
-/// `DictationBridge` as soon as they leave, whether they tap Done or go
-/// straight back with the system's top-left back arrow.
+/// Runs the microphone for the keyboard's mic key.
+///
+/// The keyboard can't record, and iOS only lets an app turn the mic on while
+/// it's in the foreground. So the first mic tap opens Tapeze, which starts
+/// the audio engine and keeps it running in the background (the `audio`
+/// background mode) for `DictationBridge.warmIdleTimeout`. Buffers are only
+/// fed to the recognizer between a start and a stop from the keyboard; the
+/// rest of the time they're dropped.
 @MainActor
-final class SpeechDictation: ObservableObject {
-    enum Phase: Equatable {
-        case starting
-        case listening
-        case finished
-        case unavailable(String)
-    }
+final class DictationService: ObservableObject {
+    static let shared = DictationService()
 
-    @Published private(set) var phase: Phase = .starting
-    @Published private(set) var transcript = ""
+    @Published private(set) var status = DictationStatus()
 
     private let audioEngine = AVAudioEngine()
     private let recognizer = SFSpeechRecognizer()
-    private var request: SFSpeechAudioBufferRecognitionRequest?
+    private var request: SFSpeechAudioBufferRecognitionRequest? {
+        didSet { requestBox.set(request) }
+    }
+    /// The tap runs on the audio thread and must append each buffer before it
+    /// returns (the engine reuses them), so it reads the request from here.
+    private let requestBox = RequestBox()
     private var task: SFSpeechRecognitionTask?
-    private var hasTap = false
+    private var heartbeatTimer: Timer?
+    private var lastActivity = Date()
+    private var lastLevelWrite = Date.distantPast
+    private var isWarm: Bool { audioEngine.isRunning }
 
-    func start() async {
-        stopAudio()
-        transcript = ""
-        phase = .starting
+    private init() {
+        // Keep counting sessions from wherever a previous launch left off, so
+        // the keyboard never mistakes a new session for one it already handled.
+        status.session = DictationBridge.readStatus().session
+        DictationBridge.observe(DictationBridge.startNotification) { [weak self] in
+            self?.startListening()
+        }
+        DictationBridge.observe(DictationBridge.stopNotification) { [weak self] in
+            self?.stopListening()
+        }
+        DictationBridge.observe(DictationBridge.cancelNotification) { [weak self] in
+            self?.cancelListening()
+        }
+    }
 
+    /// The mic key opened the app: switch the mic on and start listening.
+    func openedFromKeyboard() async {
+        if !isWarm {
+            guard await warmUp() else { return }
+        }
+        startListening()
+    }
+
+    // MARK: Warm mic
+
+    private func warmUp() async -> Bool {
         guard await Self.speechAuthorized() else {
-            phase = .unavailable("Allow Speech Recognition for Tapeze in Settings to dictate.")
-            return
+            publishUnavailable("Allow Speech Recognition for Tapeze in Settings to dictate.")
+            return false
         }
         guard await Self.microphoneAuthorized() else {
-            phase = .unavailable("Allow Microphone access for Tapeze in Settings to dictate.")
-            return
+            publishUnavailable("Allow Microphone access for Tapeze in Settings to dictate.")
+            return false
         }
         guard let recognizer, recognizer.isAvailable else {
-            phase = .unavailable("Speech recognition isn't available for your language right now.")
-            return
+            publishUnavailable("Speech recognition isn't available for your language right now.")
+            return false
         }
 
         do {
             let session = AVAudioSession.sharedInstance()
-            try session.setCategory(.record, mode: .measurement, options: .duckOthers)
-            try session.setActive(true, options: .notifyOthersOnDeactivation)
-
-            let request = SFSpeechAudioBufferRecognitionRequest()
-            request.shouldReportPartialResults = true
-            request.addsPunctuation = true
-            if recognizer.supportsOnDeviceRecognition {
-                // Keeps speech on the phone, and lifts the one-minute server limit.
-                request.requiresOnDeviceRecognition = true
-            }
-            self.request = request
+            // mixWithOthers keeps the user's music playing while the mic is warm.
+            try session.setCategory(.playAndRecord, mode: .measurement, options: [.mixWithOthers, .defaultToSpeaker, .allowBluetooth])
+            try session.setActive(true)
 
             let input = audioEngine.inputNode
-            input.installTap(onBus: 0, bufferSize: 1024, format: input.outputFormat(forBus: 0)) { buffer, _ in
+            let box = requestBox
+            input.installTap(onBus: 0, bufferSize: 1024, format: input.outputFormat(forBus: 0)) { [weak self] buffer, _ in
+                guard let request = box.get() else { return }
                 request.append(buffer)
+                let level = Self.level(of: buffer)
+                Task { @MainActor in self?.handleLevel(level) }
             }
-            hasTap = true
             audioEngine.prepare()
             try audioEngine.start()
+        } catch {
+            shutDown()
+            publishUnavailable("Couldn't start the microphone: \(error.localizedDescription)")
+            return false
+        }
 
-            task = recognizer.recognitionTask(with: request) { [weak self] result, error in
-                let text = result?.bestTranscription.formattedString
-                let isFinal = result?.isFinal == true
-                Task { @MainActor in
-                    guard let self else { return }
-                    if let text { self.transcript = text }
-                    if error != nil || isFinal { self.finish() }
+        lastActivity = Date()
+        heartbeatTimer?.invalidate()
+        heartbeatTimer = Timer.scheduledTimer(withTimeInterval: DictationBridge.heartbeatInterval, repeats: true) { [weak self] _ in
+            Task { @MainActor in self?.tick() }
+        }
+        status.message = nil
+        if status.phase == .unavailable { status.phase = .idle }
+        publish()
+        return true
+    }
+
+    private func tick() {
+        if status.phase != .listening,
+           Date().timeIntervalSince(lastActivity) > DictationBridge.warmIdleTimeout {
+            shutDown()
+            return
+        }
+        publish()
+    }
+
+    /// Turns the mic off; the next mic tap opens the app again.
+    func shutDown() {
+        endRecognition()
+        heartbeatTimer?.invalidate()
+        heartbeatTimer = nil
+        if audioEngine.isRunning { audioEngine.stop() }
+        audioEngine.inputNode.removeTap(onBus: 0)
+        try? AVAudioSession.sharedInstance().setActive(false, options: .notifyOthersOnDeactivation)
+        if status.phase == .listening { status.phase = .finished }
+        status.level = 0
+        status.heartbeat = 0
+        DictationBridge.writeStatus(status)
+    }
+
+    // MARK: Listening
+
+    private func startListening() {
+        guard isWarm, let recognizer else { return }
+        endRecognition()
+
+        let request = SFSpeechAudioBufferRecognitionRequest()
+        request.shouldReportPartialResults = true
+        request.addsPunctuation = true
+        if recognizer.supportsOnDeviceRecognition {
+            // Keeps speech on the phone, and lifts the one-minute server limit.
+            request.requiresOnDeviceRecognition = true
+        }
+        self.request = request
+
+        status.session += 1
+        status.phase = .listening
+        status.transcript = ""
+        status.message = nil
+        let session = status.session
+        task = recognizer.recognitionTask(with: request) { [weak self] result, error in
+            let text = result?.bestTranscription.formattedString
+            let isFinal = result?.isFinal == true
+            Task { @MainActor in
+                guard let self, self.status.session == session, self.status.phase == .listening else { return }
+                if let text { self.status.transcript = text }
+                if isFinal || error != nil {
+                    self.stopListening()
+                } else {
+                    self.publish()
                 }
             }
-            phase = .listening
-        } catch {
-            stopAudio()
-            phase = .unavailable("Couldn't start the microphone: \(error.localizedDescription)")
         }
+        lastActivity = Date()
+        publish()
     }
 
-    /// Stops listening and leaves the text for the keyboard.
-    func finish() {
-        guard phase == .listening else { return }
-        stopAudio()
-        DictationBridge.deliver(transcript)
-        phase = .finished
+    private func stopListening() {
+        guard status.phase == .listening else { return }
+        endRecognition()
+        status.phase = .finished
+        status.level = 0
+        lastActivity = Date()
+        publish()
     }
 
-    /// Stops listening and throws the text away.
-    func cancel() {
-        stopAudio()
-        DictationBridge.clear()
-        transcript = ""
-        phase = .finished
+    private func cancelListening() {
+        guard status.phase == .listening else { return }
+        endRecognition()
+        status.phase = .cancelled
+        status.transcript = ""
+        status.level = 0
+        lastActivity = Date()
+        publish()
     }
 
-    private func stopAudio() {
-        if audioEngine.isRunning { audioEngine.stop() }
-        if hasTap {
-            audioEngine.inputNode.removeTap(onBus: 0)
-            hasTap = false
-        }
+    private func endRecognition() {
         request?.endAudio()
         task?.cancel()
         request = nil
         task = nil
-        try? AVAudioSession.sharedInstance().setActive(false, options: .notifyOthersOnDeactivation)
+    }
+
+    private func handleLevel(_ level: Float) {
+        guard status.phase == .listening else { return }
+        status.level = level
+        // The waveform wants ~15 updates a second, not one per buffer.
+        if Date().timeIntervalSince(lastLevelWrite) > 0.066 {
+            publish()
+        }
+    }
+
+    private func publish() {
+        status.heartbeat = isWarm ? Date().timeIntervalSince1970 : 0
+        lastLevelWrite = Date()
+        DictationBridge.writeStatus(status)
+    }
+
+    private func publishUnavailable(_ message: String) {
+        status.phase = .unavailable
+        status.message = message
+        status.heartbeat = 0
+        DictationBridge.writeStatus(status)
+    }
+
+    // MARK: Helpers
+
+    nonisolated private static func level(of buffer: AVAudioPCMBuffer) -> Float {
+        guard let samples = buffer.floatChannelData?[0], buffer.frameLength > 0 else { return 0 }
+        let count = Int(buffer.frameLength)
+        var sum: Float = 0
+        for index in 0..<count { sum += samples[index] * samples[index] }
+        let rms = (sum / Float(count)).squareRoot()
+        // Speech sits around -40...-10 dBFS; map that range onto 0...1.
+        let decibels = 20 * log10(max(rms, 0.000_01))
+        return min(max((decibels + 50) / 40, 0), 1)
     }
 
     private static func speechAuthorized() async -> Bool {
@@ -126,119 +240,73 @@ final class SpeechDictation: ObservableObject {
     }
 }
 
-struct DictationView: View {
-    let sessionID: UUID
+private final class RequestBox: @unchecked Sendable {
+    private let lock = NSLock()
+    private var request: SFSpeechAudioBufferRecognitionRequest?
+
+    func set(_ request: SFSpeechAudioBufferRecognitionRequest?) {
+        lock.lock(); defer { lock.unlock() }
+        self.request = request
+    }
+
+    func get() -> SFSpeechAudioBufferRecognitionRequest? {
+        lock.lock(); defer { lock.unlock() }
+        return request
+    }
+}
+
+/// The small card shown for the one hop into the app.
+struct MicReadyView: View {
+    let launch: UUID
     let onClose: () -> Void
 
-    @StateObject private var speech = SpeechDictation()
-    @Environment(\.scenePhase) private var scenePhase
+    @ObservedObject private var service = DictationService.shared
+    @State private var isStarting = true
 
     var body: some View {
-        VStack(spacing: 24) {
-            HStack {
-                Button("Cancel") {
-                    speech.cancel()
-                    onClose()
-                }
-                Spacer()
-            }
-
-            Spacer(minLength: 0)
-
-            micBadge
-
+        VStack(spacing: 18) {
+            Spacer()
+            Image(systemName: "mic")
+                .font(.system(size: 54, weight: .light))
+                .foregroundColor(isUnavailable ? .secondary : .orange)
             Text(headline)
                 .font(.title2.weight(.semibold))
                 .multilineTextAlignment(.center)
-
-            ScrollView {
-                Text(speech.transcript.isEmpty ? placeholder : speech.transcript)
-                    .font(.title3)
-                    .foregroundColor(speech.transcript.isEmpty ? .secondary : .primary)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .textSelection(.enabled)
+            Text(detail)
+                .font(.body)
+                .foregroundColor(.secondary)
+                .multilineTextAlignment(.center)
+            if isUnavailable {
+                Button("Open Settings") {
+                    if let url = URL(string: UIApplication.openSettingsURLString) {
+                        UIApplication.shared.open(url)
+                    }
+                }
+                .buttonStyle(.bordered)
             }
-            .frame(maxHeight: 260)
-            .padding()
-            .background(Color(.secondarySystemGroupedBackground))
-            .clipShape(RoundedRectangle(cornerRadius: 14))
-
-            Spacer(minLength: 0)
-
-            actionButton
+            Spacer()
+            Button("Close", action: onClose)
+                .foregroundColor(.secondary)
         }
-        .padding(20)
+        .padding(28)
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(Color(.systemGroupedBackground).ignoresSafeArea())
-        .task(id: sessionID) {
-            await speech.start()
-        }
-        .onChange(of: scenePhase) { newPhase in
-            // The user went back with the system's back arrow (or anywhere
-            // else): hand over what we have so the keyboard can type it.
-            if newPhase != .active {
-                speech.finish()
-            }
+        .task(id: launch) {
+            isStarting = true
+            await service.openedFromKeyboard()
+            isStarting = false
         }
     }
 
-    private var micBadge: some View {
-        ZStack {
-            Circle()
-                .fill(speech.phase == .listening ? Color.orange.opacity(0.18) : Color(.tertiarySystemFill))
-                .frame(width: 120, height: 120)
-            Image(systemName: speech.phase == .listening ? "mic.fill" : "mic")
-                .font(.system(size: 48, weight: .medium))
-                .foregroundColor(speech.phase == .listening ? .orange : .secondary)
-        }
-        .accessibilityHidden(true)
-    }
+    private var isUnavailable: Bool { service.status.phase == .unavailable }
 
     private var headline: String {
-        switch speech.phase {
-        case .starting: return "Getting ready…"
-        case .listening: return "Listening"
-        case .finished:
-            return speech.transcript.isEmpty
-                ? "Nothing to type"
-                : "Tap ◀ in the top-left corner to go back. Tapeze will type it there."
-        case .unavailable(let reason): return reason
-        }
+        if isUnavailable { return "Can't dictate yet" }
+        return isStarting ? "Starting the mic…" : "Mic ready"
     }
 
-    private var placeholder: String {
-        speech.phase == .listening ? "Start speaking. Tap ◀ in the top-left corner when you're done." : ""
-    }
-
-    @ViewBuilder
-    private var actionButton: some View {
-        switch speech.phase {
-        case .listening:
-            Button {
-                speech.finish()
-            } label: {
-                Text("Done").frame(maxWidth: .infinity)
-            }
-            .buttonStyle(.borderedProminent)
-            .tint(.orange)
-            .controlSize(.large)
-        case .unavailable:
-            Button {
-                if let url = URL(string: UIApplication.openSettingsURLString) {
-                    UIApplication.shared.open(url)
-                }
-            } label: {
-                Text("Open Settings").frame(maxWidth: .infinity)
-            }
-            .buttonStyle(.bordered)
-            .controlSize(.large)
-        case .starting, .finished:
-            Button {
-                onClose()
-            } label: {
-                Text("Close").frame(maxWidth: .infinity)
-            }
-            .buttonStyle(.bordered)
-            .controlSize(.large)
-        }
+    private var detail: String {
+        if isUnavailable { return service.status.message ?? "" }
+        return "Tap ◀ in the top-left corner to go back. You're already being heard, and the keyboard will show your words.\n\nFor the next few minutes, the mic key works without coming here."
     }
 }

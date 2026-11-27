@@ -113,6 +113,7 @@ class KeyboardViewController: UIInputViewController {
 
         hostingController = hc
         installTouchSurface()
+        installDictationOverlay()
         bindKeyboardHeight()
         updateInputContext()
 
@@ -132,12 +133,159 @@ class KeyboardViewController: UIInputViewController {
 
     // MARK: - Dictation
 
-    /// Keyboards can't record audio, so open the Tapeze app, which listens and
-    /// leaves the text for us. Apple's DTS confirms a keyboard may open its
-    /// own app; it needs Full Access on iOS 26.
+    private let dictationModel = DictationOverlayModel()
+    private var dictationOverlay: UIHostingController<DictationOverlayView>?
+    /// The app's session this keyboard is typing into, if any.
+    private var dictationSession: Int?
+    /// Sessions at or below this are done with: never attach to them again.
+    private var lastHandledDictationSession = 0
+    /// What this keyboard has typed for the current session, so live updates
+    /// can replace it.
+    private var dictationTyped = ""
+    private var dictationLeadingSpace = ""
+    private var dictationPollTimer: Timer?
+
+    private func installDictationOverlay() {
+        let overlay = UIHostingController(rootView: DictationOverlayView(
+            model: dictationModel,
+            state: keyboardState,
+            onDone: { [weak self] in self?.finishDictation() },
+            onCancel: { [weak self] in self?.cancelDictation() }
+        ))
+        overlay.view.translatesAutoresizingMaskIntoConstraints = false
+        overlay.view.backgroundColor = .clear
+        overlay.view.isHidden = true
+        if #available(iOS 16.4, *) {
+            overlay.safeAreaRegions = []
+        }
+        addChild(overlay)
+        view.addSubview(overlay.view)
+        overlay.didMove(toParent: self)
+        NSLayoutConstraint.activate([
+            overlay.view.leadingAnchor.constraint(equalTo: view.leadingAnchor),
+            overlay.view.trailingAnchor.constraint(equalTo: view.trailingAnchor),
+            overlay.view.topAnchor.constraint(equalTo: view.topAnchor),
+            overlay.view.bottomAnchor.constraint(equalTo: view.bottomAnchor),
+        ])
+        dictationOverlay = overlay
+
+        DictationBridge.observe(DictationBridge.updateNotification) { [weak self] in
+            self?.syncDictation()
+        }
+    }
+
+    /// The mic key. If the app's mic is still warm, dictate right here;
+    /// otherwise hop to the app once to switch it on.
     private func startDictation() {
-        DictationBridge.clear()
-        openContainingApp(DictationBridge.dictateURL)
+        let status = DictationBridge.readStatus()
+        lastHandledDictationSession = max(lastHandledDictationSession, status.session)
+        if DictationBridge.isWarm(status) {
+            showDictationOverlay(waitingForMic: true)
+            DictationBridge.post(DictationBridge.startNotification)
+        } else {
+            openContainingApp(DictationBridge.dictateURL)
+        }
+    }
+
+    private func finishDictation() {
+        // The text so far is already in the field. Let go now rather than
+        // wait for the app's final pass, which could land after the user has
+        // moved the cursor.
+        hideDictationOverlay()
+        endDictationSession()
+        DictationBridge.post(DictationBridge.stopNotification)
+    }
+
+    private func cancelDictation() {
+        hideDictationOverlay()
+        replaceDictatedText(with: "")
+        endDictationSession()
+        DictationBridge.post(DictationBridge.cancelNotification)
+    }
+
+    /// Reads the app's status and follows it: attach to a new session, stream
+    /// its text into the field, and let go when it ends.
+    private func syncDictation() {
+        let status = DictationBridge.readStatus()
+
+        if dictationSession == nil {
+            guard status.phase == .listening,
+                  status.session > lastHandledDictationSession,
+                  DictationBridge.isWarm(status) else {
+                if dictationModel.isVisible, !DictationBridge.isWarm(status) {
+                    // Waiting for a mic that went away: hop to the app instead.
+                    hideDictationOverlay()
+                    openContainingApp(DictationBridge.dictateURL)
+                }
+                return
+            }
+            dictationSession = status.session
+            lastHandledDictationSession = status.session
+            dictationTyped = ""
+            dictationLeadingSpace = DictationBridge.leadingSpace(after: textDocumentProxy.documentContextBeforeInput)
+            showDictationOverlay(waitingForMic: false)
+        }
+
+        guard status.session == dictationSession else {
+            // The app moved on without us (for example it was relaunched).
+            if dictationModel.isVisible { hideDictationOverlay() }
+            endDictationSession()
+            return
+        }
+
+        switch status.phase {
+        case .listening:
+            dictationModel.isWaitingForMic = false
+            dictationModel.transcript = status.transcript
+            dictationModel.push(level: status.level)
+            replaceDictatedText(with: status.transcript)
+            if !DictationBridge.isWarm(status) {
+                hideDictationOverlay()
+                endDictationSession()
+            }
+        case .finished:
+            replaceDictatedText(with: status.transcript)
+            hideDictationOverlay()
+            endDictationSession()
+        case .cancelled, .idle, .unavailable:
+            replaceDictatedText(with: "")
+            hideDictationOverlay()
+            endDictationSession()
+        }
+    }
+
+    private func replaceDictatedText(with transcript: String) {
+        let target = transcript.isEmpty ? "" : dictationLeadingSpace + transcript
+        let edit = DictationBridge.edit(from: dictationTyped, to: target)
+        guard edit.delete > 0 || !edit.insert.isEmpty else { return }
+        for _ in 0..<edit.delete { textDocumentProxy.deleteBackward() }
+        if !edit.insert.isEmpty { textDocumentProxy.insertText(edit.insert) }
+        dictationTyped = target
+        scheduleInputContextUpdate()
+    }
+
+    private func endDictationSession() {
+        dictationSession = nil
+        dictationTyped = ""
+    }
+
+    private func showDictationOverlay(waitingForMic: Bool) {
+        dictationModel.reset()
+        dictationModel.isWaitingForMic = waitingForMic
+        dictationModel.isVisible = true
+        dictationOverlay?.view.isHidden = false
+        // Darwin notifications can be coalesced; poll too while the overlay is up.
+        dictationPollTimer?.invalidate()
+        dictationPollTimer = Timer.scheduledTimer(withTimeInterval: 0.25, repeats: true) { [weak self] _ in
+            DispatchQueue.main.async { self?.syncDictation() }
+        }
+    }
+
+    private func hideDictationOverlay() {
+        dictationModel.isVisible = false
+        dictationOverlay?.view.isHidden = true
+        dictationPollTimer?.invalidate()
+        dictationPollTimer = nil
     }
 
     /// `UIApplication.open` is marked unavailable to extensions at compile
@@ -159,18 +307,9 @@ class KeyboardViewController: UIInputViewController {
         }
     }
 
+    /// Back from the app after the hop: pick up the session it started.
     @objc private func hostDidBecomeActive() {
-        insertPendingDictation()
-    }
-
-    private func insertPendingDictation() {
-        guard let text = DictationBridge.takePendingText() else { return }
-        let insertion = DictationBridge.textToInsert(
-            text,
-            after: textDocumentProxy.documentContextBeforeInput
-        )
-        textDocumentProxy.insertText(insertion)
-        scheduleInputContextUpdate()
+        syncDictation()
     }
 
     override func viewWillAppear(_ animated: Bool) {
@@ -189,7 +328,7 @@ class KeyboardViewController: UIInputViewController {
         updateDisplayHeightLimit()
         applyKeyboardHeight(keyboardState.effectiveKeyboardHeight, animated: false, force: true)
         updateInputContext()
-        insertPendingDictation()
+        syncDictation()
     }
 
     override func viewDidAppear(_ animated: Bool) {
@@ -205,6 +344,9 @@ class KeyboardViewController: UIInputViewController {
     }
 
     override func viewWillDisappear(_ animated: Bool) {
+        if dictationSession != nil || dictationModel.isVisible {
+            finishDictation()
+        }
         isOnScreen = false
         super.viewWillDisappear(animated)
     }
