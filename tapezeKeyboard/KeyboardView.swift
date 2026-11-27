@@ -17,6 +17,7 @@ struct KeyboardView: View {
     let onNextKeyboard: (() -> Void)?
     /// Undo, redo and copy from the tool column.
     var onToolAction: (ToolColumnAction) -> Void = { _ in }
+    var onDictation: (() -> Void)? = nil
     /// True in the keyboard extension, whose controller delivers touches
     /// through `KeyboardState.touchHandler` instead of a SwiftUI overlay.
     var usesHostTouchSurface: Bool = false
@@ -485,7 +486,7 @@ struct KeyboardView: View {
             )
 
             internalCommandDiamond(
-                config: KeyConfig(tap: "", specialAction: .enter, displayLabel: "return"),
+                config: KeyConfig(tap: "", specialAction: .dictation, displayLabel: "dictation"),
                 position: GridPosition(row: 3, col: commandBarCol),
                 size: diamondSide,
                 center: CGPoint(x: mainX + keySide * 2 + spacing * 1.5, y: rowHeight * 2 + spacing * 1.5),
@@ -2138,7 +2139,9 @@ struct KeyboardView: View {
         case 2:
             handleSpecialAction(.backspace)
         case 3:
-            handleSpecialAction(.enter)
+            // The small diamond between the middle and right keys. The big
+            // return key sits in the corner, so this one starts dictation.
+            handleSpecialAction(.dictation)
         case 4:
             handleSpecialAction(.shift)
         default:
@@ -2167,6 +2170,8 @@ struct KeyboardView: View {
             if let content = UIPasteboard.general.string {
                 onCharacter(content)
             }
+        case .dictation:
+            onDictation?()
         }
     }
 

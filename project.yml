@@ -10,7 +10,7 @@ settings:
     SWIFT_VERSION: "5.9"
     TARGETED_DEVICE_FAMILY: "1"
     MARKETING_VERSION: "1.1.5"
-    CURRENT_PROJECT_VERSION: "64"
+    CURRENT_PROJECT_VERSION: "68"
 
 targets:
   tapeze:
@@ -23,6 +23,7 @@ targets:
       - path: tapezeKeyboard/KeyboardLayout.swift
       - path: tapezeKeyboard/KeyboardState.swift
       - path: tapezeKeyboard/GestureEngine.swift
+      - path: tapezeKeyboard/DictationBridge.swift
     resources:
       - path: tapeze/PrivacyInfo.xcprivacy
     settings:
