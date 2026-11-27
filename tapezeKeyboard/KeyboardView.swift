@@ -38,19 +38,16 @@ struct KeyboardView: View {
     /// Where the finger last settled. The hold timer restarts whenever the
     /// finger moves away from it, so it only fires once the finger is still.
     @State private var holdAnchor: CGPoint = .zero
-    /// How far the tool column's wheel is scrolled, in points.
-    @State private var toolOffset: CGFloat = 0
+    /// The tool column's scroll position, pressed row and scroll bar state.
+    /// Held as a plain reference, not observed here, so a drag redraws only
+    /// the column and not the whole keyboard on every finger sample.
+    @State private var toolWheel = ToolWheelModel()
     @State private var toolOffsetLoaded = false
     /// Wheel offset and finger height when the current column touch began.
     @State private var toolDragStart: (offset: CGFloat, y: CGFloat)?
     /// Recent finger heights on the column, for the release speed.
     @State private var toolSamples: [(y: CGFloat, time: TimeInterval)] = []
     @State private var toolDidScroll = false
-    /// Row the finger is on, drawn pressed while it stays a tap.
-    @State private var toolPressedIndex: Int?
-    /// True while the column is being dragged or is settling; its scroll
-    /// bar brightens then.
-    @State private var toolIsScrolling = false
     @State private var toolSettleToken = 0
     @State private var logicalGestureActive = false
     @State private var lastTrackedPoint: CGPoint?
@@ -224,11 +221,9 @@ struct KeyboardView: View {
                 if showsToolColumn {
                     ToolColumnView(
                         items: toolItems,
-                        offset: toolOffset,
+                        wheel: toolWheel,
                         rowHeight: keyHeight + spacing,
                         gap: spacing,
-                        isScrolling: toolIsScrolling,
-                        pressedIndex: toolPressedIndex,
                         theme: state.theme
                     )
                     .frame(width: toolColumnFrame.width, height: toolColumnFrame.height)
@@ -237,7 +232,7 @@ struct KeyboardView: View {
                     .onAppear {
                         guard !toolOffsetLoaded else { return }
                         toolOffsetLoaded = true
-                        toolOffset = min(
+                        toolWheel.offset = min(
                             max(state.toolColumnOffset, 0),
                             ToolColumnMetrics.maxOffset(
                                 itemCount: toolItems.count, rowHeight: keyHeight + spacing,
@@ -995,7 +990,7 @@ struct KeyboardView: View {
 
     private func abandonStaleGesture() {
         toolDragStart = nil
-        toolPressedIndex = nil
+        toolWheel.pressedIndex = nil
         gestureEngine.touchCancelled()
         cancelNumberLongPress()
         longPressTriggered = false
@@ -1603,11 +1598,11 @@ struct KeyboardView: View {
 
     private func beginToolTouch(at point: CGPoint, ctx: GestureLayoutContext) {
         let now = ProcessInfo.processInfo.systemUptime
-        toolDragStart = (toolOffset, point.y)
+        toolDragStart = (toolWheel.offset, point.y)
         toolSamples = [(point.y, now)]
         toolDidScroll = false
-        toolPressedIndex = ToolColumnMetrics.index(
-            atY: point.y - ctx.toolColumnFrame.minY, offset: toolOffset,
+        toolWheel.pressedIndex = ToolColumnMetrics.index(
+            atY: point.y - ctx.toolColumnFrame.minY, offset: toolWheel.offset,
             rowHeight: ctx.toolRowHeight, itemCount: toolItems.count
         )
     }
@@ -1617,13 +1612,13 @@ struct KeyboardView: View {
         let dy = point.y - start.y
         if !toolDidScroll, abs(dy) > ToolColumnMetrics.tapSlop {
             toolDidScroll = true
-            toolPressedIndex = nil
+            toolWheel.pressedIndex = nil
             toolSettleToken += 1
-            withAnimation(.easeOut(duration: 0.15)) { toolIsScrolling = true }
+            withAnimation(.easeOut(duration: 0.15)) { toolWheel.isScrolling = true }
         }
         guard toolDidScroll else { return }
         // Dragging the finger up moves the list up: further down it.
-        toolOffset = ToolColumnMetrics.dragged(start.offset - dy, maxOffset: toolMaxOffset(ctx))
+        toolWheel.offset = ToolColumnMetrics.dragged(start.offset - dy, maxOffset: toolMaxOffset(ctx))
         let now = ProcessInfo.processInfo.systemUptime
         toolSamples.append((point.y, now))
         toolSamples.removeAll { now - $0.time > 0.1 }
@@ -1632,7 +1627,7 @@ struct KeyboardView: View {
     private func endToolTouch(at point: CGPoint, ctx: GestureLayoutContext) {
         defer {
             toolDragStart = nil
-            toolPressedIndex = nil
+            toolWheel.pressedIndex = nil
             toolSamples = []
         }
         guard toolDragStart != nil else { return }
@@ -1640,7 +1635,7 @@ struct KeyboardView: View {
 
         if !toolDidScroll {
             if let index = ToolColumnMetrics.index(
-                atY: point.y - ctx.toolColumnFrame.minY, offset: toolOffset,
+                atY: point.y - ctx.toolColumnFrame.minY, offset: toolWheel.offset,
                 rowHeight: ctx.toolRowHeight, itemCount: items.count
             ) {
                 performToolItem(items[index])
@@ -1654,19 +1649,20 @@ struct KeyboardView: View {
             velocity = -(last.y - first.y) / CGFloat(last.time - first.time)
         }
         let resting = ToolColumnMetrics.resting(
-            offset: toolOffset, velocity: velocity,
+            offset: toolWheel.offset, velocity: velocity,
             rowHeight: ctx.toolRowHeight, maxOffset: toolMaxOffset(ctx)
         )
-        withAnimation(.interpolatingSpring(stiffness: 170, damping: 24)) {
-            toolOffset = resting
+        // A soft, critically damped settle: no bounce past the row.
+        withAnimation(.spring(response: 0.42, dampingFraction: 1)) {
+            toolWheel.offset = resting
         }
         state.toolColumnOffset = resting
-        // Back to full-size, aligned cells once the spring has settled.
+        // Dim the scroll bar again once the spring has settled.
         toolSettleToken += 1
         let token = toolSettleToken
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.45) {
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.6) {
             guard token == toolSettleToken else { return }
-            withAnimation(.easeOut(duration: 0.2)) { toolIsScrolling = false }
+            withAnimation(.easeOut(duration: 0.2)) { toolWheel.isScrolling = false }
         }
     }
 
@@ -2568,20 +2564,31 @@ struct HoldPickerView: View {
 
 // MARK: - Tool Column View
 
-/// The scrolling wheel beside the keys. Rows shrink and fade toward the top
-/// and bottom edges so it reads as a wheel and the next row always peeks in.
-/// Touches are handled by the keyboard's touch surface, not here.
+/// Scroll state for the tool column, observed only by the column itself.
+final class ToolWheelModel: ObservableObject {
+    /// How far the wheel is scrolled, in points.
+    @Published var offset: CGFloat = 0
+    /// True while the column is being dragged or is settling; its scroll
+    /// bar brightens then.
+    @Published var isScrolling = false
+    /// Row the finger is on, drawn pressed while it stays a tap.
+    @Published var pressedIndex: Int?
+}
+
+/// The scrolling column beside the keys: equal, full-size rows that slide
+/// under the finger. Touches are handled by the keyboard's touch surface.
 private struct ToolColumnView: View {
     let items: [ToolColumnItem]
-    let offset: CGFloat
+    @ObservedObject var wheel: ToolWheelModel
     /// One key row plus the gap below it.
     let rowHeight: CGFloat
     let gap: CGFloat
-    let isScrolling: Bool
-    let pressedIndex: Int?
     let theme: KeyboardTheme
 
     var body: some View {
+        let offset = wheel.offset
+        let isScrolling = wheel.isScrolling
+        let pressedIndex = wheel.pressedIndex
         GeometryReader { geo in
             let height = geo.size.height
             let width = geo.size.width
@@ -2594,13 +2601,16 @@ private struct ToolColumnView: View {
             ZStack(alignment: .topLeading) {
                 theme.emptyColumnBackground
 
-                ForEach(Array(items.enumerated()), id: \.offset) { index, item in
-                    let centerY = CGFloat(index) * rowHeight + cellHeight / 2 - offset
-                    // Every cell the same size and strength, wherever it is:
-                    // shrinking the edge rows made undo, at the top, harder to hit.
-                    toolCell(item, width: cellWidth, height: cellHeight, pressed: index == pressedIndex)
-                        .position(x: width / 2, y: centerY)
+                // Every cell the same size and strength, wherever it is, and
+                // the whole stack moves as one layer so scrolling is a single
+                // cheap translation rather than relaying out every row.
+                VStack(spacing: gap) {
+                    ForEach(Array(items.enumerated()), id: \.offset) { index, item in
+                        toolCell(item, width: cellWidth, height: cellHeight, pressed: index == pressedIndex)
+                    }
                 }
+                .frame(width: width, height: height, alignment: .top)
+                .offset(y: -offset)
 
                 // Always shown, faintly at rest, so it is clear there is more.
                 if maxOffset > 0 {
