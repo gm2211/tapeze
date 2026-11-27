@@ -896,10 +896,7 @@ struct DiamondCommandKeyView: View {
                 .commandLabelDepth(for: theme)
 
         case .dictation:
-            Image(systemName: "mic")
-                .font(.system(size: size.height * 0.34))
-                .foregroundColor(theme.specialTextColor)
-                .commandLabelDepth(for: theme)
+            DictationMicBadge(size: size, scale: 0.62, isActive: isActive, theme: theme)
 
         case .shift:
             Image(systemName: isCapsLocked ? "capslock.fill" : (isShifted ? "shift.fill" : "shift"))
@@ -921,6 +918,31 @@ struct DiamondCommandKeyView: View {
                 .foregroundColor(theme.specialTextColor)
                 .commandLabelDepth(for: theme)
         }
+    }
+}
+
+/// The mic key's face: a thin outlined mic inside a soft round badge, like the
+/// system dictation button.
+private struct DictationMicBadge: View {
+    let size: CGSize
+    /// Badge diameter as a fraction of the key's shorter side.
+    let scale: CGFloat
+    let isActive: Bool
+    let theme: KeyboardTheme
+
+    var body: some View {
+        let diameter = min(size.width, size.height) * scale
+        ZStack {
+            Circle()
+                .fill(theme.specialTextColor.opacity(isActive ? 0.28 : 0.13))
+            Circle()
+                .strokeBorder(theme.specialTextColor.opacity(0.10), lineWidth: 0.5)
+            Image(systemName: "mic")
+                .font(.system(size: diameter * 0.5, weight: .light))
+                .foregroundColor(theme.specialTextColor)
+        }
+        .frame(width: diameter, height: diameter)
+        .commandLabelDepth(for: theme)
     }
 }
 
@@ -1026,10 +1048,7 @@ struct CommandKeyView: View {
                 .commandLabelDepth(for: theme)
 
         case .dictation:
-            Image(systemName: "mic")
-                .font(.system(size: size.height * 0.4))
-                .foregroundColor(theme.specialTextColor)
-                .commandLabelDepth(for: theme)
+            DictationMicBadge(size: size, scale: 0.72, isActive: isActive, theme: theme)
 
         case .toggleLayer:
             Text(config.displayLabel ?? "")
