@@ -302,16 +302,18 @@ print("tool column wheel")
 do {
     let count = ToolColumnItem.items(emoji: EmojiUsage.defaults).count
     expect("4 tools + 12 emoji", "\(count)", "16")
-    let h: CGFloat = 294
-    let maxOffset = ToolColumnMetrics.maxOffset(itemCount: count, height: h)
-    expect("content runs past one screen", "\(maxOffset)", "672.0") // 16*60+6-294
-    expect("top row at rest is undo", "\(ToolColumnMetrics.index(atY: 20, offset: 0, itemCount: count) ?? -1)", "0")
-    expect("fourth row at rest is copy", "\(ToolColumnMetrics.index(atY: 200, offset: 0, itemCount: count) ?? -1)", "3")
-    expect("scrolled one row, the top is redo", "\(ToolColumnMetrics.index(atY: 20, offset: 60, itemCount: count) ?? -1)", "1")
-    expect("slow release snaps to the nearest row", "\(ToolColumnMetrics.resting(offset: 95, velocity: 0, itemCount: count, height: h))", "120.0")
-    expect("a flick carries on", "\(ToolColumnMetrics.resting(offset: 60, velocity: 1000, itemCount: count, height: h))", "300.0")
-    expect("a flick never passes the end", "\(ToolColumnMetrics.resting(offset: 600, velocity: 5000, itemCount: count, height: h))", "672.0")
-    expect("pulling above the top gives way slowly", "\(ToolColumnMetrics.dragged(-30, itemCount: count, height: h))", "-10.0")
+    // Default keyboard: 294pt tall, 72pt key rows, 2pt gaps, so a row is 74pt.
+    let h: CGFloat = 294, row: CGFloat = 74, gap: CGFloat = 2
+    expect("at rest four cells fill the column exactly", "\(4 * row - gap)", "294.0")
+    let maxOffset = ToolColumnMetrics.maxOffset(itemCount: count, rowHeight: row, gap: gap, height: h)
+    expect("the end rests on a whole row", "\(maxOffset)", "888.0") // 12 rows down
+    expect("top row at rest is undo, beside the a row", "\(ToolColumnMetrics.index(atY: 20, offset: 0, rowHeight: row, itemCount: count) ?? -1)", "0")
+    expect("fourth row at rest is copy, beside the space bar", "\(ToolColumnMetrics.index(atY: 250, offset: 0, rowHeight: row, itemCount: count) ?? -1)", "3")
+    expect("scrolled one row, the top is redo", "\(ToolColumnMetrics.index(atY: 20, offset: row, rowHeight: row, itemCount: count) ?? -1)", "1")
+    expect("slow release snaps to the nearest row", "\(ToolColumnMetrics.resting(offset: 120, velocity: 0, rowHeight: row, maxOffset: maxOffset))", "148.0")
+    expect("a flick carries on", "\(ToolColumnMetrics.resting(offset: 74, velocity: 1000, rowHeight: row, maxOffset: maxOffset))", "296.0")
+    expect("a flick never passes the end", "\(ToolColumnMetrics.resting(offset: 800, velocity: 5000, rowHeight: row, maxOffset: maxOffset))", "888.0")
+    expect("pulling above the top gives way slowly", "\(ToolColumnMetrics.dragged(-30, maxOffset: maxOffset))", "-10.0")
 }
 
 print("emoji ranking")

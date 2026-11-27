@@ -771,37 +771,38 @@ enum ToolColumnItem: Equatable, Hashable {
     }
 }
 
-/// Geometry of the tool column's wheel: fixed rows that scroll vertically and
-/// come to rest on whole rows.
+/// Geometry of the tool column's wheel. Each row is one key row tall
+/// (`rowHeight` = key height + gap), so at rest its cells line up with the
+/// letter rows and the space bar beside them.
 enum ToolColumnMetrics {
     static let width: CGFloat = 66
-    static let rowHeight: CGFloat = 60
-    /// Space above the first row and below the last.
-    static let edgeInset: CGFloat = 3
     /// Movement under which a touch on the column is a tap, not a scroll.
     static let tapSlop: CGFloat = 10
     /// How far a flick carries on, in seconds of its release speed.
     static let momentum: CGFloat = 0.22
 
-    static func contentHeight(itemCount: Int) -> CGFloat {
-        CGFloat(itemCount) * rowHeight + edgeInset * 2
+    /// The last row has no gap below it.
+    static func contentHeight(itemCount: Int, rowHeight: CGFloat, gap: CGFloat) -> CGFloat {
+        max(CGFloat(itemCount) * rowHeight - gap, 0)
     }
 
-    static func maxOffset(itemCount: Int, height: CGFloat) -> CGFloat {
-        max(contentHeight(itemCount: itemCount) - height, 0)
+    static func maxOffset(itemCount: Int, rowHeight: CGFloat, gap: CGFloat, height: CGFloat) -> CGFloat {
+        let overflow = contentHeight(itemCount: itemCount, rowHeight: rowHeight, gap: gap) - height
+        guard overflow > 0 else { return 0 }
+        // Rest on whole rows at the end too, so the last screen stays aligned.
+        return (overflow / rowHeight).rounded(.up) * rowHeight
     }
 
     /// Row under `y` (column coordinates) when the wheel is scrolled by `offset`.
-    static func index(atY y: CGFloat, offset: CGFloat, itemCount: Int) -> Int? {
-        let raw = (y + offset - edgeInset) / rowHeight
+    static func index(atY y: CGFloat, offset: CGFloat, rowHeight: CGFloat, itemCount: Int) -> Int? {
+        let raw = (y + offset) / rowHeight
         guard raw >= 0 else { return nil }
         let index = Int(raw)
         return index < itemCount ? index : nil
     }
 
     /// Offset while dragging: past either end the wheel gives way slowly.
-    static func dragged(_ offset: CGFloat, itemCount: Int, height: CGFloat) -> CGFloat {
-        let maxOffset = maxOffset(itemCount: itemCount, height: height)
+    static func dragged(_ offset: CGFloat, maxOffset: CGFloat) -> CGFloat {
         if offset < 0 { return offset / 3 }
         if offset > maxOffset { return maxOffset + (offset - maxOffset) / 3 }
         return offset
@@ -810,10 +811,10 @@ enum ToolColumnMetrics {
     /// Where a released wheel comes to rest: carried on by its speed (points
     /// per second, positive scrolls further down the list), snapped to a whole
     /// row, and kept inside the content.
-    static func resting(offset: CGFloat, velocity: CGFloat, itemCount: Int, height: CGFloat) -> CGFloat {
+    static func resting(offset: CGFloat, velocity: CGFloat, rowHeight: CGFloat, maxOffset: CGFloat) -> CGFloat {
         let projected = offset + velocity * momentum
         let snapped = (projected / rowHeight).rounded() * rowHeight
-        return min(max(snapped, 0), maxOffset(itemCount: itemCount, height: height))
+        return min(max(snapped, 0), maxOffset)
     }
 }
 
