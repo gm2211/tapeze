@@ -103,7 +103,10 @@ struct KeyboardView: View {
             /// as wasted space. Keys now stretch to fill a phone's width; the cap
             /// only stops them turning into slabs on very wide screens, where
             /// the split keyboard is the better fit.
-            let maxKeyAspectRatio: CGFloat = 1.6
+            /// 1.6 made keys look like wide slabs once the tool column took
+            /// its share; 1.3 keeps them close to square, and any width left
+            /// over goes to the tool column instead.
+            let maxKeyAspectRatio: CGFloat = 1.3
             // Solve for the row height so that `gridRows` key rows plus a space bar
             // sized at `spaceBarRowRatio` key rows, plus the inter-row spacing
             // (including the gap above the space row), exactly fill the available height.
@@ -136,11 +139,17 @@ struct KeyboardView: View {
             /// backspace rail; the keys share what is left. A split keyboard
             /// has no room for it.
             let showsToolColumn = !resolvedSplit.isSplit
-            let toolColumnWidth: CGFloat = showsToolColumn ? ToolColumnMetrics.width : 0
-            let keysWidth = totalWidth - (showsToolColumn ? toolColumnWidth + spacing : 0)
-            let maxKeyWidthBySingle = max((keysWidth - spacing * CGFloat(gridCols)) / CGFloat(gridCols + 1), 1)
+            let minimumToolColumnWidth: CGFloat = showsToolColumn ? ToolColumnMetrics.width : 0
+            let roomForKeys = totalWidth - (showsToolColumn ? minimumToolColumnWidth + spacing : 0)
+            let maxKeyWidthBySingle = max((roomForKeys - spacing * CGFloat(gridCols)) / CGFloat(gridCols + 1), 1)
             let fullKeyWidth = min(keyHeight * maxKeyAspectRatio, maxKeyWidthBySingle)
-            let fullRailWidth = railWidth(forKeyWidth: fullKeyWidth, totalWidth: keysWidth, minimum: minimumControlExtent)
+            let fullRailWidth = railWidth(forKeyWidth: fullKeyWidth, totalWidth: roomForKeys, minimum: minimumControlExtent)
+            // Keys, their gaps and the backspace rail; the tool column takes
+            // the rest, so capped keys never leave an empty strip.
+            let keysBlockWidth = fullKeyWidth * CGFloat(gridCols) + spacing * CGFloat(gridCols) + fullRailWidth
+            let toolColumnWidth: CGFloat = showsToolColumn
+                ? max(minimumToolColumnWidth, totalWidth - keysBlockWidth - spacing)
+                : 0
             let splitSizing = resolvedSplit.isSplit
                 ? resolvedSplit
                 : SplitSizing(isSplit: false, keyWidth: fullKeyWidth, railWidth: fullRailWidth)
@@ -382,13 +391,16 @@ struct KeyboardView: View {
             }
             .coordinateSpace(name: "keyboard")
         }
-        // Fill whatever height the input view really got, up to the chosen
-        // height, pinned to the bottom. A fixed height was centered when the
-        // system gave less room (landscape adds a home-indicator inset), which
-        // pushed the top key row off the top edge and left an empty strip
-        // under the space row.
-        .frame(maxWidth: .infinity, maxHeight: state.effectiveKeyboardHeight)
-        .frame(maxHeight: .infinity, alignment: .bottom)
+        // Lay out at the height the input view really has, as UIKit measured
+        // it, up to the chosen height. When iOS shrank the keyboard after it
+        // appeared, SwiftUI could keep laying out at the old height: the keys
+        // were drawn squeezed into the real space while every tap was still
+        // hit-tested against the taller grid, so taps landed a row off,
+        // worse toward the bottom, until the keyboard was reopened. Pinned to
+        // the top so a root that still thinks it is taller can't push the
+        // keys down; with the measured height the two edges coincide anyway.
+        .frame(maxWidth: .infinity, maxHeight: state.layoutHeight, alignment: .top)
+        .frame(maxHeight: .infinity, alignment: .top)
         .ignoresSafeArea(edges: .vertical)
         .onDisappear {
             cancelNumberLongPress()
@@ -1032,7 +1044,7 @@ struct KeyboardView: View {
             "\(phase == .began ? "DOWN" : "UP") key \(key) split \(isSplit) dx \(f(dx))",
             "raw \(p(sample.local)) mapped \(p(mapped))",
             "win \(p(sample.inWindow)) origin \(p(layoutOriginInWindow))",
-            "surface \(sz(sample.surfaceSize)) layout \(sz(layoutSize))\(usedWindow ? " WINDOW" : "")",
+            "surface \(sz(sample.surfaceSize)) layout \(sz(layoutSize))\(usedWindow ? " WINDOW" : "") host h \(state.measuredHostHeight.map(f) ?? "?")",
             "grid x \(f(hitLayout.originX)) y \(f(hitLayout.originY)) key \(f(hitLayout.keySide))x\(f(hitLayout.rowHeight)) engine \(engineMatches ? "ok" : "STALE")",
             "typed \(state.touchDebug.typed)",
         ]

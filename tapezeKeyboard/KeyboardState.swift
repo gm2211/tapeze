@@ -103,6 +103,16 @@ class KeyboardState: ObservableObject {
     /// height the user picked. Set while laptop mode on a foldable makes only
     /// the half below the fold usable; nil everywhere else.
     @Published var displayHeightLimit: CGFloat? = nil
+    /// The input view's height as UIKit last laid it out. SwiftUI is driven
+    /// from this, so its layout can never lag behind a resize.
+    @Published var measuredHostHeight: CGFloat? = nil
+
+    /// The height the keys are laid out in: the chosen height, or less when
+    /// the system gave the keyboard less room.
+    var layoutHeight: CGFloat {
+        guard let measuredHostHeight, measuredHostHeight > 1 else { return effectiveKeyboardHeight }
+        return min(effectiveKeyboardHeight, measuredHostHeight)
+    }
     @Published var commandBarOnRight: Bool = true {
         didSet {
             if persistsSettings {

@@ -146,7 +146,22 @@ class KeyboardViewController: UIInputViewController {
 
     override func viewDidLayoutSubviews() {
         super.viewDidLayoutSubviews()
+        publishMeasuredHeight()
         scheduleHeightCorrectionIfNeeded()
+    }
+
+    /// Hands the height UIKit really gave us to SwiftUI. Published on the next
+    /// run loop turn so no SwiftUI update starts inside this layout pass.
+    private func publishMeasuredHeight() {
+        let height = view.bounds.height
+        guard height > 1 else { return }
+        DispatchQueue.main.async { [weak self] in
+            guard let self else { return }
+            let current = self.keyboardState.measuredHostHeight ?? -1
+            if abs(current - height) > 0.5 {
+                self.keyboardState.measuredHostHeight = height
+            }
+        }
     }
 
     /// On the iPhone Duo's inner display the keyboard sometimes came up at a
