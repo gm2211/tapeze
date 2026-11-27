@@ -72,7 +72,6 @@ enum SpecialAction {
     case shift
     case tab
     case clipboard
-    case dictation
 }
 
 // MARK: - Key Configuration
