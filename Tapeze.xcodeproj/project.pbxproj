@@ -15,14 +15,17 @@
 		6205AEA3B181AFFCE9429FA4 /* KeyboardView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9BFA103EB21C944D1ED1E3FB /* KeyboardView.swift */; };
 		66175F7CB3381FA6BEDE75F5 /* KeyboardState.swift in Sources */ = {isa = PBXBuildFile; fileRef = 18C975CF74BA38A1341445DD /* KeyboardState.swift */; };
 		68FE2D9559FF8F83FC3AF282 /* KeyboardViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB702C308CAFB4918684F7FB /* KeyboardViewController.swift */; };
+		75DAD7B29C31AC4DC7754D8D /* DictationView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 87BF5F1D16CD3F0CA736CAE7 /* DictationView.swift */; };
 		7E5B595A04E25FA8C7939E87 /* GestureEngine.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4019213444657153ECC6ED69 /* GestureEngine.swift */; };
 		87F2257ADF0FF3163578E76A /* tapezeApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB8DB47EFFA28FC07968AA2C /* tapezeApp.swift */; };
 		8D961D4234CF59D7A8A17804 /* KeyboardLayout.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1D740FBDDF81BCDD2DA60ACC /* KeyboardLayout.swift */; };
 		91E49CFDFA7DE2844220F1B4 /* GestureEngine.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4019213444657153ECC6ED69 /* GestureEngine.swift */; };
+		958AFEB0CB6DDBC3D2641214 /* DictationBridge.swift in Sources */ = {isa = PBXBuildFile; fileRef = 67BD7F81914D6A238B2E4778 /* DictationBridge.swift */; };
 		C589B59DD1A705A2D5BF9417 /* tapezeKeyboard.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = A948DBF37317F20F081389F2 /* tapezeKeyboard.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
 		D0BD643252A54F497B10DD25 /* KeyboardLayout.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1D740FBDDF81BCDD2DA60ACC /* KeyboardLayout.swift */; };
 		D846A31AE5F1DA9BE81959CE /* PrivacyInfo.xcprivacy in Resources */ = {isa = PBXBuildFile; fileRef = 5297B08F426C3D92CBCB9455 /* PrivacyInfo.xcprivacy */; };
 		E013C89B38F569A1D4C8649D /* ContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 58235199439BE8127DAEA57F /* ContentView.swift */; };
+		E1CF7EBC60458440788C74F7 /* DictationBridge.swift in Sources */ = {isa = PBXBuildFile; fileRef = 67BD7F81914D6A238B2E4778 /* DictationBridge.swift */; };
 		E93D55E4240FC6E1CABFDA01 /* KeyView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F6649422907571F40D06C1C0 /* KeyView.swift */; };
 /* End PBXBuildFile section */
 
@@ -59,6 +62,8 @@
 		4F8C2F6BAFFB4DE24EA5954F /* tapezeKeyboard.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = tapezeKeyboard.entitlements; sourceTree = "<group>"; };
 		5297B08F426C3D92CBCB9455 /* PrivacyInfo.xcprivacy */ = {isa = PBXFileReference; path = PrivacyInfo.xcprivacy; sourceTree = "<group>"; };
 		58235199439BE8127DAEA57F /* ContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentView.swift; sourceTree = "<group>"; };
+		67BD7F81914D6A238B2E4778 /* DictationBridge.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DictationBridge.swift; sourceTree = "<group>"; };
+		87BF5F1D16CD3F0CA736CAE7 /* DictationView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DictationView.swift; sourceTree = "<group>"; };
 		9B87F170AFEEE5FFB1DBD4CB /* tapeze.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; path = tapeze.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		9BFA103EB21C944D1ED1E3FB /* KeyboardView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KeyboardView.swift; sourceTree = "<group>"; };
 		9FC0986E8A4D6EBD7CCABC39 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
@@ -85,6 +90,7 @@
 			children = (
 				9FC0986E8A4D6EBD7CCABC39 /* Assets.xcassets */,
 				58235199439BE8127DAEA57F /* ContentView.swift */,
+				87BF5F1D16CD3F0CA736CAE7 /* DictationView.swift */,
 				2383E4AE794E3741561CF818 /* Info.plist */,
 				BDF479B266AC46B38A165EBD /* PrivacyInfo.xcprivacy */,
 				EDFAF0C7F163D408A0BA0B70 /* tapeze.entitlements */,
@@ -96,6 +102,7 @@
 		F959EB334BFCF154B2D75624 /* tapezeKeyboard */ = {
 			isa = PBXGroup;
 			children = (
+				67BD7F81914D6A238B2E4778 /* DictationBridge.swift */,
 				4019213444657153ECC6ED69 /* GestureEngine.swift */,
 				33CB99579BE45CFD6151D233 /* Info.plist */,
 				1D740FBDDF81BCDD2DA60ACC /* KeyboardLayout.swift */,
@@ -224,6 +231,8 @@
 			buildActionMask = 2147483647;
 			files = (
 				E013C89B38F569A1D4C8649D /* ContentView.swift in Sources */,
+				958AFEB0CB6DDBC3D2641214 /* DictationBridge.swift in Sources */,
+				75DAD7B29C31AC4DC7754D8D /* DictationView.swift in Sources */,
 				7E5B595A04E25FA8C7939E87 /* GestureEngine.swift in Sources */,
 				30D52745255A03C81C104FEF /* KeyView.swift in Sources */,
 				8D961D4234CF59D7A8A17804 /* KeyboardLayout.swift in Sources */,
@@ -237,6 +246,7 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				E1CF7EBC60458440788C74F7 /* DictationBridge.swift in Sources */,
 				91E49CFDFA7DE2844220F1B4 /* GestureEngine.swift in Sources */,
 				E93D55E4240FC6E1CABFDA01 /* KeyView.swift in Sources */,
 				D0BD643252A54F497B10DD25 /* KeyboardLayout.swift in Sources */,
@@ -272,7 +282,7 @@
 				);
 				PRODUCT_BUNDLE_IDENTIFIER = com.gm2211.tapeze;
 				SDKROOT = iphoneos;
-				TARGETED_DEVICE_FAMILY = "1";
+				TARGETED_DEVICE_FAMILY = "1,2";
 			};
 			name = Release;
 		};
@@ -292,7 +302,7 @@
 				PRODUCT_BUNDLE_IDENTIFIER = com.gm2211.tapeze.keyboard;
 				SDKROOT = iphoneos;
 				SKIP_INSTALL = YES;
-				TARGETED_DEVICE_FAMILY = "1";
+				TARGETED_DEVICE_FAMILY = "1,2";
 			};
 			name = Release;
 		};
@@ -330,7 +340,7 @@
 				CLANG_WARN_UNREACHABLE_CODE = YES;
 				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
 				COPY_PHASE_STRIP = NO;
-				CURRENT_PROJECT_VERSION = 61;
+				CURRENT_PROJECT_VERSION = 66;
 				DEBUG_INFORMATION_FORMAT = dwarf;
 				ENABLE_STRICT_OBJC_MSGSEND = YES;
 				ENABLE_TESTABILITY = YES;
@@ -358,7 +368,7 @@
 				SWIFT_ACTIVE_COMPILATION_CONDITIONS = DEBUG;
 				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
 				SWIFT_VERSION = 5.9;
-				TARGETED_DEVICE_FAMILY = "1";
+				TARGETED_DEVICE_FAMILY = 1;
 			};
 			name = Debug;
 		};
@@ -377,7 +387,7 @@
 				);
 				PRODUCT_BUNDLE_IDENTIFIER = com.gm2211.tapeze;
 				SDKROOT = iphoneos;
-				TARGETED_DEVICE_FAMILY = "1";
+				TARGETED_DEVICE_FAMILY = "1,2";
 			};
 			name = Debug;
 		};
@@ -415,7 +425,7 @@
 				CLANG_WARN_UNREACHABLE_CODE = YES;
 				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
 				COPY_PHASE_STRIP = NO;
-				CURRENT_PROJECT_VERSION = 61;
+				CURRENT_PROJECT_VERSION = 66;
 				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
 				ENABLE_NS_ASSERTIONS = NO;
 				ENABLE_STRICT_OBJC_MSGSEND = YES;
@@ -436,7 +446,7 @@
 				SWIFT_COMPILATION_MODE = wholemodule;
 				SWIFT_OPTIMIZATION_LEVEL = "-O";
 				SWIFT_VERSION = 5.9;
-				TARGETED_DEVICE_FAMILY = "1";
+				TARGETED_DEVICE_FAMILY = 1;
 			};
 			name = Release;
 		};
@@ -456,7 +466,7 @@
 				PRODUCT_BUNDLE_IDENTIFIER = com.gm2211.tapeze.keyboard;
 				SDKROOT = iphoneos;
 				SKIP_INSTALL = YES;
-				TARGETED_DEVICE_FAMILY = "1";
+				TARGETED_DEVICE_FAMILY = "1,2";
 			};
 			name = Debug;
 		};
