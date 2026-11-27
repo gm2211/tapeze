@@ -298,5 +298,88 @@ do {
     expect("other screens ignore that choice", eff(.wideScreens, .largeLandscape, saved), "always")
 }
 
+print("space bar cursor control")
+do {
+    /// Plays `points` at `dt` seconds apart and returns the moves it caused.
+    func play(_ points: [CGPoint], dt: TimeInterval, holdFirst: TimeInterval = 0) -> (moves: [String], tracker: SpaceCursorTracker) {
+        var tracker = SpaceCursorTracker()
+        tracker.begin(at: points[0], time: 0)
+        var moves: [String] = []
+        for (i, p) in points.dropFirst().enumerated() {
+            switch tracker.observe(p, time: holdFirst + dt * Double(i + 1)) {
+            case .characters(let n): moves.append("c\(n)")
+            case .words(let n): moves.append("w\(n)")
+            case nil: break
+            }
+        }
+        return (moves, tracker)
+    }
+    func line(_ from: CGPoint, _ to: CGPoint, steps: Int = 10) -> [CGPoint] {
+        (0...steps).map { i in
+            let t = CGFloat(i) / CGFloat(steps)
+            return CGPoint(x: from.x + (to.x - from.x) * t, y: from.y + (to.y - from.y) * t)
+        }
+    }
+    let o = CGPoint(x: 200, y: 330)
+
+    // Quick flick: nothing live, GestureEngine handles it on lift.
+    let flick = play(line(o, CGPoint(x: 160, y: 332)), dt: 0.012)
+    expect("a quick flick moves nothing while down", flick.moves.joined(separator: ","), "")
+    expect("a quick flick leaves the lift to the engine", "\(flick.tracker.didMoveCursor)", "false")
+
+    // Quick back-and-forth: one word in the first leg's direction.
+    let leftBack = play(line(o, CGPoint(x: 165, y: 331), steps: 6) + line(CGPoint(x: 165, y: 331), CGPoint(x: 200, y: 330), steps: 6).dropFirst(), dt: 0.012)
+    expect("quick left-and-back moves a word left", leftBack.moves.joined(separator: ","), "w-1")
+    let rightBack = play(line(o, CGPoint(x: 235, y: 331), steps: 6) + line(CGPoint(x: 235, y: 331), o, steps: 6).dropFirst(), dt: 0.012)
+    expect("quick right-and-back moves a word right", rightBack.moves.joined(separator: ","), "w1")
+    var wiggle = [o]
+    for _ in 0..<3 {
+        wiggle += line(o, CGPoint(x: 235, y: 330), steps: 4).dropFirst()
+        wiggle += line(CGPoint(x: 235, y: 330), o, steps: 4).dropFirst()
+    }
+    expect("three wiggles move three words", play(wiggle, dt: 0.01).moves.joined(separator: ","), "w1,w1,w1")
+
+    // Circles: clockwise right, counter-clockwise left (screen y is down).
+    func circle(clockwise: Bool, startAngle: Double, turns: Double = 1.1, r: CGFloat = 22) -> [CGPoint] {
+        let center = CGPoint(x: o.x - r * CGFloat(cos(startAngle)), y: o.y - r * CGFloat(sin(startAngle)))
+        let n = Int(36 * turns)
+        return (0...n).map { i in
+            let a = startAngle + (clockwise ? 1 : -1) * 2 * .pi * Double(i) / 36
+            return CGPoint(x: center.x + r * CGFloat(cos(a)), y: center.y + r * CGFloat(sin(a)))
+        }
+    }
+    expect("clockwise circle from the top moves right", play(circle(clockwise: true, startAngle: -.pi / 2), dt: 0.008).moves.first ?? "", "w1")
+    expect("clockwise circle from the bottom moves right", play(circle(clockwise: true, startAngle: .pi / 2), dt: 0.008).moves.first ?? "", "w1")
+    expect("counter-clockwise circle from the top moves left", play(circle(clockwise: false, startAngle: -.pi / 2), dt: 0.008).moves.first ?? "", "w-1")
+    expect("counter-clockwise circle from the bottom moves left", play(circle(clockwise: false, startAngle: .pi / 2), dt: 0.008).moves.first ?? "", "w-1")
+
+    expect("a small clockwise circle moves right", play(circle(clockwise: true, startAngle: -.pi / 2, r: 15), dt: 0.008).moves.first ?? "", "w1")
+    expect("a small counter-clockwise circle moves left", play(circle(clockwise: false, startAngle: 0, r: 15), dt: 0.008).moves.first ?? "", "w-1")
+
+    // Slow drag: trackpad, one character per 10pt once past the dead zone.
+    let slow = play(line(o, CGPoint(x: 260, y: 333), steps: 30), dt: 0.03)
+    let total = slow.moves.compactMap { Int($0.dropFirst()) }.reduce(0, +)
+    expect("a slow 60pt drag moves the cursor live", "\(slow.tracker.mode)", "trackpad")
+    expect("a slow 60pt drag moves about 5 characters", "\(total)", "5")
+    let back = play(line(o, CGPoint(x: 260, y: 330), steps: 20) + line(CGPoint(x: 260, y: 330), CGPoint(x: 230, y: 330), steps: 10).dropFirst(), dt: 0.03)
+    expect("trackpad follows the finger back", "\(back.moves.compactMap { Int($0.dropFirst()) }.reduce(0, +))", "1")
+    expect("trackpad does not turn reversals into words", "\(back.moves.contains { $0.hasPrefix("w") })", "false")
+
+    // Hold, then drag.
+    let held = play(line(o, CGPoint(x: 170, y: 330), steps: 10), dt: 0.02, holdFirst: 0.4)
+    expect("hold then drag left moves characters left", "\(held.moves.compactMap { Int($0.dropFirst()) }.reduce(0, +))", "-2")
+
+    // A held press whose thumb rolls a little still types a space.
+    let roll = play(line(o, CGPoint(x: 211, y: 334), steps: 10), dt: 0.05)
+    expect("a slow roll inside the dead zone moves nothing", "\(roll.tracker.didMoveCursor)", "false")
+
+    // Swipe up and swipe up-and-back stay the engine's.
+    let up = play(line(o, CGPoint(x: 206, y: 270), steps: 10), dt: 0.04)
+    expect("a slow swipe up is vetoed", "\(up.tracker.mode)", "vetoed")
+    let upBack = play(line(o, CGPoint(x: 204, y: 270), steps: 6) + line(CGPoint(x: 204, y: 270), o, steps: 6).dropFirst(), dt: 0.015)
+    expect("swipe up and back is vetoed", "\(upBack.tracker.mode)", "vetoed")
+    expect("swipe up and back moves nothing", upBack.moves.joined(separator: ","), "")
+}
+
 print("\n\(passes) passed, \(failures) failed")
 exit(failures == 0 ? 0 : 1)
