@@ -745,7 +745,7 @@ enum ToolColumnItem: Equatable, Hashable {
 /// (`rowHeight` = key height + gap), so at rest its cells line up with the
 /// letter rows and the space bar beside them.
 enum ToolColumnMetrics {
-    static let width: CGFloat = 66
+    static let width: CGFloat = 92
     /// Movement under which a touch on the column is a tap, not a scroll.
     static let tapSlop: CGFloat = 10
     /// How far a flick carries on, in seconds of its release speed.
