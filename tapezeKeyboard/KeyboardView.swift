@@ -145,12 +145,17 @@ struct KeyboardView: View {
         let roomForKeys = totalWidth - (showsToolColumn ? minimumToolColumnWidth + spacing : 0)
         let maxKeyWidthBySingle = max((roomForKeys - spacing * CGFloat(gridCols)) / CGFloat(gridCols + 1), 1)
         let fullKeyWidth = min(keyHeight * maxKeyAspectRatio, maxKeyWidthBySingle)
-        let fullRailWidth = railWidth(forKeyWidth: fullKeyWidth, totalWidth: roomForKeys, minimum: minimumControlExtent)
-        // Keys, their gaps and the backspace rail; the tool column takes
-        // the rest, so capped keys never leave an empty strip.
-        let keysBlockWidth = fullKeyWidth * CGFloat(gridCols) + spacing * CGFloat(gridCols) + fullRailWidth
+        let baseRailWidth = railWidth(forKeyWidth: fullKeyWidth, totalWidth: roomForKeys, minimum: minimumControlExtent)
+        // Width the capped keys leave over is shared by the tool column and
+        // the backspace rail, so no empty strip appears and neither side
+        // turns into a slab.
+        let keysBlockWidth = fullKeyWidth * CGFloat(gridCols) + spacing * CGFloat(gridCols) + baseRailWidth
+        let leftover = showsToolColumn
+            ? max(totalWidth - keysBlockWidth - spacing - minimumToolColumnWidth, 0)
+            : 0
+        let fullRailWidth = baseRailWidth + leftover / 2
         let toolColumnWidth: CGFloat = showsToolColumn
-            ? max(minimumToolColumnWidth, totalWidth - keysBlockWidth - spacing)
+            ? minimumToolColumnWidth + leftover / 2
             : 0
         let splitSizing = resolvedSplit.isSplit
             ? resolvedSplit
