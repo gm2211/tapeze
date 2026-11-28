@@ -147,6 +147,10 @@ class KeyboardViewController: UIInputViewController {
     private var dictationTyped = ""
     private var dictationLeadingSpace = ""
     private var dictationPollTimer: Timer?
+    /// Records right here in the keyboard; the app hop is the fallback.
+    private let inKeyboardDictation = InKeyboardDictation()
+    /// True while `inKeyboardDictation` (not the app) is the one listening.
+    private var isDictatingInKeyboard = false
 
     private func installDictationOverlay() {
         let overlay = UIHostingController(rootView: DictationOverlayView(
@@ -172,25 +176,77 @@ class KeyboardViewController: UIInputViewController {
         ])
         dictationOverlay = overlay
 
+        inKeyboardDictation.attach(to: view)
+        inKeyboardDictation.onStarted = { [weak self] in
+            self?.dictationModel.isWaitingForMic = false
+        }
+        inKeyboardDictation.onLevel = { [weak self] level in
+            guard let self, self.isDictatingInKeyboard else { return }
+            self.dictationModel.isWaitingForMic = false
+            self.dictationModel.push(level: level)
+        }
+        inKeyboardDictation.onTranscript = { [weak self] text in
+            guard let self, self.isDictatingInKeyboard else { return }
+            self.dictationModel.transcript = text
+            self.replaceDictatedText(with: text)
+        }
+        inKeyboardDictation.onEnded = { [weak self] failedBeforeStart in
+            self?.inKeyboardDictationEnded(failedBeforeStart: failedBeforeStart)
+        }
+
         DictationBridge.observe(DictationBridge.updateNotification) { [weak self] in
             self?.syncDictation()
         }
     }
 
-    /// The mic key. If the app's mic is still warm, dictate right here;
-    /// otherwise hop to the app once to switch it on.
+    /// The mic key. Record right here in the keyboard when we can. If not
+    /// (no Full Access, permissions not granted yet), use the app's mic if
+    /// it's still warm, or else hop to the app once to switch it on.
     private func startDictation() {
+        guard !isDictatingInKeyboard else { return }
         let status = DictationBridge.readStatus()
         lastHandledDictationSession = max(lastHandledDictationSession, status.session)
         if DictationBridge.isWarm(status) {
             showDictationOverlay(waitingForMic: true)
             DictationBridge.post(DictationBridge.startNotification)
+        } else if inKeyboardDictation.unavailableReason(hasFullAccess: hasFullAccess) == nil {
+            startDictationInKeyboard()
         } else {
             openContainingApp(DictationBridge.dictateURL)
         }
     }
 
+    private func startDictationInKeyboard() {
+        isDictatingInKeyboard = true
+        dictationSession = nil
+        dictationTyped = ""
+        dictationLeadingSpace = DictationBridge.leadingSpace(after: textDocumentProxy.documentContextBeforeInput)
+        showDictationOverlay(waitingForMic: true, pollsApp: false)
+        inKeyboardDictation.start()
+    }
+
+    private func inKeyboardDictationEnded(failedBeforeStart: Bool) {
+        // Done or discard already tidied up; this is for endings we didn't ask
+        // for (an interruption, the recognizer giving up).
+        guard isDictatingInKeyboard else { return }
+        isDictatingInKeyboard = false
+        let typedNothing = dictationTyped.isEmpty
+        hideDictationOverlay()
+        endDictationSession()
+        if failedBeforeStart && typedNothing {
+            // The mic never opened here: fall back to the app's mic.
+            openContainingApp(DictationBridge.dictateURL)
+        }
+    }
+
     private func finishDictation() {
+        if isDictatingInKeyboard {
+            isDictatingInKeyboard = false
+            hideDictationOverlay()
+            endDictationSession()
+            inKeyboardDictation.stop()
+            return
+        }
         // The text so far is already in the field. Let go now rather than
         // wait for the app's final pass, which could land after the user has
         // moved the cursor.
@@ -200,6 +256,14 @@ class KeyboardViewController: UIInputViewController {
     }
 
     private func cancelDictation() {
+        if isDictatingInKeyboard {
+            isDictatingInKeyboard = false
+            hideDictationOverlay()
+            replaceDictatedText(with: "")
+            endDictationSession()
+            inKeyboardDictation.cancel()
+            return
+        }
         hideDictationOverlay()
         replaceDictatedText(with: "")
         endDictationSession()
@@ -209,6 +273,8 @@ class KeyboardViewController: UIInputViewController {
     /// Reads the app's status and follows it: attach to a new session, stream
     /// its text into the field, and let go when it ends.
     private func syncDictation() {
+        // The app isn't involved while the keyboard records by itself.
+        guard !isDictatingInKeyboard else { return }
         let status = DictationBridge.readStatus()
 
         if dictationSession == nil {
@@ -272,13 +338,15 @@ class KeyboardViewController: UIInputViewController {
         dictationTyped = ""
     }
 
-    private func showDictationOverlay(waitingForMic: Bool) {
+    private func showDictationOverlay(waitingForMic: Bool, pollsApp: Bool = true) {
         dictationModel.reset()
         dictationModel.isWaitingForMic = waitingForMic
         dictationModel.isVisible = true
         dictationOverlay?.view.isHidden = false
-        // Darwin notifications can be coalesced; poll too while the overlay is up.
         dictationPollTimer?.invalidate()
+        dictationPollTimer = nil
+        guard pollsApp else { return }
+        // Darwin notifications can be coalesced; poll too while the overlay is up.
         dictationPollTimer = Timer.scheduledTimer(withTimeInterval: 0.25, repeats: true) { [weak self] _ in
             DispatchQueue.main.async { self?.syncDictation() }
         }

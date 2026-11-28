@@ -43,6 +43,49 @@ final class DictationService: ObservableObject {
         DictationBridge.observe(DictationBridge.cancelNotification) { [weak self] in
             self?.cancelListening()
         }
+        // A call, Siri, another app's audio, or new headphones stops the audio
+        // engine. Without these, the mic went cold early and the next mic tap
+        // opened this app again well before the idle timeout.
+        let center = NotificationCenter.default
+        center.addObserver(forName: AVAudioSession.interruptionNotification, object: nil, queue: .main) { [weak self] note in
+            let raw = note.userInfo?[AVAudioSessionInterruptionTypeKey] as? UInt
+            let ended = raw == AVAudioSession.InterruptionType.ended.rawValue
+            Task { @MainActor in self?.audioWasInterrupted(ended: ended) }
+        }
+        center.addObserver(forName: .AVAudioEngineConfigurationChange, object: audioEngine, queue: .main) { [weak self] _ in
+            Task { @MainActor in self?.restartEngineIfWarm() }
+        }
+    }
+
+    // MARK: Interruptions
+
+    /// True from warm-up until `shutDown`, even while an interruption has the
+    /// engine stopped.
+    private var wantsWarm = false
+
+    private func audioWasInterrupted(ended: Bool) {
+        guard wantsWarm else { return }
+        if ended {
+            restartEngineIfWarm()
+        } else {
+            // The engine has stopped; finish what was heard so far.
+            stopListening()
+            publish()
+        }
+    }
+
+    private func restartEngineIfWarm() {
+        guard wantsWarm, !audioEngine.isRunning else { return }
+        do {
+            try AVAudioSession.sharedInstance().setActive(true)
+            audioEngine.prepare()
+            try audioEngine.start()
+            publish()
+        } catch {
+            // iOS doesn't let a background app turn the mic back on; the next
+            // mic tap comes here once to restart it.
+            shutDown()
+        }
     }
 
     /// The mic key opened the app: switch the mic on and start listening.
@@ -91,6 +134,7 @@ final class DictationService: ObservableObject {
             return false
         }
 
+        wantsWarm = true
         lastActivity = Date()
         heartbeatTimer?.invalidate()
         heartbeatTimer = Timer.scheduledTimer(withTimeInterval: DictationBridge.heartbeatInterval, repeats: true) { [weak self] _ in
@@ -113,6 +157,7 @@ final class DictationService: ObservableObject {
 
     /// Turns the mic off; the next mic tap opens the app again.
     func shutDown() {
+        wantsWarm = false
         endRecognition()
         heartbeatTimer?.invalidate()
         heartbeatTimer = nil

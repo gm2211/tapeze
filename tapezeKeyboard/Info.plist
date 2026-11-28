@@ -20,6 +20,10 @@
 	<string>$(MARKETING_VERSION)</string>
 	<key>CFBundleVersion</key>
 	<string>$(CURRENT_PROJECT_VERSION)</string>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>Tapeze listens while you hold the keyboard's mic open, so your words appear as you speak.</string>
+	<key>NSSpeechRecognitionUsageDescription</key>
+	<string>Tapeze turns your speech into text when you use the keyboard's mic key.</string>
 	<key>NSExtension</key>
 	<dict>
 		<key>NSExtensionAttributes</key>
