@@ -85,6 +85,9 @@ class KeyboardViewController: UIInputViewController {
             onDictation: { [weak self] in
                 self?.startDictation()
             },
+            onOpenToolSettings: { [weak self] in
+                self?.openContainingApp(ToolColumnConfig.settingsURL)
+            },
             usesHostTouchSurface: true
         )
 
@@ -317,6 +320,7 @@ class KeyboardViewController: UIInputViewController {
         configureTransparentBackgrounds()
         keyboardState.reloadPersistedAppearanceSettings()
         keyboardState.reloadToolEmoji()
+        keyboardState.isEmojiPickerOpen = false
         // A new field, or the same one edited elsewhere: old steps no longer apply.
         editHistory.reset()
         if hasFullAccess {

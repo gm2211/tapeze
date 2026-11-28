@@ -2,6 +2,8 @@ import SwiftUI
 import UniformTypeIdentifiers
 
 struct ContentView: View {
+    /// The Left column screen, also opened by long-pressing the keyboard's column.
+    @Binding var isEditingToolColumn: Bool
     @Environment(\.scenePhase) private var scenePhase
     @AppStorage(KeyboardState.showGestureTrailDefaultsKey, store: KeyboardState.settingsDefaults) private var showGestureTrail = true
     @AppStorage(KeyboardState.showTouchDebugDefaultsKey, store: KeyboardState.settingsDefaults) private var showTouchDebug = false
@@ -29,6 +31,7 @@ struct ContentView: View {
         .onAppear {
             refreshKeyboardReadsSettings()
             previewState.resetLearningPreview()
+            previewState.reloadToolEmoji()
             previewState.showGestureTrail = showGestureTrail
             previewState.keyCornerRadius = CGFloat(keyCornerRadius)
             previewState.selectedThemeID = selectedThemeID
@@ -47,6 +50,11 @@ struct ContentView: View {
                 refreshKeyboardReadsSettings()
                 previewState.resetLearningPreview()
             }
+        }
+        .sheet(isPresented: $isEditingToolColumn, onDismiss: {
+            previewState.reloadToolEmoji()
+        }) {
+            ToolColumnSettingsView { isEditingToolColumn = false }
         }
         .sheet(isPresented: $isLayoutEditorPresented, onDismiss: {
             previewState.refreshLayout()
@@ -250,6 +258,14 @@ struct ContentView: View {
                     .font(.caption)
                     .foregroundColor(.secondary)
             }
+
+            Button {
+                isEditingToolColumn = true
+            } label: {
+                Label("Left column", systemImage: "sidebar.left")
+                    .frame(maxWidth: .infinity)
+            }
+            .buttonStyle(.bordered)
 
             Button {
                 isLayoutEditorPresented = true
@@ -978,5 +994,140 @@ private struct LayoutCellDropDelegate: DropDelegate {
         }
 
         return true
+    }
+}
+
+// MARK: - Left column settings
+
+/// Chooses what the keyboard's tool column shows, in what order, and what it
+/// does with spare width. Saved to the app group on every change; the keyboard
+/// picks it up the next time it appears.
+struct ToolColumnSettingsView: View {
+    let onDone: () -> Void
+
+    @State private var config = ToolColumnConfig.load(from: KeyboardState.settingsDefaults)
+    @State private var newEmoji = ""
+    @State private var isConfirmingReset = false
+    @State private var isConfirmingClear = false
+
+    var body: some View {
+        NavigationStack {
+            List {
+                Section {
+                    ForEach($config.slots) { $slot in
+                        Toggle(isOn: $slot.isOn) {
+                            Label(slot.entry.title, systemImage: slot.entry.symbol)
+                        }
+                    }
+                    .onMove { config.slots.move(fromOffsets: $0, toOffset: $1) }
+
+                    HStack {
+                        Label("All emoji button", systemImage: "face.smiling")
+                        Spacer()
+                        Text("Always last")
+                            .font(.footnote)
+                            .foregroundColor(.secondary)
+                    }
+                } header: {
+                    Text("Items")
+                } footer: {
+                    Text("Drag to reorder. Turned-off items are hidden from the keyboard.")
+                }
+
+                Section {
+                    ForEach(config.pinnedEmoji, id: \.self) { emoji in
+                        Text(emoji).font(.title2)
+                    }
+                    .onDelete { config.pinnedEmoji.remove(atOffsets: $0) }
+                    .onMove { config.pinnedEmoji.move(fromOffsets: $0, toOffset: $1) }
+
+                    HStack {
+                        TextField("Type or paste emoji", text: $newEmoji)
+                            .onSubmit(addEmoji)
+                        Button("Add", action: addEmoji)
+                            .disabled(Self.emoji(in: newEmoji).isEmpty)
+                    }
+                } header: {
+                    Text("Pinned emoji")
+                } footer: {
+                    Text("Always shown, in this order.")
+                }
+
+                Section {
+                    Stepper(
+                        "Show \(config.recentCount)",
+                        value: $config.recentCount,
+                        in: ToolColumnConfig.recentCountRange
+                    )
+                    Button("Clear emoji history", role: .destructive) {
+                        isConfirmingClear = true
+                    }
+                } header: {
+                    Text("Most-used emoji")
+                }
+
+                Section {
+                    Picker("Spare width", selection: $config.spareWidth) {
+                        ForEach(ToolColumnConfig.SpareWidth.allCases) { mode in
+                            Text(mode.title).tag(mode)
+                        }
+                    }
+                    .pickerStyle(.menu)
+                } header: {
+                    Text("When there's spare width")
+                } footer: {
+                    Text("A shorter keyboard has narrower keys, which leaves width over. Two columns put undo and redo side by side once two cells fit. Width the column can't use stays empty on its outer edge, never next to backspace.")
+                }
+
+                Section {
+                    Button("Reset to defaults", role: .destructive) {
+                        isConfirmingReset = true
+                    }
+                    .frame(maxWidth: .infinity)
+                }
+            }
+            .environment(\.editMode, .constant(.active))
+            .navigationTitle("Left column")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Done", action: onDone)
+                }
+            }
+            .onChange(of: config) { newValue in
+                newValue.save(to: KeyboardState.settingsDefaults)
+            }
+            .confirmationDialog("Reset the left column?", isPresented: $isConfirmingReset, titleVisibility: .visible) {
+                Button("Reset to defaults", role: .destructive) {
+                    config = .default
+                }
+            } message: {
+                Text("Brings back undo, redo, paste, copy and 12 most-used emoji, unpins your emoji, and goes back to two columns when they fit. Your emoji history is kept.")
+            }
+            .confirmationDialog("Clear emoji history?", isPresented: $isConfirmingClear, titleVisibility: .visible) {
+                Button("Clear history", role: .destructive) {
+                    KeyboardState.clearEmojiCounts()
+                }
+            } message: {
+                Text("The column goes back to the starter emoji until you use some again.")
+            }
+        }
+    }
+
+    private func addEmoji() {
+        for emoji in Self.emoji(in: newEmoji) where !config.pinnedEmoji.contains(emoji) {
+            config.pinnedEmoji.append(emoji)
+        }
+        newEmoji = ""
+    }
+
+    /// The emoji in some typed text, ignoring letters, digits and spaces.
+    static func emoji(in text: String) -> [String] {
+        text.compactMap { character in
+            guard !character.isASCII,
+                  let first = character.unicodeScalars.first,
+                  first.properties.isEmoji else { return nil }
+            return String(character)
+        }
     }
 }

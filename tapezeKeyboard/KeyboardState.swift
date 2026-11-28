@@ -373,16 +373,47 @@ class KeyboardState: ObservableObject {
     }
     private static let toolColumnOffsetKey = "toolColumnOffset"
 
+    /// What the tool column shows and how it uses spare width, from the app.
+    @Published var toolColumnConfig: ToolColumnConfig = .default
+    /// Every emoji's use count, most-used first, for the picker's first tab.
+    @Published var rankedEmoji: [String] = EmojiUsage.defaults
+    /// True while the full emoji picker covers the keys.
+    @Published var isEmojiPickerOpen = false
+
+    /// Emoji use counts live in the app group, so the app can clear them.
+    /// Older builds kept them in the keyboard's own defaults.
+    static func emojiCounts() -> [String: Int] {
+        if let counts = settingsDefaults.dictionary(forKey: EmojiUsage.countsKey) as? [String: Int] {
+            return counts
+        }
+        return UserDefaults.standard.dictionary(forKey: EmojiUsage.countsKey) as? [String: Int] ?? [:]
+    }
+
+    static func clearEmojiCounts() {
+        settingsDefaults.set([String: Int](), forKey: EmojiUsage.countsKey)
+        UserDefaults.standard.removeObject(forKey: EmojiUsage.countsKey)
+    }
+
     func reloadToolEmoji() {
-        let counts = UserDefaults.standard.dictionary(forKey: EmojiUsage.countsKey) as? [String: Int] ?? [:]
-        let ranked = EmojiUsage.ranked(counts: counts)
+        let config = ToolColumnConfig.load(from: Self.settingsDefaults)
+        if config != toolColumnConfig { toolColumnConfig = config }
+        let counts = Self.emojiCounts()
+        // Room for the pinned ones, which the column leaves out of this list.
+        let limit = config.recentCount + config.pinnedEmoji.count
+        let ranked = EmojiUsage.ranked(counts: counts, limit: limit)
         if ranked != toolEmoji { toolEmoji = ranked }
+        let all = counts.filter { $0.value > 0 }
+            .sorted { $0.value != $1.value ? $0.value > $1.value : $0.key < $1.key }
+            .prefix(40)
+            .map(\.key)
+        let recent = all.isEmpty ? EmojiUsage.defaults : Array(all)
+        if recent != rankedEmoji { rankedEmoji = recent }
     }
 
     func recordEmojiUse(_ emoji: String) {
-        var counts = UserDefaults.standard.dictionary(forKey: EmojiUsage.countsKey) as? [String: Int] ?? [:]
+        var counts = Self.emojiCounts()
         counts[emoji, default: 0] += 1
-        UserDefaults.standard.set(counts, forKey: EmojiUsage.countsKey)
+        Self.settingsDefaults.set(counts, forKey: EmojiUsage.countsKey)
     }
 
     func afterCharacterInserted() {
