@@ -709,6 +709,38 @@ struct HoldPicker: Equatable {
     }
 }
 
+// MARK: - Clipboard
+
+/// What the paste key should do with what is on the clipboard. A keyboard
+/// can only insert text into the field (`UITextDocumentProxy.insertText`),
+/// so an image can't be pasted from here: iOS gives keyboards no way to hand
+/// the app an image. The best we can do is say so and point at the system
+/// Paste, which can.
+enum ClipboardPaste: Equatable {
+    case text(String)
+    case notice(String)
+
+    static let imageNotice = "Keyboards can't paste images. Tap the text box, then Paste."
+    static let otherNotice = "That can't be pasted as text. Tap the text box, then Paste."
+    static let emptyNotice = "The clipboard is empty."
+    static let noAccessNotice = "Turn on Full Access for Tapeze to paste."
+
+    static func resolve(
+        hasFullAccess: Bool,
+        string: String?,
+        url: URL?,
+        hasImages: Bool,
+        itemCount: Int
+    ) -> ClipboardPaste {
+        if let string, !string.isEmpty { return .text(string) }
+        if let url { return .text(url.absoluteString) }
+        if !hasFullAccess { return .notice(noAccessNotice) }
+        if hasImages { return .notice(imageNotice) }
+        if itemCount == 0 { return .notice(emptyNotice) }
+        return .notice(otherNotice)
+    }
+}
+
 // MARK: - Tool Column
 
 /// What the scrolling column beside the keys holds, top to bottom.

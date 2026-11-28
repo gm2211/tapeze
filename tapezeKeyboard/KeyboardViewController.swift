@@ -323,6 +323,7 @@ class KeyboardViewController: UIInputViewController {
         keyboardState.isEmojiPickerOpen = false
         // A new field, or the same one edited elsewhere: old steps no longer apply.
         editHistory.reset()
+        keyboardState.hasFullAccess = hasFullAccess
         if hasFullAccess {
             KeyboardState.settingsDefaults.set(true, forKey: KeyboardState.keyboardReadsSettingsDefaultsKey)
         }

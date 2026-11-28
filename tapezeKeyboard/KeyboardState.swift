@@ -360,6 +360,25 @@ class KeyboardState: ObservableObject {
         isShiftAutomatic = false
     }
 
+    // MARK: - Notices
+
+    /// A short message shown over the keys, such as why a paste did nothing.
+    @Published private(set) var notice: String? = nil
+    private var noticeToken = 0
+
+    /// Set by the controller: without Full Access a keyboard can't read the clipboard.
+    var hasFullAccess = true
+
+    func showNotice(_ text: String, for seconds: TimeInterval = 3.5) {
+        noticeToken += 1
+        let token = noticeToken
+        notice = text
+        DispatchQueue.main.asyncAfter(deadline: .now() + seconds) { [weak self] in
+            guard let self, self.noticeToken == token else { return }
+            self.notice = nil
+        }
+    }
+
     // MARK: - Tool column
 
     /// Emoji the tool column shows, most-picked first. Re-ranked only when
