@@ -32,7 +32,7 @@
 		</dict>
 	</array>
 	<key>NSMicrophoneUsageDescription</key>
-	<string>Tapeze listens while you dictate with the keyboard's mic key, then types what you said.</string>
+	<string>Tapeze listens when you tap the keyboard's mic key, and keeps the mic ready for a few minutes so you can dictate without leaving your app.</string>
 	<key>NSSpeechRecognitionUsageDescription</key>
 	<string>Tapeze turns your speech into text when you use the keyboard's mic key.</string>
 	<key>ITSAppUsesNonExemptEncryption</key>
@@ -44,6 +44,10 @@
 		<key>UIApplicationSupportsMultipleScenes</key>
 		<false/>
 	</dict>
+	<key>UIBackgroundModes</key>
+	<array>
+		<string>audio</string>
+	</array>
 	<key>UILaunchScreen</key>
 	<dict/>
 	<key>UISupportedInterfaceOrientations</key>

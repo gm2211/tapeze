@@ -21,6 +21,7 @@
 		8D961D4234CF59D7A8A17804 /* KeyboardLayout.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1D740FBDDF81BCDD2DA60ACC /* KeyboardLayout.swift */; };
 		91E49CFDFA7DE2844220F1B4 /* GestureEngine.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4019213444657153ECC6ED69 /* GestureEngine.swift */; };
 		958AFEB0CB6DDBC3D2641214 /* DictationBridge.swift in Sources */ = {isa = PBXBuildFile; fileRef = 67BD7F81914D6A238B2E4778 /* DictationBridge.swift */; };
+		B0332A7567C6DD5ACD9C923B /* DictationOverlayView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8BF818D216E9A174E0856C82 /* DictationOverlayView.swift */; };
 		C589B59DD1A705A2D5BF9417 /* tapezeKeyboard.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = A948DBF37317F20F081389F2 /* tapezeKeyboard.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
 		D0BD643252A54F497B10DD25 /* KeyboardLayout.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1D740FBDDF81BCDD2DA60ACC /* KeyboardLayout.swift */; };
 		D846A31AE5F1DA9BE81959CE /* PrivacyInfo.xcprivacy in Resources */ = {isa = PBXBuildFile; fileRef = 5297B08F426C3D92CBCB9455 /* PrivacyInfo.xcprivacy */; };
@@ -64,6 +65,7 @@
 		58235199439BE8127DAEA57F /* ContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentView.swift; sourceTree = "<group>"; };
 		67BD7F81914D6A238B2E4778 /* DictationBridge.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DictationBridge.swift; sourceTree = "<group>"; };
 		87BF5F1D16CD3F0CA736CAE7 /* DictationView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DictationView.swift; sourceTree = "<group>"; };
+		8BF818D216E9A174E0856C82 /* DictationOverlayView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DictationOverlayView.swift; sourceTree = "<group>"; };
 		9B87F170AFEEE5FFB1DBD4CB /* tapeze.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; path = tapeze.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		9BFA103EB21C944D1ED1E3FB /* KeyboardView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KeyboardView.swift; sourceTree = "<group>"; };
 		9FC0986E8A4D6EBD7CCABC39 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
@@ -103,6 +105,7 @@
 			isa = PBXGroup;
 			children = (
 				67BD7F81914D6A238B2E4778 /* DictationBridge.swift */,
+				8BF818D216E9A174E0856C82 /* DictationOverlayView.swift */,
 				4019213444657153ECC6ED69 /* GestureEngine.swift */,
 				33CB99579BE45CFD6151D233 /* Info.plist */,
 				1D740FBDDF81BCDD2DA60ACC /* KeyboardLayout.swift */,
@@ -247,6 +250,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				E1CF7EBC60458440788C74F7 /* DictationBridge.swift in Sources */,
+				B0332A7567C6DD5ACD9C923B /* DictationOverlayView.swift in Sources */,
 				91E49CFDFA7DE2844220F1B4 /* GestureEngine.swift in Sources */,
 				E93D55E4240FC6E1CABFDA01 /* KeyView.swift in Sources */,
 				D0BD643252A54F497B10DD25 /* KeyboardLayout.swift in Sources */,
@@ -282,7 +286,7 @@
 				);
 				PRODUCT_BUNDLE_IDENTIFIER = com.gm2211.tapeze;
 				SDKROOT = iphoneos;
-				TARGETED_DEVICE_FAMILY = "1,2";
+				TARGETED_DEVICE_FAMILY = 1;
 			};
 			name = Release;
 		};
@@ -302,7 +306,7 @@
 				PRODUCT_BUNDLE_IDENTIFIER = com.gm2211.tapeze.keyboard;
 				SDKROOT = iphoneos;
 				SKIP_INSTALL = YES;
-				TARGETED_DEVICE_FAMILY = "1,2";
+				TARGETED_DEVICE_FAMILY = 1;
 			};
 			name = Release;
 		};
@@ -340,7 +344,7 @@
 				CLANG_WARN_UNREACHABLE_CODE = YES;
 				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
 				COPY_PHASE_STRIP = NO;
-				CURRENT_PROJECT_VERSION = 69;
+				CURRENT_PROJECT_VERSION = 72;
 				DEBUG_INFORMATION_FORMAT = dwarf;
 				ENABLE_STRICT_OBJC_MSGSEND = YES;
 				ENABLE_TESTABILITY = YES;
@@ -387,7 +391,7 @@
 				);
 				PRODUCT_BUNDLE_IDENTIFIER = com.gm2211.tapeze;
 				SDKROOT = iphoneos;
-				TARGETED_DEVICE_FAMILY = "1,2";
+				TARGETED_DEVICE_FAMILY = 1;
 			};
 			name = Debug;
 		};
@@ -425,7 +429,7 @@
 				CLANG_WARN_UNREACHABLE_CODE = YES;
 				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
 				COPY_PHASE_STRIP = NO;
-				CURRENT_PROJECT_VERSION = 69;
+				CURRENT_PROJECT_VERSION = 72;
 				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
 				ENABLE_NS_ASSERTIONS = NO;
 				ENABLE_STRICT_OBJC_MSGSEND = YES;
@@ -466,7 +470,7 @@
 				PRODUCT_BUNDLE_IDENTIFIER = com.gm2211.tapeze.keyboard;
 				SDKROOT = iphoneos;
 				SKIP_INSTALL = YES;
-				TARGETED_DEVICE_FAMILY = "1,2";
+				TARGETED_DEVICE_FAMILY = 1;
 			};
 			name = Debug;
 		};

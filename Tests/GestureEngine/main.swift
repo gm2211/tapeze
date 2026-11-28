@@ -276,19 +276,88 @@ do {
 print("tool column wheel")
 do {
     let count = ToolColumnItem.items(emoji: EmojiUsage.defaults).count
-    expect("4 tools + 12 emoji", "\(count)", "16")
+    expect("4 tools + 12 emoji + all emoji", "\(count)", "17")
     // Default keyboard: 294pt tall, 72pt key rows, 2pt gaps, so a row is 74pt.
     let h: CGFloat = 294, row: CGFloat = 74, gap: CGFloat = 2
     expect("at rest four cells fill the column exactly", "\(4 * row - gap)", "294.0")
     let maxOffset = ToolColumnMetrics.maxOffset(itemCount: count, rowHeight: row, gap: gap, height: h)
-    expect("the end rests on a whole row", "\(maxOffset)", "888.0") // 12 rows down
+    expect("the end rests on a whole row", "\(maxOffset)", "962.0") // 13 rows down
     expect("top row at rest is undo, beside the a row", "\(ToolColumnMetrics.index(atY: 20, offset: 0, rowHeight: row, itemCount: count) ?? -1)", "0")
     expect("fourth row at rest is copy, beside the space bar", "\(ToolColumnMetrics.index(atY: 250, offset: 0, rowHeight: row, itemCount: count) ?? -1)", "3")
     expect("scrolled one row, the top is redo", "\(ToolColumnMetrics.index(atY: 20, offset: row, rowHeight: row, itemCount: count) ?? -1)", "1")
     expect("slow release snaps to the nearest row", "\(ToolColumnMetrics.resting(offset: 120, velocity: 0, rowHeight: row, maxOffset: maxOffset))", "148.0")
     expect("a flick carries on", "\(ToolColumnMetrics.resting(offset: 74, velocity: 1000, rowHeight: row, maxOffset: maxOffset))", "296.0")
-    expect("a flick never passes the end", "\(ToolColumnMetrics.resting(offset: 800, velocity: 5000, rowHeight: row, maxOffset: maxOffset))", "888.0")
+    expect("a flick never passes the end", "\(ToolColumnMetrics.resting(offset: 800, velocity: 5000, rowHeight: row, maxOffset: maxOffset))", "962.0")
     expect("pulling above the top gives way slowly", "\(ToolColumnMetrics.dragged(-30, maxOffset: maxOffset))", "-10.0")
+}
+
+print("tool column width")
+do {
+    func res(_ available: CGFloat, _ mode: ToolColumnConfig.SpareWidth = .twoColumns) -> String {
+        let r = ToolColumnLayout.resolve(available: available, mode: mode, gap: 2)
+        return "\(r.columns)x\(Int(r.width.rounded()))+\(Int(r.stripe.rounded()))"
+    }
+    expect("exactly one column: no stripe", res(92), "1x92+0")
+    expect("narrower than one: the column shrinks", res(80), "1x80+0")
+    expect("a little over: stripe on the outer edge", res(110), "1x92+18")
+    expect("two 60pt cells fit: two columns", res(122), "2x122+0")
+    expect("two columns grow to two full cells", res(175), "2x175+0")
+    expect("past two full cells: stripe again", res(250), "2x186+64")
+    expect("always one: the rest is stripe", res(175, .oneColumn), "1x92+83")
+    expect("widen: no stripe", res(175, .widen), "1x175+0")
+    expect("rows round up", "\(ToolColumnLayout.rowCount(itemCount: 17, columns: 2))", "9")
+    func idx(_ x: CGFloat, _ y: CGFloat) -> String {
+        "\(ToolColumnLayout.index(at: CGPoint(x: x, y: y), offset: 0, rowHeight: 74, width: 150, columns: 2, itemCount: 17) ?? -1)"
+    }
+    expect("two columns: left of the first row is undo", idx(20, 20), "0")
+    expect("two columns: right of the first row is redo", idx(130, 20), "1")
+    expect("two columns: second row right is copy", idx(130, 90), "3")
+    expect("past the last item: nothing", idx(130, 8 * 74 + 10), "-1")
+}
+
+print("tool column settings")
+do {
+    func names(_ items: [ToolColumnItem]) -> String {
+        items.map { item -> String in
+            switch item {
+            case .undo: return "U"
+            case .redo: return "R"
+            case .paste: return "P"
+            case .copy: return "C"
+            case .allEmoji: return "*"
+            case .emoji(let e): return e
+            }
+        }.joined()
+    }
+    var config = ToolColumnConfig.default
+    config.recentCount = 3
+    expect("default order, all emoji last", names(config.items(recents: ["😂", "❤️", "👍", "🙏"])), "URPC😂❤️👍*")
+    config.pinnedEmoji = ["👍", "🍕"]
+    expect("pinned before recents, not repeated", names(config.items(recents: ["😂", "👍", "❤️", "🙏"])), "URPC👍🍕😂❤️🙏*")
+    config.slots.insert(config.slots.remove(at: 5), at: 0) // most-used first
+    config.slots[4].isOn = false // copy, fifth after the move
+    expect("reordered, copy hidden", names(config.items(recents: ["😂"])), "😂URP👍🍕*")
+    var broken = ToolColumnConfig.default
+    broken.slots = [ToolColumnConfig.Slot(entry: .redo, isOn: false), ToolColumnConfig.Slot(entry: .redo, isOn: true)]
+    broken.recentCount = 99
+    let fixed = broken.normalized()
+    expect("normalize drops duplicates and adds missing entries", fixed.slots.map(\.entry.rawValue).joined(separator: ","), "redo,undo,paste,copy,pinnedEmoji,recentEmoji")
+    expect("normalize keeps the count in range", "\(fixed.recentCount)", "24")
+}
+
+print("emoji picker")
+do {
+    let layout = EmojiPickerLayout(size: CGSize(width: 300, height: 240), sections: [["a", "b"], Array(repeating: "x", count: 15)])
+    expect("seven 42pt cells fit across 300pt", "\(layout.columns)", "7")
+    expect("each section starts on its own row", layout.sectionStartRows.map(String.init).joined(separator: ","), "0,1")
+    expect("rows in total", "\(layout.rowCount)", "4")
+    expect("tap on the first cell", layout.emoji(at: CGPoint(x: 10, y: 10), offset: 0) ?? "-", "a")
+    expect("tap past a short section's end", layout.emoji(at: CGPoint(x: 200, y: 10), offset: 0) ?? "-", "-")
+    expect("second section, first row", layout.emoji(at: CGPoint(x: 10, y: 50), offset: 0) ?? "-", "x")
+    expect("the bar: ABC on the left", "\(layout.barTarget(at: CGPoint(x: 10, y: 230)) == .abc)", "true")
+    expect("the bar: backspace on the right", "\(layout.barTarget(at: CGPoint(x: 290, y: 230)) == .backspace)", "true")
+    expect("the bar: second tab", "\(layout.barTarget(at: CGPoint(x: 250, y: 230)) == .category(1))", "true")
+    expect("catalog has smileys", "\(EmojiCatalog.categories.first?.emoji.contains("😂") == true)", "true")
 }
 
 print("emoji ranking")
@@ -401,6 +470,20 @@ do {
     let upBack = play(line(o, CGPoint(x: 204, y: 270), steps: 6) + line(CGPoint(x: 204, y: 270), o, steps: 6).dropFirst(), dt: 0.015)
     expect("swipe up and back is vetoed", "\(upBack.tracker.mode)", "vetoed")
     expect("swipe up and back moves nothing", upBack.moves.joined(separator: ","), "")
+}
+
+print("\nClipboard paste")
+do {
+    func r(_ access: Bool = true, s: String? = nil, u: URL? = nil, img: Bool = false, n: Int = 0) -> String {
+        "\(ClipboardPaste.resolve(hasFullAccess: access, string: s, url: u, hasImages: img, itemCount: n))"
+    }
+    expect("text is typed", r(s: "hi", n: 1), "\(ClipboardPaste.text("hi"))")
+    expect("a copied link is typed as its address", r(u: URL(string: "https://a.b/c"), n: 1), "\(ClipboardPaste.text("https://a.b/c"))")
+    expect("an image explains the system Paste", r(img: true, n: 1), "\(ClipboardPaste.notice(ClipboardPaste.imageNotice))")
+    expect("an image with a caption types the caption", r(s: "cap", img: true, n: 1), "\(ClipboardPaste.text("cap"))")
+    expect("an empty clipboard says so", r(), "\(ClipboardPaste.notice(ClipboardPaste.emptyNotice))")
+    expect("other content explains the system Paste", r(n: 1), "\(ClipboardPaste.notice(ClipboardPaste.otherNotice))")
+    expect("no Full Access asks for it", r(false), "\(ClipboardPaste.notice(ClipboardPaste.noAccessNotice))")
 }
 
 print("\n\(passes) passed, \(failures) failed")

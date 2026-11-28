@@ -18,6 +18,8 @@ struct KeyboardView: View {
     /// Undo, redo and copy from the tool column.
     var onToolAction: (ToolColumnAction) -> Void = { _ in }
     var onDictation: (() -> Void)? = nil
+    /// Opens the app's Left column settings (long-press on the column).
+    var onOpenToolSettings: (() -> Void)? = nil
     /// True in the keyboard extension, whose controller delivers touches
     /// through `KeyboardState.touchHandler` instead of a SwiftUI overlay.
     var usesHostTouchSurface: Bool = false
@@ -53,6 +55,12 @@ struct KeyboardView: View {
     @State private var toolSamples: [(y: CGFloat, time: TimeInterval)] = []
     @State private var toolDidScroll = false
     @State private var toolSettleToken = 0
+    /// Fires when a finger rests on the column, to open its settings.
+    @State private var toolHoldTask: DispatchWorkItem?
+    @State private var emojiPicker = EmojiPickerModel()
+    @State private var emojiDragStart: (offset: CGFloat, y: CGFloat)?
+    @State private var emojiSamples: [(y: CGFloat, time: TimeInterval)] = []
+    @State private var emojiDidScroll = false
     @State private var logicalGestureActive = false
     @State private var lastTrackedPoint: CGPoint?
     /// The finger driving the current logical gesture. Other fingers that are
@@ -143,17 +151,20 @@ struct KeyboardView: View {
         let maxKeyWidthBySingle = max((roomForKeys - spacing * CGFloat(gridCols)) / CGFloat(gridCols + 1), 1)
         let fullKeyWidth = min(keyHeight * maxKeyAspectRatio, maxKeyWidthBySingle)
         let baseRailWidth = railWidth(forKeyWidth: fullKeyWidth, totalWidth: roomForKeys, minimum: minimumControlExtent)
-        // Width the capped keys leave over goes mostly to the tool column
-        // (three quarters), the rest to the backspace rail, so no empty
-        // strip appears.
+        // Width the capped keys leave over goes to the tool column: one
+        // column up to its cap, then two side by side once they fit, per the
+        // app's setting. What it can't use becomes an empty stripe on the
+        // column's outer edge. The backspace rail never grows.
         let keysBlockWidth = fullKeyWidth * CGFloat(gridCols) + spacing * CGFloat(gridCols) + baseRailWidth
-        let leftover = showsToolColumn
-            ? max(totalWidth - keysBlockWidth - spacing - minimumToolColumnWidth, 0)
-            : 0
-        let fullRailWidth = baseRailWidth + leftover * 0.25
-        let toolColumnWidth: CGFloat = showsToolColumn
-            ? minimumToolColumnWidth + leftover * 0.75
-            : 0
+        let fullRailWidth = baseRailWidth
+        let toolLayout = showsToolColumn
+            ? ToolColumnLayout.resolve(
+                available: max(totalWidth - keysBlockWidth - spacing, 0),
+                mode: state.toolColumnConfig.spareWidth,
+                gap: spacing
+            )
+            : ToolColumnLayout.Resolved(columns: 1, width: 0, stripe: 0)
+        let toolColumnWidth: CGFloat = toolLayout.width
         let splitSizing = resolvedSplit.isSplit
             ? resolvedSplit
             : SplitSizing(isSplit: false, keyWidth: fullKeyWidth, railWidth: fullRailWidth)
@@ -201,12 +212,23 @@ struct KeyboardView: View {
 
         let toolColumnFrame = showsToolColumn
             ? CGRect(
-                x: state.commandBarOnRight ? 0 : totalWidth - toolColumnWidth,
+                x: state.commandBarOnRight ? toolLayout.stripe : totalWidth - toolLayout.stripe - toolColumnWidth,
                 y: 0,
                 width: toolColumnWidth,
                 height: totalHeight
             )
             : .zero
+
+        // The emoji picker covers everything beside the tool column: the keys,
+        // the space bar and the rail.
+        let emojiPickerFrame: CGRect = {
+            guard showsToolColumn else { return CGRect(x: 0, y: 0, width: totalWidth, height: totalHeight) }
+            if state.commandBarOnRight {
+                let minX = toolColumnFrame.maxX + spacing
+                return CGRect(x: minX, y: 0, width: totalWidth - minX, height: totalHeight)
+            }
+            return CGRect(x: 0, y: 0, width: toolColumnFrame.minX - spacing, height: totalHeight)
+        }()
 
         return KeyboardGeometry(
             totalWidth: totalWidth,
@@ -244,7 +266,9 @@ struct KeyboardView: View {
             layoutOriginX: layoutOriginX,
             splitMirror: splitMirror,
             hitLayout: hitLayout,
-            toolColumnFrame: toolColumnFrame
+            toolColumnFrame: toolColumnFrame,
+            toolColumns: toolLayout.columns,
+            emojiPickerFrame: emojiPickerFrame
         )
     }
 
@@ -302,6 +326,7 @@ struct KeyboardView: View {
                         wheel: toolWheel,
                         rowHeight: keyHeight + spacing,
                         gap: spacing,
+                        columns: g.toolColumns,
                         theme: state.theme
                     )
                     .frame(width: toolColumnFrame.width, height: toolColumnFrame.height)
@@ -313,11 +338,23 @@ struct KeyboardView: View {
                         toolWheel.offset = min(
                             max(state.toolColumnOffset, 0),
                             ToolColumnMetrics.maxOffset(
-                                itemCount: toolItems.count, rowHeight: keyHeight + spacing,
+                                itemCount: ToolColumnLayout.rowCount(itemCount: toolItems.count, columns: g.toolColumns),
+                                rowHeight: keyHeight + spacing,
                                 gap: spacing, height: toolColumnFrame.height
                             )
                         )
                     }
+                }
+
+                if state.isEmojiPickerOpen {
+                    EmojiPickerView(
+                        model: emojiPicker,
+                        layout: emojiPickerLayout(size: g.emojiPickerFrame.size),
+                        theme: state.theme
+                    )
+                    .frame(width: g.emojiPickerFrame.width, height: g.emojiPickerFrame.height)
+                    .position(x: g.emojiPickerFrame.midX, y: g.emojiPickerFrame.midY)
+                    .allowsHitTesting(false)
                 }
 
                 // Wide screens: a second, draw-only copy on the far side with its
@@ -397,6 +434,26 @@ struct KeyboardView: View {
                         .allowsHitTesting(false)
                 }
             }
+            .overlay(alignment: .top) {
+                if let notice = state.notice {
+                    Text(notice)
+                        .font(.system(size: 14, weight: .medium, design: .rounded))
+                        .foregroundColor(state.theme.specialTextColor)
+                        .multilineTextAlignment(.center)
+                        .padding(.horizontal, 14)
+                        .padding(.vertical, 9)
+                        .background(
+                            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                                .fill(state.theme.activeKeyBackground)
+                                .shadow(color: .black.opacity(0.25), radius: 6, y: 2)
+                        )
+                        .padding(.horizontal, 16)
+                        .padding(.top, 6)
+                        .transition(.opacity.combined(with: .move(edge: .top)))
+                        .allowsHitTesting(false)
+                }
+            }
+            .animation(.easeOut(duration: 0.2), value: state.notice)
             .overlay(alignment: .topLeading) {
                 if let holdPicker {
                     HoldPickerView(
@@ -725,10 +782,15 @@ struct KeyboardView: View {
         layoutOriginX: CGFloat,
         mainGridWidth: CGFloat,
         backspaceRailWidth: CGFloat,
-        toolColumnFrame: CGRect = .zero
+        toolColumnFrame: CGRect = .zero,
+        emojiPickerFrame: CGRect = .zero
     ) -> ActiveBridge {
         if toolColumnFrame.contains(point) {
             return .toolColumn
+        }
+        if state.isEmojiPickerOpen {
+            // Nothing under the picker types while it is open.
+            return emojiPickerFrame.contains(point) ? .emojiPicker : .inert
         }
 
         let keySide = rowHeight
@@ -877,7 +939,8 @@ struct KeyboardView: View {
             layoutOriginX: ctx.layoutOriginX,
             mainGridWidth: ctx.mainGridWidth,
             backspaceRailWidth: ctx.backspaceRailWidth,
-            toolColumnFrame: ctx.toolColumnFrame
+            toolColumnFrame: ctx.toolColumnFrame,
+            emojiPickerFrame: ctx.emojiPickerFrame
         )
 
         switch activeBridge {
@@ -893,7 +956,9 @@ struct KeyboardView: View {
             scheduleHold(at: point, delay: numberHoldDuration)
         case .toolColumn:
             beginToolTouch(at: point, ctx: ctx)
-        case .enter, .zero:
+        case .emojiPicker:
+            beginEmojiTouch(at: point, ctx: ctx)
+        case .enter, .zero, .inert:
             break
         }
     }
@@ -927,7 +992,9 @@ struct KeyboardView: View {
             updateActiveKey(at: point)
         case .toolColumn:
             moveToolTouch(to: point, ctx: ctx)
-        case .enter, .zero:
+        case .emojiPicker:
+            moveEmojiTouch(to: point, ctx: ctx)
+        case .enter, .zero, .inert:
             break
         }
     }
@@ -942,6 +1009,12 @@ struct KeyboardView: View {
         switch bridge {
         case .toolColumn:
             endToolTouch(at: point, ctx: ctx)
+
+        case .emojiPicker:
+            endEmojiTouch(at: point, ctx: ctx)
+
+        case .inert:
+            state.gestureTrailPoints = []
 
         case .enter:
             onEnter()
@@ -1034,6 +1107,9 @@ struct KeyboardView: View {
     private func abandonStaleGesture() {
         toolDragStart = nil
         toolWheel.pressedIndex = nil
+        toolHoldTask?.cancel()
+        emojiDragStart = nil
+        emojiPicker.pressed = nil
         gestureEngine.touchCancelled()
         cancelNumberLongPress()
         longPressTriggered = false
@@ -1083,7 +1159,9 @@ struct KeyboardView: View {
                 mainGridWidth: g.mainGridWidth,
                 backspaceRailWidth: g.backspaceRailWidth,
                 toolColumnFrame: g.toolColumnFrame,
-                toolRowHeight: g.keyHeight + spacing
+                toolRowHeight: g.keyHeight + spacing,
+                toolColumns: g.toolColumns,
+                emojiPickerFrame: g.emojiPickerFrame
             )
         )
         // After handling, so "typed" includes what this touch typed.
@@ -1667,13 +1745,23 @@ struct KeyboardView: View {
     // MARK: - Tool column
 
     private var toolItems: [ToolColumnItem] {
-        ToolColumnItem.items(emoji: state.toolEmoji)
+        state.toolColumnConfig.items(recents: state.toolEmoji)
     }
 
     private func toolMaxOffset(_ ctx: GestureLayoutContext) -> CGFloat {
         ToolColumnMetrics.maxOffset(
-            itemCount: toolItems.count, rowHeight: ctx.toolRowHeight,
+            itemCount: ToolColumnLayout.rowCount(itemCount: toolItems.count, columns: ctx.toolColumns),
+            rowHeight: ctx.toolRowHeight,
             gap: spacing, height: ctx.toolColumnFrame.height
+        )
+    }
+
+    private func toolIndex(at point: CGPoint, ctx: GestureLayoutContext) -> Int? {
+        ToolColumnLayout.index(
+            at: CGPoint(x: point.x - ctx.toolColumnFrame.minX, y: point.y - ctx.toolColumnFrame.minY),
+            offset: toolWheel.offset, rowHeight: ctx.toolRowHeight,
+            width: ctx.toolColumnFrame.width, columns: ctx.toolColumns,
+            itemCount: toolItems.count
         )
     }
 
@@ -1682,10 +1770,19 @@ struct KeyboardView: View {
         toolDragStart = (toolWheel.offset, point.y)
         toolSamples = [(point.y, now)]
         toolDidScroll = false
-        toolWheel.pressedIndex = ToolColumnMetrics.index(
-            atY: point.y - ctx.toolColumnFrame.minY, offset: toolWheel.offset,
-            rowHeight: ctx.toolRowHeight, itemCount: toolItems.count
-        )
+        toolWheel.pressedIndex = toolIndex(at: point, ctx: ctx)
+        toolHoldTask?.cancel()
+        if let open = onOpenToolSettings {
+            // A finger resting on the column opens its settings in the app.
+            let task = DispatchWorkItem {
+                guard toolDragStart != nil, !toolDidScroll else { return }
+                toolDragStart = nil
+                toolWheel.pressedIndex = nil
+                open()
+            }
+            toolHoldTask = task
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.8, execute: task)
+        }
     }
 
     private func moveToolTouch(to point: CGPoint, ctx: GestureLayoutContext) {
@@ -1693,6 +1790,7 @@ struct KeyboardView: View {
         let dy = point.y - start.y
         if !toolDidScroll, abs(dy) > ToolColumnMetrics.tapSlop {
             toolDidScroll = true
+            toolHoldTask?.cancel()
             toolWheel.pressedIndex = nil
             toolSettleToken += 1
             withAnimation(.easeOut(duration: 0.15)) { toolWheel.isScrolling = true }
@@ -1706,6 +1804,7 @@ struct KeyboardView: View {
     }
 
     private func endToolTouch(at point: CGPoint, ctx: GestureLayoutContext) {
+        toolHoldTask?.cancel()
         defer {
             toolDragStart = nil
             toolWheel.pressedIndex = nil
@@ -1715,10 +1814,7 @@ struct KeyboardView: View {
         let items = toolItems
 
         if !toolDidScroll {
-            if let index = ToolColumnMetrics.index(
-                atY: point.y - ctx.toolColumnFrame.minY, offset: toolWheel.offset,
-                rowHeight: ctx.toolRowHeight, itemCount: items.count
-            ) {
+            if let index = toolIndex(at: point, ctx: ctx) {
                 performToolItem(items[index])
             }
             return
@@ -1747,6 +1843,20 @@ struct KeyboardView: View {
         }
     }
 
+    /// Types the clipboard's text, or explains why there is none to type.
+    @discardableResult
+    private func pasteFromClipboard() -> Bool {
+        switch ClipboardPaste.resolveGeneral(hasFullAccess: state.hasFullAccess) {
+        case .text(let content):
+            onCharacter(content)
+            return true
+        case .notice(let message):
+            UINotificationFeedbackGenerator().notificationOccurred(.warning)
+            withAnimation(.easeOut(duration: 0.2)) { state.showNotice(message) }
+            return false
+        }
+    }
+
     private func performToolItem(_ item: ToolColumnItem) {
         switch item {
         case .undo:
@@ -1756,15 +1866,116 @@ struct KeyboardView: View {
         case .copy:
             onToolAction(.copy)
         case .paste:
-            if let content = UIPasteboard.general.string, !content.isEmpty {
-                onCharacter(content)
+            if pasteFromClipboard() {
                 state.afterCharacterInserted()
             }
         case .emoji(let emoji):
-            onCharacter(emoji)
-            state.recordEmojiUse(emoji)
-            state.afterCharacterInserted()
+            typeEmoji(emoji)
+        case .allEmoji:
+            if state.isEmojiPickerOpen {
+                state.isEmojiPickerOpen = false
+            } else {
+                emojiPicker.offset = 0
+                emojiPicker.section = 0
+                state.isEmojiPickerOpen = true
+            }
         }
+    }
+
+    private func typeEmoji(_ emoji: String) {
+        onCharacter(emoji)
+        state.recordEmojiUse(emoji)
+        state.afterCharacterInserted()
+    }
+
+    // MARK: - Emoji picker
+
+    private var emojiSections: [[String]] {
+        [state.rankedEmoji] + EmojiCatalog.categories.map(\.emoji)
+    }
+
+    private func emojiPickerLayout(size: CGSize) -> EmojiPickerLayout {
+        EmojiPickerLayout(size: size, sections: emojiSections)
+    }
+
+    private func emojiLocal(_ point: CGPoint, _ ctx: GestureLayoutContext) -> CGPoint {
+        CGPoint(x: point.x - ctx.emojiPickerFrame.minX, y: point.y - ctx.emojiPickerFrame.minY)
+    }
+
+    private func beginEmojiTouch(at point: CGPoint, ctx: GestureLayoutContext) {
+        let layout = emojiPickerLayout(size: ctx.emojiPickerFrame.size)
+        let local = emojiLocal(point, ctx)
+        emojiDidScroll = false
+        if layout.barTarget(at: local) != nil {
+            emojiDragStart = nil
+            return
+        }
+        emojiDragStart = (emojiPicker.offset, point.y)
+        emojiSamples = [(point.y, ProcessInfo.processInfo.systemUptime)]
+        emojiPicker.pressed = layout.emoji(at: local, offset: emojiPicker.offset)
+    }
+
+    private func moveEmojiTouch(to point: CGPoint, ctx: GestureLayoutContext) {
+        guard let start = emojiDragStart else { return }
+        let dy = point.y - start.y
+        if !emojiDidScroll, abs(dy) > ToolColumnMetrics.tapSlop {
+            emojiDidScroll = true
+            emojiPicker.pressed = nil
+        }
+        guard emojiDidScroll else { return }
+        let layout = emojiPickerLayout(size: ctx.emojiPickerFrame.size)
+        emojiPicker.offset = ToolColumnMetrics.dragged(start.offset - dy, maxOffset: layout.maxOffset)
+        emojiPicker.section = layout.section(atOffset: emojiPicker.offset)
+        let now = ProcessInfo.processInfo.systemUptime
+        emojiSamples.append((point.y, now))
+        emojiSamples.removeAll { now - $0.time > 0.1 }
+    }
+
+    private func endEmojiTouch(at point: CGPoint, ctx: GestureLayoutContext) {
+        defer {
+            emojiDragStart = nil
+            emojiPicker.pressed = nil
+            emojiSamples = []
+        }
+        let layout = emojiPickerLayout(size: ctx.emojiPickerFrame.size)
+        let local = emojiLocal(point, ctx)
+
+        if emojiDragStart == nil {
+            switch layout.barTarget(at: local) {
+            case .abc:
+                state.isEmojiPickerOpen = false
+            case .backspace:
+                onBackspace()
+            case .category(let index):
+                withAnimation(.spring(response: 0.42, dampingFraction: 1)) {
+                    emojiPicker.offset = layout.offset(forSection: index)
+                }
+                emojiPicker.section = index
+            case nil:
+                break
+            }
+            return
+        }
+
+        if !emojiDidScroll {
+            if let emoji = layout.emoji(at: local, offset: emojiPicker.offset) {
+                typeEmoji(emoji)
+            }
+            return
+        }
+
+        var velocity: CGFloat = 0
+        if let first = emojiSamples.first, let last = emojiSamples.last, last.time - first.time > 0.008 {
+            velocity = -(last.y - first.y) / CGFloat(last.time - first.time)
+        }
+        let resting = ToolColumnMetrics.resting(
+            offset: emojiPicker.offset, velocity: velocity,
+            rowHeight: layout.cellHeight, maxOffset: layout.maxOffset
+        )
+        withAnimation(.spring(response: 0.42, dampingFraction: 1)) {
+            emojiPicker.offset = resting
+        }
+        emojiPicker.section = layout.section(atOffset: resting)
     }
 
     // MARK: - Hold: numbers and accents
@@ -2161,10 +2372,7 @@ struct KeyboardView: View {
         case .tab:
             onCharacter("\t")
         case .clipboard:
-            // Paste from clipboard
-            if let content = UIPasteboard.general.string {
-                onCharacter(content)
-            }
+            pasteFromClipboard()
         case .dictation:
             onDictation?()
         }
@@ -2313,6 +2521,8 @@ private struct KeyboardGeometry {
     let splitMirror: SplitMirrorLayout?
     let hitLayout: LatticeHitLayout
     let toolColumnFrame: CGRect
+    let toolColumns: Int
+    let emojiPickerFrame: CGRect
 }
 
 private struct LatticeHitLayout: Equatable {
@@ -2450,6 +2660,8 @@ private struct GestureLayoutContext {
     let backspaceRailWidth: CGFloat
     var toolColumnFrame: CGRect = .zero
     var toolRowHeight: CGFloat = 74
+    var toolColumns: Int = 1
+    var emojiPickerFrame: CGRect = .zero
 }
 
 private struct BottomControlMetrics {
@@ -2494,7 +2706,9 @@ private struct BackspaceScrubTracker {
 }
 
 enum ActiveBridge: Equatable {
-    case none, backspace, space, zero, enter, toolColumn
+    case none, backspace, space, zero, enter, toolColumn, emojiPicker
+    /// A touch that does nothing: under the emoji picker's edge, say.
+    case inert
 }
 
 /// What a tap on the tool column asks the controller to do. Paste and emoji
@@ -2708,6 +2922,8 @@ private struct ToolColumnView: View {
     /// One key row plus the gap below it.
     let rowHeight: CGFloat
     let gap: CGFloat
+    /// Cells side by side in each row: two when the column has room.
+    let columns: Int
     let theme: KeyboardTheme
 
     var body: some View {
@@ -2717,10 +2933,12 @@ private struct ToolColumnView: View {
         GeometryReader { geo in
             let height = geo.size.height
             let width = geo.size.width
-            let cellWidth = width - 6
+            let columnCount = max(columns, 1)
+            let rows = ToolColumnLayout.rowCount(itemCount: items.count, columns: columnCount)
+            let cellWidth = (width - 6 - gap * CGFloat(columnCount - 1)) / CGFloat(columnCount)
             let cellHeight = rowHeight - gap
             let maxOffset = ToolColumnMetrics.maxOffset(
-                itemCount: items.count, rowHeight: rowHeight, gap: gap, height: height
+                itemCount: rows, rowHeight: rowHeight, gap: gap, height: height
             )
 
             ZStack(alignment: .topLeading) {
@@ -2730,8 +2948,17 @@ private struct ToolColumnView: View {
                 // the whole stack moves as one layer so scrolling is a single
                 // cheap translation rather than relaying out every row.
                 VStack(spacing: gap) {
-                    ForEach(Array(items.enumerated()), id: \.offset) { index, item in
-                        toolCell(item, width: cellWidth, height: cellHeight, pressed: index == pressedIndex)
+                    ForEach(0..<rows, id: \.self) { row in
+                        HStack(spacing: gap) {
+                            ForEach(0..<columnCount, id: \.self) { column in
+                                let index = row * columnCount + column
+                                if index < items.count {
+                                    toolCell(items[index], width: cellWidth, height: cellHeight, pressed: index == pressedIndex)
+                                } else {
+                                    Color.clear.frame(width: cellWidth, height: cellHeight)
+                                }
+                            }
+                        }
                     }
                 }
                 .frame(width: width, height: height, alignment: .top)
@@ -2740,7 +2967,7 @@ private struct ToolColumnView: View {
                 // Always shown, faintly at rest, so it is clear there is more.
                 if maxOffset > 0 {
                         let track = height - 16
-                        let content = ToolColumnMetrics.contentHeight(itemCount: items.count, rowHeight: rowHeight, gap: gap)
+                        let content = ToolColumnMetrics.contentHeight(itemCount: rows, rowHeight: rowHeight, gap: gap)
                         let thumb = max(track * height / content, 16)
                         let progress = min(max(offset / maxOffset, 0), 1)
                         Capsule()
@@ -2778,6 +3005,109 @@ private struct ToolColumnView: View {
         .overlay(
             RoundedRectangle(cornerRadius: 10, style: .continuous)
                 .stroke(theme.keyBorder, lineWidth: 1)
+        )
+    }
+}
+
+// MARK: - Emoji Picker View
+
+/// Scroll position, open tab and pressed emoji of the full emoji picker,
+/// observed only by the picker so scrolling doesn't redraw the keys.
+final class EmojiPickerModel: ObservableObject {
+    @Published var offset: CGFloat = 0
+    @Published var section: Int = 0
+    @Published var pressed: String?
+}
+
+/// The full emoji grid that covers the keys. Touches are handled by the
+/// keyboard's touch surface through `EmojiPickerLayout`.
+private struct EmojiPickerView: View {
+    @ObservedObject var model: EmojiPickerModel
+    let layout: EmojiPickerLayout
+    let theme: KeyboardTheme
+
+    private var tabIcons: [String] {
+        ["🕘"] + EmojiCatalog.categories.map(\.icon)
+    }
+
+    var body: some View {
+        let gridHeight = layout.gridHeight
+        // Only the rows on screen, so a long catalog stays cheap to draw.
+        let firstRow = max(Int(model.offset / layout.cellHeight) - 1, 0)
+        let lastRow = min(Int((model.offset + gridHeight) / layout.cellHeight) + 1, layout.rowCount - 1)
+
+        VStack(spacing: 0) {
+            ZStack(alignment: .topLeading) {
+                Color.clear
+                if lastRow >= firstRow {
+                    ForEach(firstRow...lastRow, id: \.self) { row in
+                        rowView(row)
+                            .frame(width: layout.size.width, height: layout.cellHeight, alignment: .leading)
+                            .offset(y: CGFloat(row) * layout.cellHeight - model.offset)
+                    }
+                }
+            }
+            .frame(width: layout.size.width, height: gridHeight, alignment: .topLeading)
+            .clipped()
+
+            HStack(spacing: 0) {
+                Text("ABC")
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundColor(theme.specialTextColor)
+                    .frame(width: EmojiPickerLayout.abcWidth - 8, height: 28)
+                    .background(RoundedRectangle(cornerRadius: 7).fill(theme.keyBackground))
+                    .frame(width: EmojiPickerLayout.abcWidth)
+                ForEach(Array(tabIcons.enumerated()), id: \.offset) { index, icon in
+                    Text(icon)
+                        .font(.system(size: 17))
+                        .opacity(index == model.section ? 1 : 0.45)
+                        .frame(maxWidth: .infinity)
+                }
+                Image(systemName: "delete.left")
+                    .font(.system(size: 17, weight: .medium))
+                    .foregroundColor(theme.specialTextColor)
+                    .frame(width: EmojiPickerLayout.backspaceWidth)
+            }
+            .frame(width: layout.size.width, height: EmojiPickerLayout.barHeight)
+        }
+        .background(theme.emptyColumnBackground)
+    }
+
+    @ViewBuilder
+    private func rowView(_ row: Int) -> some View {
+        let section = layout.sectionStartRows.lastIndex { $0 <= row } ?? 0
+        let start = (row - layout.sectionStartRows[section]) * layout.columns
+        let emoji = layout.sections[section]
+        HStack(spacing: 0) {
+            ForEach(0..<layout.columns, id: \.self) { column in
+                let index = start + column
+                if index < emoji.count {
+                    Text(emoji[index])
+                        .font(.system(size: layout.cellHeight * 0.62))
+                        .frame(width: layout.cellWidth, height: layout.cellHeight)
+                        .background(
+                            RoundedRectangle(cornerRadius: 8)
+                                .fill(model.pressed == emoji[index] ? theme.activeKeyBackground : Color.clear)
+                        )
+                } else {
+                    Color.clear.frame(width: layout.cellWidth, height: layout.cellHeight)
+                }
+            }
+        }
+    }
+}
+
+extension ClipboardPaste {
+    static func resolveGeneral(hasFullAccess: Bool) -> ClipboardPaste {
+        let board = UIPasteboard.general
+        // Only read what the board says it holds, so we don't ask iOS for
+        // text that isn't there.
+        return resolve(
+            hasFullAccess: hasFullAccess,
+            string: board.hasStrings ? board.string : nil,
+            url: board.hasURLs ? board.url : nil,
+            hasImages: board.hasImages,
+            itemCount: board.numberOfItems
         )
     }
 }
